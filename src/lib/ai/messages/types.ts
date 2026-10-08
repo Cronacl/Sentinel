@@ -97,7 +97,10 @@ export const threadMessageMetadataSchema = z
       .optional(),
     usage: z
       .object({
+        cachedInputTokens: z.number().optional(),
         contextWindow: z.number().optional(),
+        /** Cumulative session cost an agent reports (ACP usage_update). */
+        cost: z.object({ amount: z.number(), currency: z.string() }).optional(),
         inputTokens: z.number().optional(),
         maxOutputTokens: z.number().optional(),
         outputTokens: z.number().optional(),
@@ -143,6 +146,30 @@ function getValueFingerprint(value: unknown) {
   } catch {
     return String(value);
   }
+}
+
+// Full-content digest (32-bit FNV-1a) for small values such as provider
+// metadata, where an edit in the middle keeps the length, head and tail that
+// getValueFingerprint compares (a tool's kind or label changing in place).
+function getValueDigest(value: unknown) {
+  if (value == null) {
+    return "";
+  }
+
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(value) ?? String(value);
+  } catch {
+    serialized = String(value);
+  }
+
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return `${serialized.length}:${(hash >>> 0).toString(36)}`;
 }
 
 function getComposerContextFingerprint(
@@ -196,8 +223,16 @@ function getPartSyncToken(part: ThreadUIMessage["parts"][number]) {
         getValueFingerprint("input" in part ? part.input : undefined),
         getValueFingerprint("output" in part ? part.output : undefined),
         "errorText" in part ? String(part.errorText ?? "") : "",
-        getValueFingerprint(
-          "providerMetadata" in part ? part.providerMetadata : undefined,
+        "preliminary" in part && part.preliminary ? "1" : "0",
+        // External engines carry display data (tool kind, label, locations,
+        // permission options) in callProviderMetadata and the title, and can
+        // change them without touching state, input or output.
+        getValueDigest(part.title),
+        getValueDigest(part.callProviderMetadata),
+        getValueDigest(
+          "resultProviderMetadata" in part
+            ? part.resultProviderMetadata
+            : undefined,
         ),
       ].join(":");
     default:

@@ -21,6 +21,8 @@ import * as nodePty from "node-pty";
 
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createDesktopUpdaterController } from "./updater.mjs";
+import { createDialogDefaultPaths } from "./dialog-paths.mjs";
+import { prepareTerminalCommand } from "./terminal-commands.mjs";
 import {
   configureDesktopPermissionHandlers,
   getDesktopMicrophonePermissionState,
@@ -572,6 +574,23 @@ function killAllTerminalSessions() {
   }
 }
 
+// A command terminal belongs to the page that started it: after a reload
+// or a navigation nothing can reattach to it, so its sign-in command ends
+// (the server-side flow can then be cancelled or started again).
+function killCommandTerminalSessions() {
+  for (const [sessionId, session] of terminalSessions.entries()) {
+    if (session.kind !== "command") {
+      continue;
+    }
+    try {
+      session.pty.kill();
+    } catch (error) {
+      console.warn(`[electron] failed to kill terminal ${sessionId}`, error);
+      cleanupTerminalSession(sessionId);
+    }
+  }
+}
+
 function createTerminalSession(cwd) {
   const sessionId = randomUUID();
   ensureNodePtySpawnHelperExecutable();
@@ -620,6 +639,57 @@ function createTerminalSession(cwd) {
 
   ptyProcess.onExit(({ exitCode }) => {
     sendTerminalEvent(DESKTOP_CHANNELS.TERMINAL_EXIT, sessionId, exitCode ?? 0);
+    cleanupTerminalSession(sessionId);
+  });
+
+  return {
+    pid: ptyProcess.pid,
+    sessionId,
+  };
+}
+
+// A terminal that runs one server-vended command (an engine CLI's sign-in)
+// rather than a shell; see terminal-commands.mjs for how the request is
+// checked against the server before anything is spawned.
+async function createTerminalCommandSession(input) {
+  const prepared = await prepareTerminalCommand(input, {
+    internalToken: serverState?.internalToken ?? null,
+    serverUrl:
+      serverState?.url ??
+      process.env.SENTINEL_APP_URL ??
+      `http://localhost:${APP_PORT}`,
+  });
+  const sessionId = randomUUID();
+  ensureNodePtySpawnHelperExecutable();
+
+  const ptyProcess = nodePty.spawn(prepared.command, prepared.args, {
+    cols: prepared.cols,
+    cwd: prepared.cwd,
+    env: prepared.env,
+    name: prepared.env.TERM,
+    rows: prepared.rows,
+  });
+
+  terminalSessions.set(sessionId, {
+    createdAt: Date.now(),
+    cwd: prepared.cwd,
+    kind: "command",
+    pid: ptyProcess.pid,
+    pty: ptyProcess,
+    title: prepared.title,
+  });
+
+  ptyProcess.onData((data) => {
+    sendTerminalEvent(DESKTOP_CHANNELS.TERMINAL_DATA, sessionId, data);
+  });
+
+  ptyProcess.onExit(({ exitCode, signal }) => {
+    sendTerminalEvent(
+      DESKTOP_CHANNELS.TERMINAL_EXIT,
+      sessionId,
+      exitCode ?? 0,
+      signal ?? null,
+    );
     cleanupTerminalSession(sessionId);
   });
 
@@ -987,19 +1057,28 @@ function createWindow() {
 
   mainWindow.webContents.on(
     "console-message",
-    (_event, level, message, line, sourceId) => {
+    ({ level, lineNumber, message, sourceId }) => {
       if (process.env.NODE_ENV === "production") {
         return;
       }
 
       console.log(
-        `[electron:renderer:${level}] ${message} (${sourceId || "unknown"}:${line})`,
+        `[electron:renderer:${level}] ${message} (${sourceId || "unknown"}:${lineNumber})`,
       );
     },
   );
 
   mainWindow.webContents.on("did-attach-webview", (_event, guestContents) => {
     configureBrowserGuestContents(guestContents, resolvedTheme);
+  });
+
+  mainWindow.webContents.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      killCommandTerminalSessions();
+    }
+  });
+  mainWindow.webContents.on("render-process-gone", () => {
+    killCommandTerminalSessions();
   });
 
   mainWindow.webContents.on(
@@ -1540,7 +1619,7 @@ async function setDesktopComputerClipboard(text) {
     throw new Error("Clipboard text must be a string.");
   }
 
-  clipboard.writeText(text);
+  await clipboard.writeText(text);
   return {
     platform: "darwin",
     supported: true,
@@ -1673,6 +1752,11 @@ async function runDesktopComputerActions(input) {
 }
 
 function registerIpc() {
+  const dialogDefaultPaths = createDialogDefaultPaths({
+    fallbackPath: app.getPath("home"),
+    filePath: path.join(app.getPath("userData"), "dialog-paths.json"),
+  });
+
   ipcMain.handle(DESKTOP_CHANNELS.APP_LIST_SYSTEM_FONTS, async () =>
     listSystemFontFamilies(),
   );
@@ -1683,7 +1767,7 @@ function registerIpc() {
         throw new Error("Clipboard text must be a string.");
       }
 
-      clipboard.writeText(text);
+      await clipboard.writeText(text);
     },
   );
   ipcMain.handle(DESKTOP_CHANNELS.COMPUTER_STATUS, async () =>
@@ -1746,8 +1830,10 @@ function registerIpc() {
   });
   ipcMain.handle(DESKTOP_CHANNELS.PICK_DIRECTORY, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      defaultPath: await dialogDefaultPaths.current("directory"),
       properties: ["openDirectory"],
     });
+    await dialogDefaultPaths.remember("directory", result);
 
     const selectedPath = result.filePaths[0];
     if (result.canceled || !selectedPath) {
@@ -1762,8 +1848,10 @@ function registerIpc() {
 
   ipcMain.handle(DESKTOP_CHANNELS.PICK_FILES, async () => {
     const result = await dialog.showOpenDialog(mainWindow ?? undefined, {
+      defaultPath: await dialogDefaultPaths.current("files"),
       properties: ["multiSelections", "openFile"],
     });
+    await dialogDefaultPaths.remember("files", result);
 
     if (result.canceled || result.filePaths.length === 0) {
       return [];
@@ -1853,6 +1941,11 @@ function registerIpc() {
     const normalizedPath = await assertProjectDirectory(cwd);
     return createTerminalSession(normalizedPath);
   });
+
+  ipcMain.handle(
+    DESKTOP_CHANNELS.TERMINAL_CREATE_COMMAND,
+    async (_event, input) => createTerminalCommandSession(input),
+  );
 
   ipcMain.on(DESKTOP_CHANNELS.TERMINAL_WRITE, (_event, sessionId, data) => {
     if (typeof sessionId !== "string" || typeof data !== "string") {

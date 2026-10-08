@@ -1,9 +1,8 @@
 import { Output, generateText, type StepResult, type ToolSet } from "ai";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 
 import type { AIProvider } from "@/server/db/enums";
-import { getReasoningProviderOptions } from "@/lib/ai/providers/models";
 import {
   findIntegrationProviderByToolName,
   getIntegrationToolPrefix,
@@ -120,7 +119,7 @@ type RouteToolExposureInput = {
   evidence?: ToolRoutingEvidence;
   initialActiveTools?: string[];
   mainLanguageModel: unknown;
-  mainProviderOptions?: SharedV3ProviderOptions;
+  mainProviderOptions?: ProviderOptions;
   promptContext: ThreadPromptContext;
   resolvedProviderId?: AIProvider | null;
   stage: "initial" | "step";
@@ -260,14 +259,6 @@ export function buildToolRoutingEvidence(
 
     for (const toolResult of step.toolResults ?? []) {
       const serialized = JSON.stringify(toolResult);
-      const resultPayload =
-        toolResult &&
-        typeof toolResult === "object" &&
-        "result" in toolResult &&
-        toolResult.result &&
-        typeof toolResult.result === "object"
-          ? toolResult.result
-          : toolResult;
 
       if (projectMarkerPattern.test(serialized)) {
         projectContextFound = true;
@@ -280,13 +271,13 @@ export function buildToolRoutingEvidence(
       }
 
       if (
-        resultPayload &&
-        typeof resultPayload === "object" &&
-        "output" in resultPayload &&
-        resultPayload.output &&
-        typeof resultPayload.output === "object"
+        toolResult &&
+        typeof toolResult === "object" &&
+        "output" in toolResult &&
+        toolResult.output &&
+        typeof toolResult.output === "object"
       ) {
-        const output = resultPayload.output as Record<string, unknown>;
+        const output = toolResult.output as Record<string, unknown>;
         if (typeof output.exitCode === "number") {
           lastExitCode = output.exitCode;
           if (output.exitCode !== 0) {
@@ -746,11 +737,8 @@ export async function routeToolExposure(
 
     routerModelId = resolved.requestedModelId;
 
-    const providerOptions = getReasoningProviderOptions(
-      resolved.providerId,
-      resolved.responseModelId,
-      "minimal",
-    );
+    // The helper model already asks for the least reasoning it supports.
+    const providerOptions = resolved.providerOptions;
 
     const { output } = await generateText({
       model: resolved.languageModel as Parameters<
@@ -759,7 +747,7 @@ export async function routeToolExposure(
       output: Output.object({ schema: toolRoutingDecisionSchema }),
       ...(providerOptions ? { providerOptions } : {}),
       prompt: buildToolRouterPrompt(manifest),
-      system: buildToolRouterSystemPrompt(),
+      instructions: buildToolRouterSystemPrompt(),
     });
 
     return validateToolRoutingDecision({
@@ -785,7 +773,7 @@ export async function routeToolExposure(
             ? { providerOptions: input.mainProviderOptions }
             : {}),
           prompt: buildToolRouterPrompt(manifest),
-          system: buildToolRouterSystemPrompt(),
+          instructions: buildToolRouterSystemPrompt(),
         });
 
         return validateToolRoutingDecision({

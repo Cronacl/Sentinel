@@ -18,7 +18,7 @@ const hasToolCall = mock((toolName) => ({ kind: "has-tool-call", toolName }));
 const Output = {
   object: mock((config) => config),
 };
-const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const isStepCount = mock(() => ({ kind: "stop-when" }));
 const getEnabledModelsMock = mock(async () => [
   {
     compositeId: "openai:gpt-5-mini",
@@ -92,6 +92,9 @@ const createGateway = mock(() => ({
   imageModel: () => ({}),
 }));
 const validateUIMessages = mock(async ({ messages }) => messages);
+// The provider factory wraps xAI models in a default-settings middleware.
+const defaultSettingsMiddleware = mock((options) => options);
+const wrapLanguageModel = mock(({ model }) => model);
 
 class MockToolLoopAgent {
   constructor(config) {
@@ -102,14 +105,16 @@ class MockToolLoopAgent {
 mock.module("ai", () => ({
   Output,
   createGateway,
+  defaultSettingsMiddleware,
   experimental_generateVideo,
   generateImage,
   generateText,
   hasToolCall,
-  stepCountIs,
+  isStepCount,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
   validateUIMessages,
+  wrapLanguageModel,
 }));
 
 mock.module("server-only", () => ({}));
@@ -126,7 +131,15 @@ mock.module("@/lib/ai/providers/models", async () => {
 
   return {
     ...actual,
-    REASONING_EFFORTS: ["none", "minimal", "low", "medium", "high", "xhigh"],
+    REASONING_EFFORTS: [
+      "none",
+      "minimal",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ],
     getReasoningProviderOptions: getReasoningProviderOptionsMock,
     toCompositeModelId: (provider: string, model: string) =>
       `${provider}:${model}`,
@@ -442,6 +455,39 @@ describe("createThreadAgent", () => {
   Spec:
   - keeps webfetch available without a workspace root.
   */
+
+  it("declines what would ask the user only in unattended runs", async () => {
+    const base = {
+      defaultDirectory: "/tmp/workspace",
+      memoryRuntime: defaultMemoryRuntime,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId: "user-message-unattended",
+      systemPrompt: "System prompt",
+      threadId: "thread-unattended",
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    };
+    const { declineUserApprovalsWhenUnattended } =
+      await import("./unattended-approval");
+
+    expect((await prepareWith(base)).toolApproval).toBeUndefined();
+    expect(
+      (await prepareWith({ ...base, interactive: true })).toolApproval,
+    ).toBeUndefined();
+    expect(
+      (await prepareWith({ ...base, interactive: false })).toolApproval,
+    ).toBe(declineUserApprovalsWhenUnattended);
+  });
 
   it("hides memory tools when memory runtime is unavailable", async () => {
     const prepared = await prepareWith({
@@ -770,7 +816,7 @@ describe("createThreadAgent", () => {
     });
 
     const nextStep = await aiTestState.agentConfig.prepareStep({
-      experimental_context: null,
+      runtimeContext: undefined,
       stepNumber: 2,
       steps: [
         {
@@ -782,5 +828,206 @@ describe("createThreadAgent", () => {
 
     expect(nextStep.activeTools).toContain("edit");
     expect(nextStep.activeTools).toContain("apply_patch");
+  });
+
+  function chatAgentOptions(sourceMessageId: string) {
+    return {
+      defaultDirectory: "/tmp/workspace",
+      latestUserText: "Implement the fix in the workspace.",
+      memoryRuntime: defaultMemoryRuntime,
+      permissionMode: "default",
+      searchProviders: {},
+      searchSettings: {
+        defaultProvider: "exa",
+        defaultResultCount: 5,
+        maxResultCount: 10,
+      },
+      sourceMessageId,
+      systemPrompt: "System prompt",
+      threadId: `thread-${sourceMessageId}`,
+      threadMode: "chat",
+      userId: "user-1",
+      toolApprovalPolicies: getDefaultToolApprovalPolicies(),
+      toolsEnabled: true,
+      webFetchSettings: { batchEnabled: false, batchLimit: 10 },
+      workspaceId: "workspace-1",
+    };
+  }
+
+  function manageTaskResult(id: string, status: string) {
+    return {
+      input: {},
+      output: {
+        action: "update",
+        planId: "plan-1",
+        task: { description: null, id, status, title: id },
+      },
+      toolCallId: `call-${id}-${status}`,
+      toolName: "manage_task",
+      type: "tool-result",
+    };
+  }
+
+  it("returns the full instructions on every step so directives do not carry forward", async () => {
+    const prepared = await prepareWith(chatAgentOptions("instructions-reset"));
+    const { allowSystemInMessages, prepareStep } = aiTestState.agentConfig;
+
+    // Context compaction feeds its summary as a synthetic system message.
+    expect(allowSystemInMessages).toBe(true);
+    expect(prepared.runtimeContext).toHaveProperty("toolRouting");
+
+    const firstStep = await prepareStep({
+      runtimeContext: prepared.runtimeContext,
+      stepNumber: 0,
+      steps: [],
+    });
+    expect(firstStep.instructions).toBe(prepared.instructions);
+    expect(firstStep.runtimeContext).toHaveProperty("toolRouting");
+
+    const mutationStep = { toolCalls: [{ toolName: "edit" }], toolResults: [] };
+    const validationStep = await prepareStep({
+      runtimeContext: firstStep.runtimeContext,
+      stepNumber: 1,
+      steps: [mutationStep],
+    });
+    expect(validationStep.instructions).toBe(
+      `${prepared.instructions}\n## Step Directive: Validate Your Changes\n` +
+        "You just made file changes. Before proceeding to the next task:\n" +
+        "1. Read the modified files to verify correctness.\n" +
+        "2. Run relevant checks via diagnostics or run_task (lint, typecheck, test) when available.\n" +
+        "3. Update the corresponding task status with manage_task.\n" +
+        "Do not mark a task as completed until the changes are validated.",
+    );
+
+    // AI SDK 7 keeps returned instructions for later steps, so the step after
+    // the directive must hand back the plain instructions explicitly.
+    const followUpStep = await prepareStep({
+      runtimeContext: validationStep.runtimeContext,
+      stepNumber: 2,
+      steps: [mutationStep, { toolCalls: [], toolResults: [] }],
+    });
+    expect(followUpStep.instructions).toBe(prepared.instructions);
+  });
+
+  it("tracks manage_task tool outputs for step progress and the stop condition", async () => {
+    await prepareWith(chatAgentOptions("task-tracking"));
+    const { prepareStep, stopWhen } = aiTestState.agentConfig;
+    const allTasksResolved = stopWhen.find(
+      (condition) => typeof condition === "function",
+    );
+
+    const inProgressSteps = [
+      {
+        toolCalls: [{ toolName: "manage_task" }, { toolName: "manage_task" }],
+        toolResults: [
+          manageTaskResult("task-1", "completed"),
+          manageTaskResult("task-2", "in_progress"),
+        ],
+      },
+    ];
+    expect(allTasksResolved({ steps: inProgressSteps })).toBe(false);
+
+    const progressStep = await prepareStep({
+      runtimeContext: undefined,
+      stepNumber: 1,
+      steps: inProgressSteps,
+    });
+    // No step number, so the instructions stay the same while counts do.
+    expect(progressStep.instructions).toContain("## Step Progress\n");
+    expect(progressStep.instructions).toContain(
+      "Tasks: 1/2 completed, 1 remaining.",
+    );
+
+    const resolvedSteps = [
+      ...inProgressSteps,
+      {
+        toolCalls: [{ toolName: "manage_task" }],
+        toolResults: [manageTaskResult("task-2", "blocked")],
+      },
+    ];
+    // The step after the last task resolves is left for the model to report.
+    expect(allTasksResolved({ steps: resolvedSteps })).toBe(false);
+    expect(
+      allTasksResolved({
+        steps: [...resolvedSteps, { toolCalls: [{ toolName: "read" }] }],
+      }),
+    ).toBe(true);
+    // Opening a new task in that step keeps the run going.
+    expect(
+      allTasksResolved({
+        steps: [
+          ...resolvedSteps,
+          {
+            toolCalls: [{ toolName: "manage_task" }],
+            toolResults: [manageTaskResult("task-3", "pending")],
+          },
+        ],
+      }),
+    ).toBe(false);
+
+    // The AI SDK 4 `result` shape is not a tool result in AI SDK 5 and later.
+    const legacyStep = {
+      toolResults: [
+        {
+          result: manageTaskResult("task-3", "completed").output,
+          toolName: "manage_task",
+        },
+      ],
+    };
+    expect(allTasksResolved({ steps: [legacyStep, legacyStep] })).toBe(false);
+  });
+
+  it("counts plan tasks from earlier runs before stopping", async () => {
+    await prepareWith({
+      ...chatAgentOptions("task-tracking-continuation"),
+      planTasks: [
+        { id: "task-1", status: "in_progress" },
+        { id: "task-2", status: "pending" },
+        { id: "task-3", status: "completed" },
+      ],
+    });
+    const { prepareStep, stopWhen } = aiTestState.agentConfig;
+    const allTasksResolved = stopWhen.find(
+      (condition) => typeof condition === "function",
+    );
+
+    // Tasks this run has not touched neither stop nor steer it.
+    const firstStep = await prepareStep({
+      runtimeContext: undefined,
+      stepNumber: 0,
+      steps: [],
+    });
+    expect(firstStep.instructions).not.toContain("## Step Progress");
+    const readSteps = [{ toolCalls: [{ toolName: "read" }], toolResults: [] }];
+    expect(allTasksResolved({ steps: [...readSteps, ...readSteps] })).toBe(
+      false,
+    );
+
+    const updateSteps = [
+      {
+        toolCalls: [{ toolName: "manage_task" }],
+        toolResults: [manageTaskResult("task-1", "completed")],
+      },
+      { toolCalls: [{ toolName: "read" }], toolResults: [] },
+    ];
+    expect(allTasksResolved({ steps: updateSteps })).toBe(false);
+    const progressStep = await prepareStep({
+      runtimeContext: undefined,
+      stepNumber: 1,
+      steps: updateSteps.slice(0, 1),
+    });
+    expect(progressStep.instructions).toContain(
+      "Tasks: 2/3 completed, 1 remaining.",
+    );
+
+    const finishedSteps = [
+      ...updateSteps,
+      {
+        toolCalls: [{ toolName: "manage_task" }],
+        toolResults: [manageTaskResult("task-2", "completed")],
+      },
+      { toolCalls: [{ toolName: "read" }], toolResults: [] },
+    ];
+    expect(allTasksResolved({ steps: finishedSteps })).toBe(true);
   });
 });

@@ -65,4 +65,50 @@ describe("resolveThreadSelectionSyncInput", () => {
       });
     });
   }
+
+  it("syncs a thread whose instance differs from the selection", () => {
+    expect(
+      resolveThreadSelectionSyncInput({
+        canPersistThreadSelection: true,
+        planMode: false,
+        planModeReady: true,
+        selectedEngine: "codex",
+        selectedInstanceId: "codex-work",
+        selectedModelKey: "gpt-5.4",
+        selectedReasoningEffort: null,
+        threadPersistenceReady: false,
+        threadSelection: {
+          engine: "codex",
+          engineInstanceId: "codex",
+          modelId: "gpt-5.4",
+          mode: "chat",
+          reasoningEffort: null,
+        },
+      }),
+    ).toEqual({
+      engine: "codex",
+      engineInstanceId: "codex-work",
+      mode: "chat",
+      modelId: "gpt-5.4",
+      reasoningEffort: null,
+    });
+    expect(
+      resolveThreadSelectionSyncInput({
+        canPersistThreadSelection: true,
+        planMode: false,
+        planModeReady: true,
+        selectedEngine: "codex",
+        selectedInstanceId: "codex",
+        selectedModelKey: "gpt-5.4",
+        selectedReasoningEffort: null,
+        threadPersistenceReady: false,
+        threadSelection: {
+          engine: "codex",
+          modelId: "gpt-5.4",
+          mode: "chat",
+          reasoningEffort: null,
+        },
+      }),
+    ).toBeNull();
+  });
 });

@@ -103,6 +103,7 @@ export default function ProvidersPage() {
       void Promise.all([
         utils.models.list.invalidate(),
         utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+        utils.engines.composerCatalog.invalidate(),
       ]);
     },
   });
@@ -168,9 +169,11 @@ export default function ProvidersPage() {
                           })
                         }
                       >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
                       </Switch>
                       <Button
                         onPress={() =>

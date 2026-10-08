@@ -311,6 +311,7 @@ export function ProviderConfigModal({
       void Promise.all([
         utils.models.list.invalidate(),
         utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+        utils.engines.composerCatalog.invalidate(),
       ]);
       sileo.success({ description: "Provider saved." });
       state.close();
@@ -356,6 +357,7 @@ export function ProviderConfigModal({
       void Promise.all([
         utils.models.list.invalidate(),
         utils.engines.models.invalidate(SENTINEL_MODELS_QUERY_INPUT),
+        utils.engines.composerCatalog.invalidate(),
       ]);
       sileo.success({ description: "Provider removed." });
       state.close();

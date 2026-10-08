@@ -55,7 +55,14 @@ export const PERSONALITY_PRESETS = [
 ] as const;
 export type PersonalityPreset = (typeof PERSONALITY_PRESETS)[number];
 
-export const PERMISSION_MODES = ["default", "full"] as const;
+// Stored as plain text (no CHECK constraint), so widening needs no migration.
+// Engines declare the subset they honour (catalog capabilities).
+export const PERMISSION_MODES = [
+  "default",
+  "accept_edits",
+  "auto",
+  "full",
+] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
 export const WORKSPACE_KINDS = ["project", "quick_chat"] as const;
@@ -147,6 +154,7 @@ export const AUTOMATION_REASONING_EFFORTS = [
   "medium",
   "high",
   "xhigh",
+  "max",
 ] as const;
 export type AutomationReasoningEffort =
   (typeof AUTOMATION_REASONING_EFFORTS)[number];

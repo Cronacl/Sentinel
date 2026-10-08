@@ -29,6 +29,7 @@ export const DESKTOP_CHANNELS = {
   WORKSPACE_OPEN_IN_TERMINAL: "sentinel:workspace-open-in-terminal",
   WORKSPACE_REVEAL_IN_FILE_MANAGER: "sentinel:workspace-reveal-in-file-manager",
   TERMINAL_CREATE: "sentinel:terminal-create",
+  TERMINAL_CREATE_COMMAND: "sentinel:terminal-create-command",
   TERMINAL_WRITE: "sentinel:terminal-write",
   TERMINAL_RESIZE: "sentinel:terminal-resize",
   TERMINAL_KILL: "sentinel:terminal-kill",

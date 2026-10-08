@@ -2,17 +2,32 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { findMissingServerRuntimeFiles } from "./audit-bundle-utils.mjs";
+import {
+  findBetterSqlite3RuntimeIssues,
+  findMissingServerRuntimeFiles,
+  findSqliteVecRuntimeIssues,
+  inferBundleArch,
+} from "./audit-bundle-utils.mjs";
+import { findExcludedServerPackages } from "./excluded-server-packages.mjs";
+import { SERVER_EXTERNAL_PACKAGES } from "./server-external-packages.mjs";
+import { UNTRACED_SERVER_PACKAGES } from "./untraced-server-packages.mjs";
+import {
+  findMacUpdateFeedIssues,
+  readAppMinimumSystemVersion,
+  readMacUpdateFeeds,
+} from "./update-feed.mjs";
 
 const require = createRequire(import.meta.url);
 const { listPackage } = require("@electron/asar");
 const {
+  findUnexpectedPackagedCopilotFiles,
   getExpectedPackagedCopilotFiles,
 } = require("./copilot-runtime-packaging.cjs");
 
 const projectRoot = process.cwd();
 const distRoot = path.join(projectRoot, "dist");
 const ALLOWED_ASAR_TOP_LEVEL = new Set(["desktop", "package.json", "scripts"]);
+const NODE_PLATFORMS = { linux: "linux", mac: "darwin", win: "win32" };
 const UNPACKED_DENYLIST = [
   "/node_modules/@img/sharp-",
   "/node_modules/@next/swc",
@@ -321,18 +336,112 @@ for (const unpackedAppPath of unpackedAppPaths) {
     );
   }
 
-  const missingCopilotRuntimeFiles = findMissingServerRuntimeFiles({
-    requiredFiles: getExpectedPackagedCopilotFiles({
-      serverNodeModulesPath: path.join(serverPath, "node_modules"),
-    }),
+  const nativeRuntimeTarget = {
+    arch: inferBundleArch(
+      path.basename(
+        platform === "mac" ? path.dirname(unpackedAppPath) : unpackedAppPath,
+      ),
+    ),
+    platform: NODE_PLATFORMS[platform],
+    serverFiles,
+    serverPath,
+  };
+
+  try {
+    const missingCopilotRuntimeFiles = findMissingServerRuntimeFiles({
+      requiredFiles: getExpectedPackagedCopilotFiles({
+        arch: nativeRuntimeTarget.arch,
+        platform: nativeRuntimeTarget.platform,
+        serverNodeModulesPath: path.join(serverPath, "node_modules"),
+      }),
+      serverFiles,
+      serverPath,
+    });
+
+    if (missingCopilotRuntimeFiles.length > 0) {
+      failures.push(
+        `${unpackedAppPath}: packaged server is missing Copilot runtime files:\n${missingCopilotRuntimeFiles.join("\n")}`,
+      );
+    }
+
+    const unexpectedCopilotRuntimePackages =
+      findUnexpectedPackagedCopilotFiles(nativeRuntimeTarget);
+
+    if (unexpectedCopilotRuntimePackages.length > 0) {
+      failures.push(
+        `${unpackedAppPath}: packaged server ships Copilot runtime packages for other targets:\n${unexpectedCopilotRuntimePackages.join("\n")}`,
+      );
+    }
+  } catch (error) {
+    // A universal bundle has no single Copilot runtime platform.
+    failures.push(
+      `${unpackedAppPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const missingUntracedRuntimeFiles = findMissingServerRuntimeFiles({
+    requiredFiles: UNTRACED_SERVER_PACKAGES.map((packageName) =>
+      path.join(serverPath, "node_modules", packageName, "package.json"),
+    ),
     serverFiles,
     serverPath,
   });
 
-  if (missingCopilotRuntimeFiles.length > 0) {
+  if (missingUntracedRuntimeFiles.length > 0) {
     failures.push(
-      `${unpackedAppPath}: packaged server is missing Copilot runtime files:\n${missingCopilotRuntimeFiles.join("\n")}`,
+      `${unpackedAppPath}: packaged server is missing untraced runtime packages:\n${missingUntracedRuntimeFiles.join("\n")}`,
     );
+  }
+
+  const missingExternalRuntimeFiles = findMissingServerRuntimeFiles({
+    requiredFiles: SERVER_EXTERNAL_PACKAGES.map((packageName) =>
+      path.join(serverPath, "node_modules", packageName, "package.json"),
+    ),
+    serverFiles,
+    serverPath,
+  });
+
+  if (missingExternalRuntimeFiles.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server is missing serverExternalPackages:\n${missingExternalRuntimeFiles.join("\n")}`,
+    );
+  }
+
+  const excludedServerPackages = findExcludedServerPackages({
+    serverFiles,
+    serverPath,
+  });
+
+  if (excludedServerPackages.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server ships packages that must stay out of the bundle (Claude Agent SDK native CLIs; Sentinel uses the user's claude):\n${excludedServerPackages.join("\n")}`,
+    );
+  }
+
+  const nativeRuntimeIssues = [
+    ...findBetterSqlite3RuntimeIssues(nativeRuntimeTarget),
+    ...findSqliteVecRuntimeIssues(nativeRuntimeTarget),
+  ];
+
+  if (nativeRuntimeIssues.length > 0) {
+    failures.push(
+      `${unpackedAppPath}: packaged server native SQLite runtime is wrong:\n${nativeRuntimeIssues.join("\n")}`,
+    );
+  }
+
+  if (platform === "mac") {
+    const macosVersion = await readAppMinimumSystemVersion(unpackedAppPath);
+    const updateFeedIssues = findMacUpdateFeedIssues({
+      feeds: await readMacUpdateFeeds(distRoot),
+      macosVersion,
+    });
+    console.log(`  ${"minimum macOS".padEnd(18)} ${macosVersion}`);
+
+    if (updateFeedIssues.length > 0) {
+      failures.push(
+        `${unpackedAppPath}: update feed would offer this build below its macOS floor:\n${updateFeedIssues.join("\n")}`,
+      );
+    }
   }
 }
 

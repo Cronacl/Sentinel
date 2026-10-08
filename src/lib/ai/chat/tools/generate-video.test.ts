@@ -319,7 +319,7 @@ describe("executeGenerateVideo", () => {
     );
   });
 
-  it("applies documented provider defaults for xAI, Kling AI, and ByteDance polling", async () => {
+  it("sets the polling timeout for xAI, Kling AI, and ByteDance through the AI SDK", async () => {
     await executeGenerateVideo({
       input: {
         count: 1,
@@ -353,21 +353,26 @@ describe("executeGenerateVideo", () => {
     expect(generateVideoMock).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        providerOptions: { xai: { pollTimeoutMs: 600000 } },
+        poll: { timeoutMs: 600000 },
       }),
     );
     expect(generateVideoMock).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        providerOptions: { klingai: { pollTimeoutMs: 600000 } },
+        poll: { timeoutMs: 600000 },
       }),
     );
     expect(generateVideoMock).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        providerOptions: { bytedance: { pollTimeoutMs: 600000 } },
+        poll: { timeoutMs: 600000 },
       }),
     );
+    // AI SDK 7 video providers ignore pollTimeoutMs in providerOptions, and
+    // ByteDance reports it as a deprecated setting in the tool output.
+    for (const [args] of generateVideoMock.mock.calls) {
+      expect(args).not.toHaveProperty("providerOptions");
+    }
   });
 
   it("rejects invalid single-provider model overrides", async () => {

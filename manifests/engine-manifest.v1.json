@@ -1,0 +1,854 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-10-08T12:00:00.000Z",
+  "compatibility": [
+    {
+      "driver": "codex",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=0.160.0",
+      "ranges": [
+        {
+          "range": ">=0.156.0",
+          "status": "supported"
+        },
+        {
+          "range": ">=0.149.0 <0.156.0",
+          "status": "graceful",
+          "message": "Codex {version} predates the app-server protocol Sentinel targets (0.156): plan mode uses a fallback and rollback may fail. Update Codex to {recommended}."
+        },
+        {
+          "range": "<0.149.0",
+          "status": "unsupported",
+          "message": "Codex {version} is older than the versions Sentinel is tested with, and some features may not work. Update Codex to {recommended}."
+        }
+      ]
+    },
+    {
+      "driver": "claude",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=2.1.280",
+      "ranges": [
+        {
+          "range": ">=2.1.280",
+          "status": "supported"
+        },
+        {
+          "range": ">=2.1.111 <2.1.280",
+          "status": "graceful"
+        },
+        {
+          "range": "<2.1.111",
+          "status": "unsupported"
+        }
+      ]
+    },
+    {
+      "driver": "copilot",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=1.0.0",
+      "ranges": [
+        {
+          "range": ">=1.0.0",
+          "status": "supported"
+        },
+        {
+          "range": "<1.0.0",
+          "status": "unsupported",
+          "message": "Copilot CLI {version} predates the 1.0 runtime protocol Sentinel's Copilot SDK speaks. Update it, or clear the instance's binary path to use the runtime bundled with Sentinel."
+        }
+      ]
+    },
+    {
+      "driver": "cursor",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=2026.5.9",
+      "ranges": [
+        {
+          "range": ">=2026.5.9",
+          "status": "supported"
+        },
+        {
+          "range": "<2026.5.9",
+          "status": "unknown"
+        }
+      ]
+    },
+    {
+      "driver": "opencode",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=1.14.19 <2.0.0",
+      "recommendedVersion": "1.14.19",
+      "ranges": [
+        {
+          "range": ">=2.0.0",
+          "status": "unsupported",
+          "message": "OpenCode {version} is the 2.x generation, which Sentinel does not support yet. Install OpenCode 1.x (npm i -g opencode-ai) to use it here."
+        },
+        {
+          "range": ">=1.14.19 <2.0.0",
+          "status": "supported"
+        },
+        {
+          "range": ">=1.0.224 <1.14.19",
+          "status": "graceful",
+          "message": "OpenCode {version} still works with Sentinel, but {recommended} is recommended. Update it with `opencode upgrade`."
+        },
+        {
+          "range": "<1.0.224",
+          "status": "broken",
+          "message": "OpenCode {version} is too old for Sentinel, which needs 1.0.224 or newer. Update it with `opencode upgrade`."
+        }
+      ]
+    },
+    {
+      "driver": "grok",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=1.0.13",
+      "ranges": [
+        {
+          "range": ">=1.0.13",
+          "status": "supported"
+        },
+        {
+          "range": "<1.0.13",
+          "status": "broken",
+          "message": "Grok {version} predates the Grok Build agent protocol Sentinel drives. Update it with `grok update`."
+        }
+      ]
+    },
+    {
+      "driver": "antigravity",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=1.3.0",
+      "recommendedVersion": "1.3.0",
+      "ranges": [
+        {
+          "range": ">=1.3.0",
+          "status": "supported"
+        },
+        {
+          "range": "<1.3.0",
+          "status": "unknown"
+        }
+      ]
+    },
+    {
+      "driver": "pi",
+      "sentinelRange": ">=0.0.66",
+      "recommendedRange": ">=1.0.0",
+      "ranges": [
+        {
+          "range": ">=0.80.5",
+          "status": "supported"
+        },
+        {
+          "range": "<0.80.5",
+          "status": "unsupported"
+        }
+      ]
+    }
+  ],
+  "drivers": {
+    "claude": {
+      "mode": "overlay",
+      "defaults": {
+        "chat": "claude-fable-5-1"
+      },
+      "profiles": {
+        "opus-5-5": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            },
+            {
+              "type": "boolean",
+              "id": "fastMode",
+              "label": "Fast mode",
+              "role": "fast",
+              "defaultValue": false
+            }
+          ]
+        },
+        "sonnet-5-5": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            }
+          ]
+        },
+        "fable-5": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            }
+          ]
+        },
+        "opus-5": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            },
+            {
+              "type": "boolean",
+              "id": "fastMode",
+              "label": "Fast mode",
+              "role": "fast",
+              "defaultValue": false
+            }
+          ]
+        },
+        "sonnet-5": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            }
+          ]
+        },
+        "opus-4-8": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            },
+            {
+              "type": "boolean",
+              "id": "fastMode",
+              "label": "Fast mode",
+              "role": "fast",
+              "defaultValue": false
+            }
+          ]
+        },
+        "opus-4-7": {
+          "contextWindow": 1000000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            }
+          ]
+        },
+        "opus-4-6": {
+          "contextWindow": 200000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            },
+            {
+              "type": "select",
+              "id": "contextWindow",
+              "label": "Context window",
+              "role": "context",
+              "choices": [
+                {
+                  "id": "200k",
+                  "label": "200K",
+                  "isDefault": true
+                },
+                {
+                  "id": "1m",
+                  "label": "1M"
+                }
+              ]
+            }
+          ]
+        },
+        "opus-4-5": {
+          "contextWindow": 200000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                }
+              ]
+            }
+          ]
+        },
+        "sonnet-4-6": {
+          "contextWindow": 200000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium"
+                },
+                {
+                  "id": "high",
+                  "label": "High",
+                  "isDefault": true
+                },
+                {
+                  "id": "max",
+                  "label": "Max"
+                }
+              ]
+            },
+            {
+              "type": "select",
+              "id": "contextWindow",
+              "label": "Context window",
+              "role": "context",
+              "choices": [
+                {
+                  "id": "200k",
+                  "label": "200K",
+                  "isDefault": true
+                },
+                {
+                  "id": "1m",
+                  "label": "1M"
+                }
+              ]
+            }
+          ]
+        },
+        "haiku-4-5": {
+          "contextWindow": 200000,
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "boolean",
+              "id": "thinking",
+              "label": "Extended thinking",
+              "role": "thinking",
+              "defaultValue": false
+            }
+          ]
+        }
+      },
+      "models": [
+        {
+          "id": "claude-opus-5-5",
+          "name": "Claude Opus 5.5",
+          "status": "current",
+          "profile": "opus-5-5",
+          "badge": "new",
+          "aliases": ["opus", "opus-5.5", "claude-opus-5.5"],
+          "minRuntimeVersion": "2.1.280",
+          "description": "Most capable Claude model for complex, long-running work."
+        },
+        {
+          "id": "claude-sonnet-5-5",
+          "name": "Claude Sonnet 5.5",
+          "status": "current",
+          "profile": "sonnet-5-5",
+          "badge": "new",
+          "aliases": ["sonnet", "sonnet-5.5", "claude-sonnet-5.5"],
+          "minRuntimeVersion": "2.1.284",
+          "description": "Fast, capable Claude model for everyday coding."
+        },
+        {
+          "id": "claude-fable-5-1",
+          "name": "Claude Fable 5.1",
+          "status": "current",
+          "profile": "fable-5",
+          "aliases": ["fable", "fable-5.1", "claude-fable-5.1"],
+          "minRuntimeVersion": "2.1.257",
+          "description": "Claude Code's default model for coding tasks."
+        },
+        {
+          "id": "claude-haiku-4-5",
+          "name": "Claude Haiku 4.5",
+          "status": "current",
+          "profile": "haiku-4-5",
+          "aliases": [
+            "haiku",
+            "haiku-4.5",
+            "claude-haiku-4.5",
+            "claude-haiku-4-5-20251001"
+          ],
+          "description": "Fastest Claude model for quick, lightweight tasks."
+        },
+        {
+          "id": "claude-opus-5",
+          "name": "Claude Opus 5",
+          "status": "current",
+          "profile": "opus-5",
+          "aliases": ["opus-5", "claude-opus-5.0", "claude-opus-5-0"],
+          "minRuntimeVersion": "2.1.219"
+        },
+        {
+          "id": "claude-sonnet-5",
+          "name": "Claude Sonnet 5",
+          "status": "current",
+          "profile": "sonnet-5",
+          "aliases": ["sonnet-5", "claude-sonnet-5.0", "claude-sonnet-5-0"]
+        },
+        {
+          "id": "claude-fable-5",
+          "name": "Claude Fable 5",
+          "status": "legacy",
+          "profile": "fable-5",
+          "minRuntimeVersion": "2.1.169"
+        },
+        {
+          "id": "claude-opus-4-8",
+          "name": "Claude Opus 4.8",
+          "status": "legacy",
+          "profile": "opus-4-8",
+          "aliases": ["opus-4.8", "claude-opus-4.8"],
+          "minRuntimeVersion": "2.1.154"
+        },
+        {
+          "id": "claude-opus-4-7",
+          "name": "Claude Opus 4.7",
+          "status": "legacy",
+          "profile": "opus-4-7",
+          "aliases": ["opus-4.7", "claude-opus-4.7"],
+          "minRuntimeVersion": "2.1.111"
+        },
+        {
+          "id": "claude-opus-4-6",
+          "name": "Claude Opus 4.6",
+          "status": "legacy",
+          "profile": "opus-4-6",
+          "aliases": ["opus-4.6", "claude-opus-4.6", "claude-opus-4-6-20251117"]
+        },
+        {
+          "id": "claude-opus-4-5",
+          "name": "Claude Opus 4.5",
+          "status": "legacy",
+          "profile": "opus-4-5"
+        },
+        {
+          "id": "claude-sonnet-4-6",
+          "name": "Claude Sonnet 4.6",
+          "status": "legacy",
+          "profile": "sonnet-4-6",
+          "aliases": [
+            "sonnet-4.6",
+            "claude-sonnet-4.6",
+            "claude-sonnet-4-6-20251117"
+          ]
+        }
+      ]
+    },
+    "codex": {
+      "mode": "overlay",
+      "defaults": {
+        "chat": "gpt-6-astra",
+        "customModelProfile": "gpt-6"
+      },
+      "profiles": {
+        "gpt-6": {
+          "inputModalities": ["text", "image"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                },
+                {
+                  "id": "xhigh",
+                  "label": "Extra high"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "models": [
+        {
+          "id": "gpt-6-astra",
+          "name": "GPT-6 Astra",
+          "status": "current",
+          "profile": "gpt-6",
+          "description": "Most capable Codex model for complex agentic coding."
+        },
+        {
+          "id": "gpt-6.1-sol",
+          "name": "GPT-6.1 Sol",
+          "status": "current",
+          "profile": "gpt-6",
+          "description": "Near-Astra coding quality at a lower cost."
+        },
+        {
+          "id": "gpt-6-luna",
+          "name": "GPT-6 Luna",
+          "status": "current",
+          "profile": "gpt-6",
+          "description": "Fast, low-cost model for lighter coding tasks."
+        },
+        {
+          "id": "gpt-5-codex",
+          "name": "GPT-5 Codex",
+          "status": "legacy",
+          "profile": "gpt-6"
+        }
+      ]
+    },
+    "copilot": {
+      "mode": "overlay",
+      "defaults": {
+        "customModelProfile": "default"
+      },
+      "profiles": {
+        "default": {
+          "inputModalities": ["text"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "models": []
+    },
+    "cursor": {
+      "mode": "overlay",
+      "defaults": {
+        "customModelProfile": "default"
+      },
+      "profiles": {
+        "default": {
+          "inputModalities": ["text"],
+          "options": [
+            {
+              "type": "select",
+              "id": "effort",
+              "label": "Reasoning effort",
+              "role": "reasoning",
+              "choices": [
+                {
+                  "id": "low",
+                  "label": "Low"
+                },
+                {
+                  "id": "medium",
+                  "label": "Medium",
+                  "isDefault": true
+                },
+                {
+                  "id": "high",
+                  "label": "High"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "models": []
+    },
+    "opencode": {
+      "mode": "overlay",
+      "profiles": {},
+      "models": []
+    },
+    "grok": {
+      "mode": "overlay",
+      "profiles": {},
+      "models": []
+    },
+    "antigravity": {
+      "mode": "catalog",
+      "defaults": {
+        "chat": "gemini-3.8-flash-high"
+      },
+      "profiles": {},
+      "models": [
+        {
+          "id": "gemini-3.8-flash-high",
+          "name": "Gemini 3.8 Flash (High)",
+          "status": "current",
+          "inputModalities": ["text", "image"]
+        },
+        {
+          "id": "gemini-3.8-flash-medium",
+          "name": "Gemini 3.8 Flash (Medium)",
+          "status": "current",
+          "inputModalities": ["text", "image"]
+        },
+        {
+          "id": "gemini-3.8-flash-low",
+          "name": "Gemini 3.8 Flash (Low)",
+          "status": "current",
+          "inputModalities": ["text", "image"]
+        }
+      ]
+    },
+    "pi": {
+      "mode": "overlay",
+      "profiles": {},
+      "models": []
+    },
+    "acp": {
+      "mode": "overlay",
+      "profiles": {},
+      "models": []
+    }
+  }
+}

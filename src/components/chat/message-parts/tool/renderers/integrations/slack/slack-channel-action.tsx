@@ -57,10 +57,7 @@ export const SlackChannelActionTool = memo(function SlackChannelActionTool({
   const output =
     state.hasOutput && "output" in part
       ? (part.output as
-          | ChannelOutput
-          | SuccessOutput
-          | TopicOutput
-          | PurposeOutput)
+          ChannelOutput | SuccessOutput | TopicOutput | PurposeOutput)
       : null;
 
   const [isExpanded, setIsExpanded] = useToolExpansionState({

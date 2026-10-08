@@ -1,11 +1,12 @@
 import type { AIProvider } from "@/server/db/enums";
 import type { ChatEngine } from "@/server/db/enums";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 import type { ReasoningEffort } from "../providers/models";
 import type { ThreadUIMessage } from "../messages/types";
 import type { ThreadMode, ThreadPlanAnswer } from "@/lib/plan";
 import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 
 export type ThreadChatTrigger =
@@ -35,10 +36,26 @@ export type ThreadOpenCodeOptions = {
 export type ThreadChatRequest = {
   draftRepoState?: Partial<RepoThreadState>;
   engine?: ChatEngine;
+  /**
+   * The instance of `engine` a new thread binds to; omitted for the
+   * default instance. An existing thread keeps its own binding.
+   */
+  engineInstanceId?: string;
+  /**
+   * False for unattended runs (automations): a request that would ask the
+   * user is declined instead, unless the permission mode allows it outright.
+   */
+  interactive?: boolean;
   message?: ThreadUIMessage;
   messages?: ThreadUIMessage[];
   messageId?: string;
   modelId?: string;
+  /**
+   * The model's option selections (reasoning effort, OpenCode agent and
+   * variant, …). `reasoningEffort` and `openCode` carry the same values for
+   * the runtimes that read them.
+   */
+  modelOptions?: EngineOptionSelection[];
   openCode?: ThreadOpenCodeOptions;
   planAnswers?: ThreadPlanAnswer[];
   planQuestionSetId?: string;
@@ -57,7 +74,7 @@ type ResolvedThreadModel = {
   contextWindow?: number;
   languageModel: unknown;
   providerId: AIProvider;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
   requestedModelId: string;
   responseModelId: string;
 };

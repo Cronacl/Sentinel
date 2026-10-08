@@ -35,6 +35,9 @@ import { useShell } from "@/components/shell/shell-context";
 import { useThreadChat } from "@/hooks/use-thread-chat";
 import { isCommittedThreadActionError } from "@/hooks/use-thread-chat";
 import { moveQueuedFollowUpToFront } from "@/hooks/use-thread-chat";
+import { getDriverMessageActions } from "@/lib/ai/chat/engines/catalog";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
+import { canRunSentinelSlashCommands } from "@/lib/ai/chat/engines/slash-commands";
 import type { QueuedFollowUpSummary } from "@/lib/ai/chat/session/types";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -44,7 +47,7 @@ import {
   useShortcutLabel,
   useShortcutScope,
 } from "@/lib/shortcuts/provider";
-import type { ChatEngine } from "@/server/db/enums";
+import type { ChatEngine, PermissionMode } from "@/server/db/enums";
 import {
   applyThreadSnapshotCacheUpdate,
   applyThreadSettingsCacheUpdate,
@@ -58,7 +61,8 @@ import type { FileUIPart } from "ai";
 
 import {
   ChatComposer,
-  type ChatComposerOpenCodeSelection,
+  type ChatComposerOptionSelection,
+  type ChatComposerSelectionChange,
   type ChatComposerStartPlanImplementationHandler,
   type ChatComposerThreadSelection,
 } from "./chat-composer";
@@ -69,7 +73,10 @@ import {
   clearThreadRouteHandoff,
   type ThreadRouteHandoffState,
 } from "./thread-route-handoff";
-import { resolveInitialThreadComposerUiState } from "./thread-screen.helpers";
+import {
+  applyThreadSelectionChange,
+  resolveInitialThreadComposerUiState,
+} from "./thread-screen.helpers";
 import {
   buildRepoDiffPanelInvalidationInputs,
   reapplyUserMessageCheckpoint,
@@ -82,7 +89,10 @@ type ThreadScreenProps = {
   thread: {
     activeRunId: string | null;
     chatEngine: ChatEngine;
+    /** The thread's engine instance (the engine itself for the default). */
+    chatEngineInstanceId?: string | null;
     chatModelId: string | null;
+    chatModelOptions?: EngineOptionSelection[] | null;
     chatReasoningEffort: string | null;
     hasCodexThread: boolean;
     id: string;
@@ -98,7 +108,7 @@ type ThreadScreenProps = {
     id: string;
     kind: "project" | "quick_chat";
     name: string;
-    permissionModeOverride: "default" | "full" | null;
+    permissionModeOverride: PermissionMode | null;
     rootPath: string | null;
     updatedAt: Date;
   };
@@ -128,9 +138,9 @@ export function ThreadScreen({
     useState<ChatComposerThreadSelection>(
       resolvedInitialComposerUiState.threadSelection,
     );
-  const [openCodeSelectionState, setOpenCodeSelectionState] =
-    useState<ChatComposerOpenCodeSelection>(
-      resolvedInitialComposerUiState.openCodeSelection,
+  const [optionSelectionState, setOptionSelectionState] =
+    useState<ChatComposerOptionSelection>(
+      resolvedInitialComposerUiState.optionSelection,
     );
   const [draftProjectMode, setDraftProjectMode] = useState<DraftProjectMode>(
     resolvedInitialComposerUiState.draftProjectMode,
@@ -151,7 +161,7 @@ export function ThreadScreen({
 
   useEffect(() => {
     setThreadSelectionState(resolvedInitialComposerUiState.threadSelection);
-    setOpenCodeSelectionState(resolvedInitialComposerUiState.openCodeSelection);
+    setOptionSelectionState(resolvedInitialComposerUiState.optionSelection);
     setDraftProjectMode(resolvedInitialComposerUiState.draftProjectMode);
     setDraftPreparedWorktree(
       resolvedInitialComposerUiState.draftPreparedWorktree,
@@ -465,8 +475,9 @@ export function ThreadScreen({
       composerContext,
       files,
       engine,
+      engineInstanceId,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -475,20 +486,24 @@ export function ThreadScreen({
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
+      engineInstanceId?: string;
       modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
+      modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
       toolTags?: import("@/lib/ai/chat/tools/selection/tags").SentinelComposerToolTag[];
     }) => {
       setChatError(null);
-      setThreadSelectionState({
-        engine,
-        modelId,
-        mode: threadMode ?? threadSelectionState.mode,
-        reasoningEffort: reasoningEffort ?? null,
-      });
+      setThreadSelectionState((current: ChatComposerThreadSelection) =>
+        applyThreadSelectionChange(current, {
+          engine,
+          ...(engineInstanceId ? { engineInstanceId } : {}),
+          modelId,
+          mode: threadMode ?? current.mode,
+          reasoningEffort: reasoningEffort ?? null,
+        }),
+      );
       applyThreadSettingsCacheUpdate({
         patch: {
           chatEngine: engine,
@@ -504,9 +519,10 @@ export function ThreadScreen({
       await sendMessage({
         composerContext,
         engine,
+        ...(engineInstanceId ? { engineInstanceId } : {}),
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -528,8 +544,9 @@ export function ThreadScreen({
       composerContext,
       files,
       engine,
+      engineInstanceId,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -538,8 +555,9 @@ export function ThreadScreen({
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
+      engineInstanceId?: string;
       modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
+      modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -549,9 +567,10 @@ export function ThreadScreen({
       await queueFollowUp({
         composerContext,
         engine,
+        ...(engineInstanceId ? { engineInstanceId } : {}),
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -570,8 +589,9 @@ export function ThreadScreen({
       composerContext,
       files,
       engine,
+      engineInstanceId,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -580,8 +600,9 @@ export function ThreadScreen({
       composerContext?: import("@/lib/composer-context/types").ComposerContext;
       files?: FileUIPart[];
       engine: ChatEngine;
+      engineInstanceId?: string;
       modelId: string;
-      openCode?: { agent?: string | null; variant?: string | null };
+      modelOptions?: EngineOptionSelection[];
       reasoningEffort?: ReasoningEffort | null;
       text: string;
       threadMode?: "chat" | "plan";
@@ -591,9 +612,10 @@ export function ThreadScreen({
       await steerFollowUp({
         composerContext,
         engine,
+        ...(engineInstanceId ? { engineInstanceId } : {}),
         files,
         modelId,
-        ...(openCode ? { openCode } : {}),
+        ...(modelOptions?.length ? { modelOptions } : {}),
         reasoningEffort,
         text,
         threadMode: threadMode ?? threadSelectionState.mode,
@@ -664,27 +686,13 @@ export function ThreadScreen({
     setEditingMessage(null);
   }, []);
 
+  // The selection keeps the thread's engine instance: the composer would
+  // otherwise fall back to the driver's default instance and persist it.
   const handleSelectionChange = useCallback(
-    ({
-      engine,
-      modelId,
-      mode,
-      reasoningEffort,
-    }: {
-      engine?: ChatEngine;
-      modelId?: string | null;
-      mode?: "chat" | "plan";
-      reasoningEffort?: ReasoningEffort | null;
-    }) => {
-      setThreadSelectionState((current: ChatComposerThreadSelection) => ({
-        engine: engine ?? current.engine,
-        modelId: modelId !== undefined ? modelId : current.modelId,
-        mode: mode ?? current.mode,
-        reasoningEffort:
-          reasoningEffort !== undefined
-            ? reasoningEffort
-            : current.reasoningEffort,
-      }));
+    (change: ChatComposerSelectionChange) => {
+      setThreadSelectionState((current: ChatComposerThreadSelection) =>
+        applyThreadSelectionChange(current, change),
+      );
     },
     [],
   );
@@ -847,9 +855,9 @@ export function ThreadScreen({
     scopeId: threadScope.id,
   });
 
-  const codexReview = api.engines.codexReview.useMutation();
-  const codexRollback = api.engines.codexRollback.useMutation();
-  const codexCompact = api.engines.codexCompact.useMutation();
+  const codexReview = api.engines.codex.review.useMutation();
+  const codexRollback = api.engines.codex.rollback.useMutation();
+  const codexCompact = api.engines.codex.compact.useMutation();
   const canRunCodexAppCommands =
     chatEngine === "codex" && thread.hasCodexThread;
 
@@ -1084,7 +1092,7 @@ export function ThreadScreen({
     [],
   );
 
-  const supportsSentinelMessageActions = chatEngine === "sentinel";
+  const messageActions = getDriverMessageActions(chatEngine);
   const isBranchSwitchingDisabled =
     status === "submitted" || status === "streaming";
 
@@ -1270,13 +1278,9 @@ export function ThreadScreen({
                       : undefined
                   }
                   onRegenerate={
-                    supportsSentinelMessageActions
-                      ? handleRegenerate
-                      : undefined
+                    messageActions.regenerate ? handleRegenerate : undefined
                   }
-                  onRetry={
-                    supportsSentinelMessageActions ? handleRetry : undefined
-                  }
+                  onRetry={messageActions.retry ? handleRetry : undefined}
                   onSelectBranch={handleSelectBranch}
                   disableBranchSwitching={isBranchSwitchingDisabled}
                   repoCheckpointAnchorMessageId={
@@ -1313,11 +1317,11 @@ export function ThreadScreen({
               draftPreparedWorktree={draftPreparedWorktree}
               draftProjectMode={draftProjectMode}
               isEditing={editingMessage != null}
-              openCodeSelection={openCodeSelectionState}
+              optionSelection={optionSelectionState}
               onCancelEdit={handleCancelEdit}
               onDraftPreparedWorktreeChange={setDraftPreparedWorktree}
               onDraftProjectModeChange={setDraftProjectMode}
-              onOpenCodeSelectionChange={setOpenCodeSelectionState}
+              onOptionSelectionChange={setOptionSelectionState}
               onQueueFollowUp={handleQueueFollowUp}
               onRemoveQueuedFollowUp={async (id) => {
                 const previousQueue = liveQueuedFollowUps;
@@ -1362,17 +1366,15 @@ export function ThreadScreen({
               promptSeed={editingPromptSeed}
               promptSeedKey={editingMessage?.id ?? "__composer-empty__"}
               queuedFollowUps={liveQueuedFollowUps}
-              providerSlashCommandsEnabled={canRunCodexAppCommands}
+              providerSlashCommandsEnabled={canRunSentinelSlashCommands({
+                driver: chatEngine,
+                hasCodexThread: thread.hasCodexThread,
+              })}
               repoThreadId={thread.id}
               showBranchSwitcher={!isQuickChat}
               status={status}
               threadId={thread.id}
-              threadSelection={{
-                engine: threadSelectionState.engine,
-                modelId: threadSelectionState.modelId,
-                mode: threadSelectionState.mode,
-                reasoningEffort: threadSelectionState.reasoningEffort,
-              }}
+              threadSelection={threadSelectionState}
             />
           </div>
         </ScrollShadow>

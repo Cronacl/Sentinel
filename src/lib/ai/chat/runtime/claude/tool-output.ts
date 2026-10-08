@@ -194,3 +194,34 @@ export function extractClaudeUserToolResults(message: unknown) {
 
   return results;
 }
+
+/**
+ * The structured `tool_use_result` of a user message that carries exactly one
+ * tool_result block (the SDK only sends one structured result per message),
+ * keyed by that block's tool call id.
+ */
+export function extractClaudeStructuredToolResult(message: unknown) {
+  if (!isRecord(message) || !("tool_use_result" in message)) {
+    return null;
+  }
+
+  const messageParam = isRecord(message.message) ? message.message : null;
+  const toolResultBlocks = Array.isArray(messageParam?.content)
+    ? messageParam.content.filter(
+        (block) => isRecord(block) && block.type === "tool_result",
+      )
+    : [];
+  const toolResultBlock = toolResultBlocks[0];
+  if (
+    toolResultBlocks.length !== 1 ||
+    !isRecord(toolResultBlock) ||
+    typeof toolResultBlock.tool_use_id !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    output: message.tool_use_result,
+    toolCallId: toolResultBlock.tool_use_id,
+  };
+}

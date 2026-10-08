@@ -14,6 +14,7 @@ import {
 } from "@heroui/react";
 import { Icon } from "@iconify/react";
 
+import { getExternalToolMeta } from "../../external-tool-meta";
 import type { RendererProps } from "../../renderer";
 import { ToolLayout } from "../shared/tool-layout";
 
@@ -104,15 +105,22 @@ function getPromptText(value: unknown): string | null {
   return null;
 }
 
-const optionClass =
-  "my-0.5 w-full cursor-pointer items-start gap-2 rounded-xl border border-border/30 px-2.5 py-2 transition-colors data-selected:border-primary/35 data-selected:bg-primary/8";
+const optionClass = "my-0.5 w-full";
+// The card is the option's clickable label (`Checkbox.Content` / `Radio.Content`).
+const optionContentClass =
+  "w-full cursor-pointer items-start gap-2 rounded-xl border border-border/30 px-2.5 py-2 font-normal transition-colors data-selected:border-primary/35 data-selected:bg-primary/8";
 const controlClass = "mt-0.5 size-3 shrink-0";
 
-function makeExternalUserInputTool(engine: "Cursor" | "OpenCode") {
+/**
+ * The question card. With a fixed `engine` label (legacy Cursor and OpenCode
+ * parts), else the agent's label from the part's external metadata.
+ */
+function makeExternalUserInputTool(engine: string | null) {
   return memo(function ExternalUserInputTool({
     onApprove,
     part,
   }: RendererProps) {
+    const label = engine ?? getExternalToolMeta(part)?.agentLabel ?? "Agent";
     const isWaiting = part.state === "approval-requested";
     const isDone =
       part.state === "output-available" || part.state === "approval-responded";
@@ -217,7 +225,11 @@ function makeExternalUserInputTool(engine: "Cursor" | "OpenCode") {
           icon="solar:chat-round-line-linear"
           className="mr-1 inline-block h-3.5 w-3.5 shrink-0 align-text-bottom text-foreground/50"
         />
-        {isDone ? "Input provided" : `${engine} needs input`}
+        {isDone
+          ? "Input provided"
+          : part.state === "output-denied" || part.state === "output-error"
+            ? "Question dismissed"
+            : `${label} needs input`}
       </>
     );
 
@@ -309,18 +321,20 @@ function makeExternalUserInputTool(engine: "Cursor" | "OpenCode") {
                               key={option.label}
                               value={option.label}
                             >
-                              <Checkbox.Control className={controlClass}>
-                                <Checkbox.Indicator />
-                              </Checkbox.Control>
-                              <Checkbox.Content className="min-w-0 gap-0">
-                                <Label className="cursor-pointer text-[12px] font-medium text-foreground">
-                                  {option.label}
-                                </Label>
-                                {option.description ? (
-                                  <Description className="text-[11px] leading-5 text-foreground/55">
-                                    {option.description}
-                                  </Description>
-                                ) : null}
+                              <Checkbox.Content className={optionContentClass}>
+                                <Checkbox.Control className={controlClass}>
+                                  <Checkbox.Indicator />
+                                </Checkbox.Control>
+                                <span className="flex min-w-0 flex-col">
+                                  <Label className="cursor-pointer text-[12px] font-medium text-foreground">
+                                    {option.label}
+                                  </Label>
+                                  {option.description ? (
+                                    <Description className="text-[11px] leading-5 text-foreground/55">
+                                      {option.description}
+                                    </Description>
+                                  ) : null}
+                                </span>
                               </Checkbox.Content>
                             </Checkbox>
                           ))}
@@ -342,18 +356,20 @@ function makeExternalUserInputTool(engine: "Cursor" | "OpenCode") {
                               key={option.label}
                               value={option.label}
                             >
-                              <Radio.Control className={controlClass}>
-                                <Radio.Indicator />
-                              </Radio.Control>
-                              <Radio.Content className="min-w-0 gap-0">
-                                <Label className="cursor-pointer text-[12px] font-medium text-foreground">
-                                  {option.label}
-                                </Label>
-                                {option.description ? (
-                                  <Description className="text-[11px] leading-5 text-foreground/55">
-                                    {option.description}
-                                  </Description>
-                                ) : null}
+                              <Radio.Content className={optionContentClass}>
+                                <Radio.Control className={controlClass}>
+                                  <Radio.Indicator />
+                                </Radio.Control>
+                                <span className="flex min-w-0 flex-col">
+                                  <Label className="cursor-pointer text-[12px] font-medium text-foreground">
+                                    {option.label}
+                                  </Label>
+                                  {option.description ? (
+                                    <Description className="text-[11px] leading-5 text-foreground/55">
+                                      {option.description}
+                                    </Description>
+                                  ) : null}
+                                </span>
                               </Radio.Content>
                             </Radio>
                           ))}
@@ -459,4 +475,5 @@ function makeExternalUserInputTool(engine: "Cursor" | "OpenCode") {
 }
 
 export const CursorUserInputTool = makeExternalUserInputTool("Cursor");
+export const ExternalUserInputTool = makeExternalUserInputTool(null);
 export const OpenCodeUserInputTool = makeExternalUserInputTool("OpenCode");

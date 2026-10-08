@@ -8,14 +8,11 @@ import {
   filterSelectableModels,
   getReasoningEffortLabel,
   haveSameEngineOptionSet,
+  getEngineStabilityNotice,
   haveSameSelectableModelSet,
-  isUnstableChatEngine,
-  resolveOpenCodeTraitValueForThreadMode,
   resolveReasoningEffort,
   resolveStableEngineOptions,
   resolveStableSelectableModels,
-  shouldHideOpenCodeAgentSelector,
-  shouldHideOpenCodeTraitSelector,
   shouldClearComposerAfterSend,
   shouldClearComposerAfterSendError,
 } from "./chat-composer-helpers";
@@ -29,9 +26,11 @@ function createModel(
     displayName: "Test model",
     engine: "codex",
     inputModalities: ["text"],
+    instanceId: "codex",
     isConnected: true,
     isEnabled: true,
     modelId: "gpt-5-codex",
+    options: [],
     provider: null,
     rawModelId: "gpt-5-codex",
     supportedReasoningEfforts: ["medium"],
@@ -107,111 +106,45 @@ describe("chat composer model helpers", () => {
     ).toBe(false);
   });
 
-  it("does not mark Cursor as unstable", () => {
-    expect(isUnstableChatEngine("cursor")).toBe(false);
-    expect(isUnstableChatEngine("opencode")).toBe(false);
-    expect(isUnstableChatEngine("codex")).toBe(false);
-  });
-
-  it("maps OpenCode plan mode to a matching plan trait when available", () => {
+  it("tells instances of the same driver apart", () => {
     expect(
-      resolveOpenCodeTraitValueForThreadMode(
-        [
-          { isDefault: true, label: "Build", value: "build" },
-          { label: "Plan", value: "plan" },
-        ],
-        "build",
-        "plan",
+      haveSameSelectableModelSet(
+        [createModel()],
+        [createModel({ instanceId: "codex-work" })],
       ),
-    ).toBe("plan");
-  });
-
-  it("maps OpenCode plan mode to the max variant when High/Max variants are available", () => {
+    ).toBe(false);
     expect(
-      resolveOpenCodeTraitValueForThreadMode(
-        [
-          { isDefault: true, label: "High", value: "high" },
-          { label: "Max", value: "max" },
-        ],
-        "high",
-        "plan",
-      ),
-    ).toBe("max");
-  });
-
-  it("maps OpenCode chat mode back to a build-like trait when leaving plan mode", () => {
-    expect(
-      resolveOpenCodeTraitValueForThreadMode(
-        [
-          { isDefault: true, label: "Build", value: "build" },
-          { label: "Plan", value: "plan" },
-        ],
-        "plan",
-        "chat",
-      ),
-    ).toBe("build");
-  });
-
-  it("maps OpenCode chat mode back to the high variant when leaving Max mode", () => {
-    expect(
-      resolveOpenCodeTraitValueForThreadMode(
-        [
-          { isDefault: true, label: "High", value: "high" },
-          { label: "Max", value: "max" },
-        ],
-        "max",
-        "chat",
-      ),
-    ).toBe("high");
-  });
-
-  it("keeps non-plan OpenCode variants unchanged when no plan mapping exists", () => {
-    expect(
-      resolveOpenCodeTraitValueForThreadMode(
-        [
-          { label: "Low", value: "low" },
-          { isDefault: true, label: "High", value: "high" },
-        ],
-        "high",
-        "chat",
-      ),
-    ).toBe("high");
-  });
-
-  it("hides the OpenCode agent selector when agent options are only the plan/build mode pair", () => {
-    expect(
-      shouldHideOpenCodeAgentSelector([
-        { isDefault: true, label: "Build", value: "build" },
-        { label: "Plan", value: "plan" },
-      ]),
-    ).toBe(true);
-  });
-
-  it("keeps the OpenCode agent selector for non-mode agent sets", () => {
-    expect(
-      shouldHideOpenCodeAgentSelector([
-        { isDefault: true, label: "Big Pickle", value: "big-pickle" },
-        { label: "Code Reviewer", value: "reviewer" },
+      haveSameEngineOptionSet(FALLBACK_CHAT_ENGINE_OPTIONS, [
+        ...FALLBACK_CHAT_ENGINE_OPTIONS.slice(0, -1),
+        { ...FALLBACK_CHAT_ENGINE_OPTIONS.at(-1)!, instanceId: "other" },
       ]),
     ).toBe(false);
   });
 
-  it("hides the OpenCode variant selector when variant options are only the plan/build mode pair", () => {
+  it("offers every implemented driver's default instance before the catalog loads", () => {
     expect(
-      shouldHideOpenCodeTraitSelector([
-        { isDefault: true, label: "High", value: "high" },
-        { label: "Max", value: "max" },
+      FALLBACK_CHAT_ENGINE_OPTIONS.map((option) => [
+        option.engine,
+        option.instanceId,
       ]),
-    ).toBe(true);
+    ).toEqual([
+      ["sentinel", "sentinel"],
+      ["codex", "codex"],
+      ["claude", "claude"],
+      ["copilot", "copilot"],
+      ["cursor", "cursor"],
+      ["opencode", "opencode"],
+    ]);
   });
 
-  it("keeps the OpenCode variant selector for non-mode variant sets", () => {
-    expect(
-      shouldHideOpenCodeTraitSelector([
-        { isDefault: true, label: "Fast", value: "fast" },
-        { label: "Balanced", value: "balanced" },
-      ]),
-    ).toBe(false);
+  it("flags engines by catalog stability, not a stub", () => {
+    expect(getEngineStabilityNotice({ stability: "stable" })).toBeNull();
+    expect(getEngineStabilityNotice({ stability: "experimental" })).toEqual({
+      description:
+        "Experimental integration; behavior may change or fail unexpectedly.",
+      label: "Unstable",
+    });
+    expect(getEngineStabilityNotice({ stability: "beta" })?.label).toBe("Beta");
   });
 
   it("clears the composer after committed turn failures", () => {

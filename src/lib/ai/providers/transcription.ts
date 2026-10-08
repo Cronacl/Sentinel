@@ -40,27 +40,38 @@ export type VoiceInputAvailability = {
   unavailableReason: string | null;
 };
 
+// OpenAI retires whisper-1 and the GPT-4o transcribe models on 2027-02-26
+// and recommends gpt-transcribe, which uses the same /audio/transcriptions
+// endpoint (https://developers.openai.com/api/docs/deprecations).
 const OPENAI_TRANSCRIPTION_MODELS = [
   {
-    description: "OpenAI Whisper transcription for broad audio compatibility.",
-    id: "whisper-1",
-    label: "Whisper 1",
+    description: "OpenAI's current transcription model and Sentinel's default.",
+    id: "gpt-transcribe",
+    label: "GPT Transcribe",
   },
   {
-    description: "Balanced accuracy, latency, and cost for spoken prompts.",
+    description:
+      "Balanced accuracy, latency, and cost (OpenAI retires it on 2027-02-26).",
     id: "gpt-4o-mini-transcribe",
     label: "GPT-4o Mini Transcribe",
   },
   {
     description:
-      "Pinned OpenAI transcription snapshot used as Sentinel's default.",
+      "Pinned GPT-4o Mini Transcribe snapshot (OpenAI retires it on 2027-02-26).",
     id: "gpt-4o-mini-transcribe-2025-12-15",
     label: "GPT-4o Mini Transcribe 2025-12-15",
   },
   {
-    description: "Higher-end OpenAI transcription model for nuanced speech.",
+    description:
+      "Higher-end GPT-4o transcription (OpenAI retires it on 2027-02-26).",
     id: "gpt-4o-transcribe",
     label: "GPT-4o Transcribe",
+  },
+  {
+    description:
+      "OpenAI Whisper for broad audio compatibility (OpenAI retires it on 2027-02-26).",
+    id: "whisper-1",
+    label: "Whisper 1",
   },
 ] as const satisfies readonly TranscriptionModelOption[];
 
@@ -99,7 +110,7 @@ export const TRANSCRIPTION_PROVIDER_CATALOG: Record<
     requiresModelOverride: false,
   },
   openai: {
-    defaultModelId: "whisper-1",
+    defaultModelId: "gpt-transcribe",
     description: "OpenAI audio transcription with Whisper and 4o models.",
     modelOptions: OPENAI_TRANSCRIPTION_MODELS,
     requiresModelOverride: false,

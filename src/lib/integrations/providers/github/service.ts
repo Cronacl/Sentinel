@@ -727,8 +727,7 @@ export class GitHubService {
         textMatches:
           (
             (item as Record<string, unknown>).text_matches as
-              | { fragment: string }[]
-              | undefined
+              { fragment: string }[] | undefined
           )?.map((m) => m.fragment) ?? [],
       })),
       totalCount: data.total_count,

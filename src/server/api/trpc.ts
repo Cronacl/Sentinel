@@ -9,7 +9,7 @@
 import { TRPCError, initTRPC } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import superjson from "superjson";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 
 import { createLogger } from "@/lib/logger";
 import { db } from "@/server/db";
@@ -26,6 +26,13 @@ export const createTRPCContext = async (opts: { headers: Headers }) => {
 };
 
 const t = initTRPC.context<typeof createTRPCContext>().create({
+  // Subscriptions (engines.onEvents) stream over SSE on the same route. The
+  // ping keeps idle connections open; the client reconnects (and replays
+  // the current state) when a connection goes quiet.
+  sse: {
+    client: { reconnectAfterInactivityMs: 30_000 },
+    ping: { enabled: true, intervalMs: 15_000 },
+  },
   transformer: superjson,
   errorFormatter({ shape, error }) {
     return {
@@ -33,7 +40,7 @@ const t = initTRPC.context<typeof createTRPCContext>().create({
       data: {
         ...shape.data,
         zodError:
-          error.cause instanceof ZodError ? error.cause.flatten() : null,
+          error.cause instanceof ZodError ? z.flattenError(error.cause) : null,
       },
     };
   },

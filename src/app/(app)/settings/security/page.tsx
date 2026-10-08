@@ -10,7 +10,10 @@ import { sileo } from "sileo";
 import { ControlledSelectField } from "@/components/forms/controlled-fields";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import { useOptimisticMutation } from "@/hooks/use-optimistic-mutation";
-import { PERMISSION_MODE_OPTIONS } from "@/lib/security";
+import {
+  BUILTIN_PERMISSION_MODES,
+  getPermissionModeOptions,
+} from "@/lib/security";
 import {
   type SecuritySettingsFormValues,
   securitySettingsFormSchema,
@@ -160,7 +163,11 @@ export default function SecuritySettingsPage() {
                   control={form.control}
                   label="Permission mode"
                   name="permissionMode"
-                  options={PERMISSION_MODE_OPTIONS.map((option) => ({
+                  // The global default also drives Sentinel's own tools,
+                  // which only understand default and full.
+                  options={getPermissionModeOptions(
+                    BUILTIN_PERMISSION_MODES,
+                  ).map((option) => ({
                     description: option.description,
                     label: option.label,
                     value: option.value,

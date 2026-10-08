@@ -7,11 +7,14 @@ export function resolveThreadSelectionSyncInput(input: {
   planMode: boolean;
   planModeReady: boolean;
   selectedEngine: ChatEngine;
+  /** The selected instance of selectedEngine (its id is the engine for the default). */
+  selectedInstanceId?: string;
   selectedModelKey: string | null;
   selectedReasoningEffort: ReasoningEffort | null;
   threadPersistenceReady: boolean;
   threadSelection?: {
     engine?: ChatEngine;
+    engineInstanceId?: string | null;
     modelId: string | null;
     mode?: "chat" | "plan";
     reasoningEffort?: ReasoningEffort | null;
@@ -31,8 +34,15 @@ export function resolveThreadSelectionSyncInput(input: {
   const persistedReasoningEffort =
     input.threadSelection.reasoningEffort ?? null;
 
+  const persistedEngine = input.threadSelection.engine ?? "sentinel";
+  const sameInstance =
+    input.selectedInstanceId === undefined ||
+    (input.threadSelection.engineInstanceId ?? persistedEngine) ===
+      input.selectedInstanceId;
+
   if (
-    (input.threadSelection.engine ?? "sentinel") === input.selectedEngine &&
+    persistedEngine === input.selectedEngine &&
+    sameInstance &&
     input.threadSelection.modelId === input.selectedModelKey &&
     persistedReasoningEffort === input.selectedReasoningEffort &&
     input.threadSelection.mode === selectedMode
@@ -42,6 +52,9 @@ export function resolveThreadSelectionSyncInput(input: {
 
   return {
     engine: input.selectedEngine,
+    ...(input.selectedInstanceId === undefined
+      ? {}
+      : { engineInstanceId: input.selectedInstanceId }),
     mode: selectedMode,
     modelId: input.selectedModelKey,
     reasoningEffort: input.selectedReasoningEffort,

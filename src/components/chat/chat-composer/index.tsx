@@ -11,8 +11,12 @@ import {
   type DragEvent as ReactDragEvent,
 } from "react";
 import { Button } from "@heroui/react";
+import { getDriverPermissionModes } from "@/lib/ai/chat/engines/catalog";
+import {
+  getRunnableComposerSlashCommands,
+  resolveComposerSlashCommands,
+} from "@/lib/ai/chat/engines/slash-commands";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
-import { getExactContextWindowUsage } from "@/lib/ai/chat/context/context-window";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
   extractComposerContext,
@@ -25,10 +29,15 @@ import { ComposerToolbar } from "../composer-toolbar";
 import { ComposerWorkspaceBar } from "../composer-workspace-bar";
 import { ModelSelector } from "../model-selector";
 import { QueuedMessages } from "../queued-messages";
+import { shouldClearComposerAfterSendError } from "../chat-composer-helpers";
 import {
-  resolveOpenCodeTraitValueForThreadMode,
-  shouldClearComposerAfterSendError,
-} from "../chat-composer-helpers";
+  mapsPlanModeToOptions,
+  resolveOptionValueForThreadMode,
+  toModelOptionSelections,
+  toOptionChoices,
+  type ComposerOptionValues,
+} from "@/components/engines/option-descriptors";
+import { EngineUsageLimitsChip } from "@/components/engines/usage-limits-chip";
 import { VoiceRecorderPanel } from "./voice-recorder-panel";
 
 import type { ChatComposerProps, ComposerSendInput } from "./types";
@@ -39,13 +48,16 @@ import { usePersistSelection } from "./use-persist-selection";
 import { usePlanMode } from "./use-plan-mode";
 import { useVoiceInput } from "./use-voice-input";
 import { shouldShowVoiceInputControl } from "./voice-input.helpers";
+import { resolveComposerContextWindowIndicator } from "./context-window-indicator.helpers";
 import { resolveThreadSelectionSyncInput } from "./thread-selection-sync";
 
 export type {
-  ChatComposerOpenCodeSelection,
+  ChatComposerOptionSelection,
   ChatComposerProps,
+  ChatComposerSelectionChange,
   ChatComposerStartPlanImplementationHandler,
   ChatComposerThreadSelection,
+  ComposerSendInput,
 } from "./types";
 
 let hasComposerBootstrappedThisSession = false;
@@ -61,11 +73,11 @@ export function ChatComposer({
   draftThreadId,
   draftMode = null,
   isEditing = false,
-  openCodeSelection = null,
+  optionSelection = null,
   onCancelEdit,
   onDraftPreparedWorktreeChange,
   onDraftProjectModeChange,
-  onOpenCodeSelectionChange,
+  onOptionSelectionChange,
   onQueueFollowUp,
   onRegisterStartPlanImplementation,
   onRemoveQueuedFollowUp,
@@ -100,9 +112,9 @@ export function ChatComposer({
 
   const generalSettingsQuery = api.generalSettings.get.useQuery();
   const voiceSettingsQuery = api.voiceSettings.get.useQuery();
-  const codexReview = api.engines.codexReview.useMutation();
-  const codexRollback = api.engines.codexRollback.useMutation();
-  const codexCompact = api.engines.codexCompact.useMutation();
+  const codexReview = api.engines.codex.review.useMutation();
+  const codexRollback = api.engines.codex.rollback.useMutation();
+  const codexCompact = api.engines.codex.compact.useMutation();
   const followUpBehavior =
     generalSettingsQuery.data?.followUpBehavior ?? DEFAULT_FOLLOW_UP_BEHAVIOR;
 
@@ -138,22 +150,23 @@ export function ChatComposer({
     engineOptions,
     handleSelectEngine,
     handleSelectModel,
-    handleSelectOpenCodeAgent,
-    handleSelectOpenCodeVariant,
+    handleSelectOption,
     handleSelectReasoningEffort,
     modelsQuery,
     selectedEngine,
+    selectedInstanceId,
     selectedModel,
     selectedModelKey,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
+    composerOptions,
+    selectedEngineStatus,
+    selectedOptionValues,
     selectedReasoningEffort,
     supportedReasoningEfforts,
     threadPersistenceReadyRef,
   } = useModelSelection({
     globalSelectionQuery,
-    openCodeSelection,
-    onOpenCodeSelectionChange,
+    optionSelection,
+    onOptionSelectionChange,
     onSelectionChange,
     persistEngineSelection,
     persistSelection,
@@ -161,7 +174,8 @@ export function ChatComposer({
     threadSelection,
   });
 
-  const planModeAvailable = true;
+  // Hidden only for an engine that declares it cannot plan.
+  const planModeAvailable = selectedEngineStatus?.supportsPlanMode !== false;
   const { handleTogglePlanMode, planMode, planModeReady, setPlanMode } =
     usePlanMode({
       canPersistThreadSelection,
@@ -196,8 +210,19 @@ export function ChatComposer({
         }
       : undefined;
 
+  // Another instance of a driver can keep its skills in its own home
+  // (CLAUDE_CONFIG_DIR, COPILOT_HOME, CODEX_HOME): list that one's.
+  const skillsInstanceId =
+    selectedEngineStatus && !selectedEngineStatus.isDefaultInstance
+      ? selectedInstanceId
+      : undefined;
   const skillsQuery = api.skills.list.useQuery(
-    activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : undefined,
+    activeWorkspace?.id || skillsInstanceId
+      ? {
+          ...(skillsInstanceId ? { instanceId: skillsInstanceId } : {}),
+          ...(activeWorkspace?.id ? { workspaceId: activeWorkspace.id } : {}),
+        }
+      : undefined,
     {
       staleTime: 30_000,
     },
@@ -232,41 +257,59 @@ export function ChatComposer({
     }));
   }, [skillsQuery.data]);
 
-  const handleSlashCommand = useCallback(
-    (command: string) => {
-      if (
-        selectedEngine !== "codex" ||
-        !threadId ||
-        !providerSlashCommandsEnabled
-      ) {
-        return;
-      }
-
-      if (command === "compact") {
-        codexCompact.mutate({ threadId });
-        return;
-      }
-
-      if (command === "review") {
-        codexReview.mutate({ threadId });
-        return;
-      }
-
-      if (command === "rollback") {
-        codexRollback.mutate({ count: 1, threadId });
-      }
-    },
-    [
-      codexCompact,
-      codexReview,
-      codexRollback,
-      providerSlashCommandsEnabled,
-      selectedEngine,
-      threadId,
-    ],
+  // Commands Sentinel runs itself ("sentinel" source), per driver; the
+  // rest go to the runtime as prompt text.
+  const sentinelSlashActions = useMemo<
+    Partial<Record<string, Record<string, (threadId: string) => void>>>
+  >(
+    () => ({
+      codex: {
+        compact: (id) => codexCompact.mutate({ threadId: id }),
+        review: (id) => codexReview.mutate({ threadId: id }),
+        rollback: (id) => codexRollback.mutate({ count: 1, threadId: id }),
+      },
+    }),
+    [codexCompact, codexReview, codexRollback],
   );
   const canExecuteProviderSlashCommands = Boolean(
     threadId && providerSlashCommandsEnabled,
+  );
+  const slashCommands = useMemo(
+    () =>
+      getRunnableComposerSlashCommands(
+        resolveComposerSlashCommands({
+          driver: selectedEngine,
+          slashCommands: selectedEngineStatus?.slashCommands,
+        }),
+        {
+          actions: new Set(
+            Object.keys(sentinelSlashActions[selectedEngine] ?? {}),
+          ),
+          canExecute: canExecuteProviderSlashCommands,
+        },
+      ),
+    [
+      canExecuteProviderSlashCommands,
+      selectedEngine,
+      selectedEngineStatus?.slashCommands,
+      sentinelSlashActions,
+    ],
+  );
+
+  const handleSlashCommand = useCallback(
+    (command: string) => {
+      const action = sentinelSlashActions[selectedEngine]?.[command];
+      if (!action || !threadId || !providerSlashCommandsEnabled) {
+        return;
+      }
+      action(threadId);
+    },
+    [
+      providerSlashCommandsEnabled,
+      selectedEngine,
+      sentinelSlashActions,
+      threadId,
+    ],
   );
 
   const { editor, placeholderText } = useComposerEditor({
@@ -284,6 +327,7 @@ export function ChatComposer({
     promptSeed,
     promptSeedKey,
     selectedEngine,
+    slashCommands,
   });
   const voiceInput = useVoiceInput({ editor });
 
@@ -292,30 +336,48 @@ export function ChatComposer({
       ? (utils.threads.get.getData({ threadId })?.messages ?? [])
       : [];
 
-  const contextWindowIndicator =
-    selectedEngine === "sentinel" && selectedModelKey && selectedModel
-      ? getExactContextWindowUsage({
-          contextWindow: selectedModel.contextWindow,
-          fixedWindowSize:
-            generalSettingsQuery.data?.contextCompactionFixedWindowSize,
-          messages: threadMessages,
-          useFixedWindow:
-            generalSettingsQuery.data?.contextCompactionUseFixedWindow,
-        })
-      : null;
-  const openCodeTraits =
-    selectedModel?.engine === "opencode" ? selectedModel.openCode : undefined;
-  const effectiveSelectedOpenCodeAgent = resolveOpenCodeTraitValueForThreadMode(
-    openCodeTraits?.agentOptions,
-    selectedOpenCodeAgent,
-    planMode ? "plan" : "chat",
+  const contextWindowIndicator = useMemo(
+    () =>
+      resolveComposerContextWindowIndicator({
+        engine: selectedEngine,
+        generalSettings: generalSettingsQuery.data,
+        hasSelectedModel: Boolean(selectedModelKey && selectedModel),
+        messages: threadMessages,
+        modelContextWindow: selectedModel?.contextWindow,
+      }),
+    [
+      generalSettingsQuery.data,
+      selectedEngine,
+      selectedModel,
+      selectedModelKey,
+      threadMessages,
+    ],
   );
-  const effectiveSelectedOpenCodeVariant =
-    resolveOpenCodeTraitValueForThreadMode(
-      openCodeTraits?.variantOptions,
-      selectedOpenCodeVariant,
-      planMode ? "plan" : "chat",
-    );
+  // Engines that plan by picking an option (OpenCode's plan agent) follow
+  // the plan toggle through their options.
+  const planMapsToOptions = mapsPlanModeToOptions(
+    selectedEngineStatus?.supportsPlanMode,
+  );
+  const resolveOptionValuesForMode = useCallback(
+    (threadMode: "chat" | "plan"): ComposerOptionValues =>
+      planMapsToOptions
+        ? Object.fromEntries(
+            composerOptions.map((option) => [
+              option.id,
+              resolveOptionValueForThreadMode(
+                toOptionChoices(option),
+                selectedOptionValues[option.id] ?? null,
+                threadMode,
+              ),
+            ]),
+          )
+        : selectedOptionValues,
+    [composerOptions, planMapsToOptions, selectedOptionValues],
+  );
+  const effectiveOptionValues = useMemo(
+    () => resolveOptionValuesForMode(planMode ? "plan" : "chat"),
+    [planMode, resolveOptionValuesForMode],
+  );
 
   useEffect(() => {
     if (!canPersistThreadSelection || !threadSelection) {
@@ -327,6 +389,7 @@ export function ChatComposer({
       planMode,
       planModeReady,
       selectedEngine,
+      selectedInstanceId,
       selectedModelKey,
       selectedReasoningEffort,
       threadPersistenceReady: threadPersistenceReadyRef.current,
@@ -341,6 +404,7 @@ export function ChatComposer({
 
     persistSelection(syncInput.modelId, syncInput.reasoningEffort, {
       engine: syncInput.engine,
+      engineInstanceId: syncInput.engineInstanceId,
       mode: syncInput.mode,
       skipGlobal: true,
     });
@@ -350,6 +414,7 @@ export function ChatComposer({
     planModeReady,
     persistSelection,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
     selectedReasoningEffort,
     threadPersistenceReadyRef,
@@ -357,25 +422,22 @@ export function ChatComposer({
   ]);
 
   useEffect(() => {
-    if (selectedModel?.engine !== "opencode") {
+    if (!planMapsToOptions) {
       return;
     }
 
-    if (effectiveSelectedOpenCodeAgent !== selectedOpenCodeAgent) {
-      handleSelectOpenCodeAgent(effectiveSelectedOpenCodeAgent);
-    }
-
-    if (effectiveSelectedOpenCodeVariant !== selectedOpenCodeVariant) {
-      handleSelectOpenCodeVariant(effectiveSelectedOpenCodeVariant);
+    for (const option of composerOptions) {
+      const next = effectiveOptionValues[option.id] ?? null;
+      if (next !== (selectedOptionValues[option.id] ?? null)) {
+        handleSelectOption(option.id, next);
+      }
     }
   }, [
-    effectiveSelectedOpenCodeAgent,
-    effectiveSelectedOpenCodeVariant,
-    handleSelectOpenCodeAgent,
-    handleSelectOpenCodeVariant,
-    selectedModel?.engine,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
+    composerOptions,
+    effectiveOptionValues,
+    handleSelectOption,
+    planMapsToOptions,
+    selectedOptionValues,
   ]);
 
   const dispatchMessagePayload = useCallback(
@@ -428,16 +490,13 @@ export function ChatComposer({
         ...(hasComposerContext(composerContext) ? { composerContext } : {}),
         ...(draftRepoState ? { draftRepoState } : {}),
         engine: selectedEngine,
+        engineInstanceId: selectedInstanceId,
         ...(files.length > 0 ? { files } : {}),
         modelId: selectedModelKey,
-        ...(selectedEngine === "opencode"
-          ? {
-              openCode: {
-                agent: effectiveSelectedOpenCodeAgent,
-                variant: effectiveSelectedOpenCodeVariant,
-              },
-            }
-          : {}),
+        modelOptions: toModelOptionSelections(
+          effectiveOptionValues,
+          composerOptions,
+        ),
         reasoningEffort: selectedReasoningEffort,
         text,
         threadMode: (planMode ? "plan" : "chat") as "chat" | "plan",
@@ -485,9 +544,10 @@ export function ChatComposer({
     planMode,
     canSend,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
-    effectiveSelectedOpenCodeAgent,
-    effectiveSelectedOpenCodeVariant,
+    composerOptions,
+    effectiveOptionValues,
     selectedReasoningEffort,
     setAttachmentError,
     setPreviewAttachment,
@@ -508,23 +568,13 @@ export function ChatComposer({
     await sendPlanImplementation({
       ...(draftRepoState ? { draftRepoState } : {}),
       engine: selectedEngine,
+      engineInstanceId: selectedInstanceId,
       modelId: selectedModelKey,
-      ...(selectedEngine === "opencode"
-        ? {
-            openCode: {
-              agent: resolveOpenCodeTraitValueForThreadMode(
-                selectedModel?.openCode?.agentOptions,
-                selectedOpenCodeAgent,
-                "chat",
-              ),
-              variant: resolveOpenCodeTraitValueForThreadMode(
-                selectedModel?.openCode?.variantOptions,
-                selectedOpenCodeVariant,
-                "chat",
-              ),
-            },
-          }
-        : {}),
+      // Implementation runs in chat mode, whatever the plan toggle showed.
+      modelOptions: toModelOptionSelections(
+        resolveOptionValuesForMode("chat"),
+        composerOptions,
+      ),
       reasoningEffort: selectedReasoningEffort,
       text: IMPLEMENT_PLAN_PROMPT,
       threadMode: "chat",
@@ -535,11 +585,10 @@ export function ChatComposer({
     onSend,
     onStartPlanImplementationSend,
     selectedEngine,
+    selectedInstanceId,
     selectedModelKey,
-    selectedModel?.openCode?.agentOptions,
-    selectedModel?.openCode?.variantOptions,
-    selectedOpenCodeAgent,
-    selectedOpenCodeVariant,
+    composerOptions,
+    resolveOptionValuesForMode,
     selectedReasoningEffort,
     setAttachmentError,
     setPlanMode,
@@ -567,39 +616,17 @@ export function ChatComposer({
         .
       </>
     ) : null;
-  const contextWindowIndicatorProps = useMemo(
-    () =>
-      contextWindowIndicator
-        ? {
-            compactionEnabled:
-              generalSettingsQuery.data?.contextCompactionEnabled ?? false,
-            contextWindowMode: contextWindowIndicator.source,
-            compactionWindowPercent:
-              generalSettingsQuery.data?.contextCompactionWindowPercent ?? 70,
-            contextWindow: contextWindowIndicator.contextWindow,
-            inputTokens: contextWindowIndicator.inputTokens,
-            modelContextWindow: selectedModel?.contextWindow,
-            usedPercent: contextWindowIndicator.usedPercent,
-          }
-        : null,
-    [
-      contextWindowIndicator,
-      generalSettingsQuery.data?.contextCompactionEnabled,
-      generalSettingsQuery.data?.contextCompactionWindowPercent,
-      selectedModel?.contextWindow,
-    ],
-  );
   const modelSelectorNode = useMemo(
     () => (
       <ModelSelector
         availableModels={availableModels}
         isLoading={modelsQuery.isLoading && availableModels.length === 0}
+        composerOptions={composerOptions}
+        hideModeMappingOptions={planMapsToOptions}
         onSelectModel={handleSelectModel}
-        onSelectOpenCodeAgent={handleSelectOpenCodeAgent}
-        onSelectOpenCodeVariant={handleSelectOpenCodeVariant}
+        onSelectOption={handleSelectOption}
         onSelectReasoningEffort={handleSelectReasoningEffort}
-        selectedOpenCodeAgent={effectiveSelectedOpenCodeAgent}
-        selectedOpenCodeVariant={effectiveSelectedOpenCodeVariant}
+        optionValues={effectiveOptionValues}
         selectedModel={selectedModel}
         selectedModelKey={selectedModelKey}
         selectedReasoningEffort={selectedReasoningEffort}
@@ -608,18 +635,28 @@ export function ChatComposer({
     ),
     [
       availableModels,
+      composerOptions,
+      effectiveOptionValues,
       handleSelectModel,
-      handleSelectOpenCodeAgent,
-      handleSelectOpenCodeVariant,
+      handleSelectOption,
       handleSelectReasoningEffort,
       modelsQuery.isLoading,
-      effectiveSelectedOpenCodeAgent,
-      effectiveSelectedOpenCodeVariant,
+      planMapsToOptions,
       selectedModel,
       selectedModelKey,
       selectedReasoningEffort,
       supportedReasoningEfforts,
     ],
+  );
+  const usageLimitsIndicator = useMemo(
+    () => (
+      <EngineUsageLimitsChip
+        driver={selectedEngine}
+        instanceId={selectedInstanceId}
+        isDisabled={isLocked}
+      />
+    ),
+    [isLocked, selectedEngine, selectedInstanceId],
   );
   const showEngineSelector = !canPersistThreadSelection;
   const selectedVoiceProviderLabel =
@@ -846,7 +883,7 @@ export function ChatComposer({
           ) : (
             <ComposerToolbar
               canSend={canSend}
-              contextWindowIndicator={contextWindowIndicatorProps}
+              contextWindowIndicator={contextWindowIndicator}
               engineOptions={engineOptions}
               hasWorkspace={hasWorkspace}
               isBusy={isBusy}
@@ -862,10 +899,12 @@ export function ChatComposer({
               planMode={planMode}
               planModeAvailable={planModeAvailable}
               selectedEngine={selectedEngine}
+              selectedInstanceId={selectedInstanceId}
               selectedModelKey={selectedModelKey}
               showEngineSelector={showEngineSelector}
               showVoiceInput={showVoiceInput}
               toolTags={toolTags}
+              usageLimitsIndicator={usageLimitsIndicator}
               voiceInputDisabled={!editor}
             />
           )}
@@ -882,6 +921,7 @@ export function ChatComposer({
               onDraftPreparedWorktreeChange={onDraftPreparedWorktreeChange}
               onDraftProjectModeChange={onDraftProjectModeChange}
               onSetupPendingChange={setIsRepoSetupPending}
+              permissionModes={getDriverPermissionModes(selectedEngine)}
               repoThreadId={repoThreadId}
               showBranchSwitcher={showBranchSwitcher}
             />

@@ -1,3 +1,7 @@
+import {
+  EngineInstanceUnavailableError,
+  EngineTriggerUnsupportedError,
+} from "@/lib/ai/chat/engines/platform/errors";
 import { getErrorMessage } from "@/lib/errors";
 
 export class InvalidThreadChatRequestError extends Error {
@@ -25,6 +29,23 @@ export function createThreadChatErrorResponse(error: unknown) {
         },
       },
       { status: 400 },
+    );
+  }
+
+  // The thread's engine instance cannot run this turn (removed, disabled,
+  // unknown driver) or its runtime does not handle the action.
+  if (
+    error instanceof EngineInstanceUnavailableError ||
+    error instanceof EngineTriggerUnsupportedError
+  ) {
+    return Response.json(
+      {
+        error: {
+          code: error.code,
+          message,
+        },
+      },
+      { status: 409 },
     );
   }
 

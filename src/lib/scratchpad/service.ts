@@ -2,6 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 
 import { runThreadChat } from "@/lib/ai/chat";
+import { toStoredEngineInstanceId } from "@/lib/ai/chat/engines/contract/ids";
 import type {
   RepoProjectMode,
   ThreadChatEngineState,
@@ -54,6 +55,7 @@ type ScratchpadThreadStateRow = Pick<
 type LaunchScratchpadTaskRunInput = {
   database?: Database;
   engine?: ChatEngine;
+  engineInstanceId?: string;
   modelId?: string;
   reasoningEffort?: ReasoningEffort;
   taskId: string;
@@ -476,6 +478,9 @@ async function defaultLaunchScratchpadTaskRun(
     const response = await runThreadChat(
       {
         engine: input.engine ?? SCRATCHPAD_ENGINE,
+        ...(input.engineInstanceId
+          ? { engineInstanceId: input.engineInstanceId }
+          : {}),
         id: input.threadId,
         message: {
           id: messageId,
@@ -633,6 +638,8 @@ export async function listScratchpad(params: {
 export async function createScratchpadTask(params: {
   database?: Database;
   engine?: ChatEngine;
+  /** The instance of `engine` both task threads bind to. */
+  engineInstanceId?: string;
   modelId?: string;
   permissionModeOverride?: PermissionMode;
   projectMode?: RepoProjectMode;
@@ -674,6 +681,10 @@ export async function createScratchpadTask(params: {
     tx.insert(threads)
       .values({
         chatEngine: params.engine ?? SCRATCHPAD_ENGINE,
+        chatEngineInstanceId: toStoredEngineInstanceId(
+          params.engine ?? SCRATCHPAD_ENGINE,
+          params.engineInstanceId,
+        ),
         ...(threadState ? { chatEngineState: threadState } : {}),
         ...(params.modelId ? { chatModelId: params.modelId } : {}),
         ...(params.reasoningEffort
@@ -693,6 +704,10 @@ export async function createScratchpadTask(params: {
     tx.insert(threads)
       .values({
         chatEngine: params.engine ?? SCRATCHPAD_ENGINE,
+        chatEngineInstanceId: toStoredEngineInstanceId(
+          params.engine ?? SCRATCHPAD_ENGINE,
+          params.engineInstanceId,
+        ),
         ...(threadState ? { chatEngineState: threadState } : {}),
         ...(params.modelId ? { chatModelId: params.modelId } : {}),
         ...(params.reasoningEffort
@@ -735,6 +750,9 @@ export async function createScratchpadTask(params: {
   (params.scheduleTaskRun ?? scheduleScratchpadTaskRun)({
     database,
     ...(params.engine ? { engine: params.engine } : {}),
+    ...(params.engineInstanceId
+      ? { engineInstanceId: params.engineInstanceId }
+      : {}),
     ...(params.modelId ? { modelId: params.modelId } : {}),
     ...(params.reasoningEffort
       ? { reasoningEffort: params.reasoningEffort }

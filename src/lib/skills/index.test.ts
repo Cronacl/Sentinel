@@ -123,6 +123,60 @@ describe("skills", () => {
     expect(skills[1]?.scope).toBe("workspace");
   });
 
+  it("reads Claude and Copilot global skills from an instance's home", async () => {
+    const claudeHome = path.join(homeDirectory, "claude-work");
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".claude/skills",
+      name: "default-claude",
+    });
+    await writeSkill({
+      baseDirectory: claudeHome,
+      container: "skills",
+      name: "work-claude",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".copilot/skills",
+      name: "default-copilot",
+    });
+    const globalDirectories = { claude: path.join(claudeHome, "skills") };
+
+    const skills = await discoverSkills({
+      globalDirectories,
+      workspaceRoot: null,
+    });
+    expect(
+      skills.map((skill) => [skill.name, skill.sourceKind, skill.scope]),
+    ).toEqual([
+      ["default-copilot", "copilot", "global"],
+      ["work-claude", "claude", "global"],
+    ]);
+
+    // Snapshots are kept apart per set of homes.
+    const instanceSnapshot = await getSkillSnapshot({
+      globalDirectories,
+      workspaceRoot: null,
+    });
+    const defaultSnapshot = await getSkillSnapshot({ workspaceRoot: null });
+    expect(instanceSnapshot.skills.map((skill) => skill.name)).toContain(
+      "work-claude",
+    );
+    expect(defaultSnapshot.skills.map((skill) => skill.name)).toContain(
+      "default-claude",
+    );
+    expect(
+      (
+        await loadSkillByName({
+          globalDirectories,
+          name: "work-claude",
+          target: "claude",
+          workspaceRoot: null,
+        })
+      )?.skillFile,
+    ).toBe(path.join(claudeHome, "skills", "work-claude", "SKILL.md"));
+  });
+
   it("preserves optional skill icons from frontmatter", async () => {
     await writeSkill({
       baseDirectory: workspaceRoot,

@@ -112,7 +112,7 @@ export function buildMySQLTools(
           .describe("Target database. Uses the configured default if omitted."),
       }),
       outputSchema: z.object({
-        rows: z.array(z.record(z.unknown())),
+        rows: z.array(z.record(z.string(), z.unknown())),
         rowCount: z.number(),
         fields: z.array(z.object({ name: z.string(), dataType: z.string() })),
       }),

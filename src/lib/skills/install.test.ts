@@ -134,6 +134,29 @@ EOF`,
     expect(result.directory).toBe(`${root}/.copilot/skills/copilot-skill`);
   });
 
+  it("installs global skills into an instance's own skills folder", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+    const claudeSkills = path.join(root, "claude-work", "skills");
+
+    const result = await executeInstallSteps({
+      destRoot: root,
+      globalSkillsDirectory: claudeSkills,
+      installSteps: [
+        `mkdir -p "{{DEST}}"`,
+        `printf -- '---\\nname: work-skill\\ndescription: Helpful\\n---\\n' > "{{DEST}}/SKILL.md"`,
+      ],
+      name: "work-skill",
+      scope: "global",
+      target: "claude",
+    });
+
+    expect(result.directory).toBe(path.join(claudeSkills, "work-skill"));
+    expect(
+      await readFile(path.join(claudeSkills, "work-skill", "SKILL.md"), "utf8"),
+    ).toContain("name: work-skill");
+  });
+
   it("installs Copilot skills into the workspace .github/skills directory", async () => {
     const root = await createTempRoot("sentinel-skill-install-");
     tempRoots.push(root);

@@ -100,73 +100,81 @@ const MASK_ONLY_IMAGE_CAPABILITIES: ImageModelCapabilities = {
   supportsTextToImage: false,
 };
 
+// The first entry of each provider is its default image model. Retired ids
+// live in RETIRED_IMAGE_MODEL_REPLACEMENTS below, not here.
 const IMAGE_MODEL_CATALOG: Partial<Record<AIProvider, ImageModelMeta[]>> = {
   openai: [
     {
-      capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Highest quality OpenAI image generation model.",
-      displayName: "GPT Image 1",
-      id: "gpt-image-1",
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description: "Most capable OpenAI model for image generation and edits.",
+      displayName: "GPT Image 2.5 Sunburst",
+      id: "gpt-image-2.5-sunburst",
+    },
+    {
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description: "Fastest OpenAI model for high-quality everyday images.",
+      displayName: "GPT Image 2.5 Flare",
+      id: "gpt-image-2.5-flare",
+    },
+    {
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description: "Previous OpenAI image generation and editing model.",
+      displayName: "GPT Image 2",
+      id: "gpt-image-2",
     },
     {
       capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Lower-cost OpenAI image generation model.",
-      displayName: "GPT Image 1 Mini",
-      id: "gpt-image-1-mini",
-    },
-    {
-      capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Latest OpenAI image generation variant.",
+      description:
+        "OpenAI image generation variant (OpenAI retires it on 2026-12-01).",
       displayName: "GPT Image 1.5",
       id: "gpt-image-1.5",
     },
     {
       capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Classic OpenAI image generation model.",
-      displayName: "DALL-E 3",
-      id: "dall-e-3",
-    },
-    {
-      capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Legacy OpenAI image generation model.",
-      displayName: "DALL-E 2",
-      id: "dall-e-2",
+      description:
+        "Lower-cost OpenAI image generation model (OpenAI retires it on 2026-12-01).",
+      displayName: "GPT Image 1 Mini",
+      id: "gpt-image-1-mini",
     },
   ],
+  // `@ai-sdk/google` only serves Gemini image models; Imagen was dropped.
   google: [
     {
-      capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Google Imagen 4 text-to-image model.",
-      displayName: "Imagen 4",
-      id: "imagen-4.0-generate-001",
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description:
+        "Gemini Nano Banana 2.1 for fast image generation and editing.",
+      displayName: "Nano Banana 2.1",
+      id: "gemini-nano-banana-2.1",
     },
     {
-      capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Google Imagen 3 text-to-image model.",
-      displayName: "Imagen 3",
-      id: "imagen-3.0-generate-002",
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description: "Gemini 3 Pro Image (Nano Banana Pro) for premium quality.",
+      displayName: "Gemini 3 Pro Image",
+      id: "gemini-3-pro-image",
     },
   ],
   google_vertex: [
     {
-      capabilities: TEXT_ONLY_IMAGE_CAPABILITIES,
-      description: "Vertex AI Imagen 4 deployment.",
-      displayName: "Imagen 4",
-      id: "imagen-4.0-generate-001",
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description:
+        "Vertex AI Nano Banana 2.1 for fast image generation and editing.",
+      displayName: "Nano Banana 2.1",
+      id: "gemini-nano-banana-2.1",
     },
     {
-      capabilities: {
-        supportsMask: true,
-        supportsReferenceImages: true,
-        supportsSeed: true,
-        supportsTextToImage: true,
-      },
-      description: "Vertex AI Imagen 3 deployment with editing support.",
-      displayName: "Imagen 3",
-      id: "imagen-3.0-generate-002",
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description: "Vertex AI Gemini 2.5 Flash Image generation and editing.",
+      displayName: "Gemini 2.5 Flash Image",
+      id: "gemini-2.5-flash-image",
     },
   ],
   xai: [
+    {
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description: "Latest xAI Grok image generation and editing model.",
+      displayName: "Grok Imagine Image 2.0",
+      id: "grok-imagine-image-2.0",
+    },
     {
       capabilities: EDITABLE_IMAGE_CAPABILITIES,
       description: "xAI Grok image generation and editing model.",
@@ -175,6 +183,13 @@ const IMAGE_MODEL_CATALOG: Partial<Record<AIProvider, ImageModelMeta[]>> = {
     },
   ],
   black_forest_labs: [
+    {
+      capabilities: EDITABLE_IMAGE_CAPABILITIES,
+      description:
+        "FLUX 3 for text prompts and up to 10 reference images (no seed).",
+      displayName: "FLUX 3",
+      id: "flux-3-image",
+    },
     {
       capabilities: SEEDED_EDITABLE_IMAGE_CAPABILITIES,
       description:
@@ -388,14 +403,52 @@ export function supportsImageGeneration({
   }
 }
 
+/**
+ * Image model ids that providers have retired, mapped to their recommended
+ * replacement, so a stored image model keeps working instead of disabling
+ * the provider.
+ */
+const RETIRED_IMAGE_MODEL_REPLACEMENTS: Partial<
+  Record<AIProvider, Readonly<Record<string, string>>>
+> = {
+  // https://developers.openai.com/api/docs/deprecations
+  openai: {
+    "dall-e-2": "gpt-image-2",
+    "dall-e-3": "gpt-image-2",
+    // Shut down 2026-10-23.
+    "gpt-image-1": "gpt-image-2.5-sunburst",
+  },
+  // https://ai.google.dev/gemini-api/docs/deprecations
+  google: {
+    "imagen-3.0-generate-002": "gemini-nano-banana-2.1",
+    "imagen-4.0-generate-001": "gemini-nano-banana-2.1",
+  },
+  google_vertex: {
+    "imagen-3.0-generate-002": "gemini-nano-banana-2.1",
+    "imagen-4.0-generate-001": "gemini-nano-banana-2.1",
+  },
+};
+
+export function getRetiredImageModelReplacement(
+  provider: AIProvider,
+  modelId: string,
+): string | null {
+  const replacements = RETIRED_IMAGE_MODEL_REPLACEMENTS[provider];
+  return replacements && Object.hasOwn(replacements, modelId)
+    ? replacements[modelId]!
+    : null;
+}
+
 function resolveSelectedModelId({
   availableModels,
   isCustom,
+  provider,
   requestedModelId,
   supportsCustomModel,
 }: {
   availableModels: ImageModelMeta[];
   isCustom: boolean;
+  provider: AIProvider;
   requestedModelId: string | null;
   supportsCustomModel: boolean;
 }) {
@@ -408,7 +461,14 @@ function resolveSelectedModelId({
       return requestedModelId;
     }
 
-    return null;
+    const replacement = getRetiredImageModelReplacement(
+      provider,
+      requestedModelId,
+    );
+    return replacement &&
+      availableModels.some((model) => model.id === replacement)
+      ? replacement
+      : null;
   }
 
   return availableModels[0]?.id ?? null;
@@ -447,6 +507,7 @@ export function buildImageGenerationProviderEntries({
     const modelId = resolveSelectedModelId({
       availableModels,
       isCustom,
+      provider: credential.provider,
       requestedModelId,
       supportsCustomModel,
     });

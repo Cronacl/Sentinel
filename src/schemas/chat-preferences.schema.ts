@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { engineInstanceIdSchema } from "@/lib/ai/chat/engines/contract/ids";
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
 import { CHAT_ENGINES } from "@/server/db/enums";
@@ -10,6 +11,11 @@ const chatModelIdSchema = z.string().trim().min(1, "Model is required.");
 
 const chatSelectionFieldsSchema = z.object({
   engine: chatEngineSchema.nullish(),
+  /**
+   * The instance of `engine`; only applied together with `engine`. Omitted,
+   * the stored instance is kept while the engine is unchanged.
+   */
+  engineInstanceId: engineInstanceIdSchema.nullish(),
   mode: z.enum(THREAD_MODES).nullish(),
   modelId: chatModelIdSchema.optional(),
   reasoningEffort: reasoningEffortSchema.nullish(),
@@ -17,6 +23,7 @@ const chatSelectionFieldsSchema = z.object({
 
 function hasChatSelectionUpdate(value: {
   engine?: (typeof CHAT_ENGINES)[number] | null;
+  engineInstanceId?: string | null;
   mode?: (typeof THREAD_MODES)[number] | null;
   modelId?: string;
   reasoningEffort?: (typeof REASONING_EFFORTS)[number] | null;

@@ -5,10 +5,9 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { createLogger } from "@/lib/logger";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
+import { createLineSplitter } from "@/lib/runtime/process/line-splitter";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type {
   CodexApprovalPolicy,
   CodexSandboxMode,
@@ -18,8 +17,34 @@ import {
   readCodexCliVersion,
   resolveCodexCli,
   spawnCodexCli,
+  type CodexCliInstance,
   type ResolvedCodexCli,
 } from "../codex-cli";
+import { getInstanceResources } from "../platform/instance-resources";
+import { getLegacyEngineStatusFilePath } from "../platform/paths";
+import {
+  getConfiguredBinaryOverride,
+  getInstanceProcessEnv,
+  getInstanceRuntimeKey,
+} from "../platform/runtime/resolve-binary";
+import {
+  buildCodexApprovalResult,
+  buildCodexDeclinedServerRequestResult,
+  buildCodexInitializeParams,
+  buildCodexUserInputResult,
+  CODEX_METHOD_NOT_FOUND_ERROR_CODE,
+  CODEX_PROTOCOL_BASELINE_VERSION,
+  getCodexMcpElicitationDeclineReason,
+  isCodexAlreadyInitializedError,
+  isCodexApprovalRequestMethod,
+  isCodexUserInputRequestMethod,
+  isCodexVersionAtLeast,
+  parseCodexVersion,
+  revertCodexThreadTurns,
+  type CodexApprovalDecision,
+  type CodexApprovalRequestMethod,
+  type CodexUserInputRequestMethod,
+} from "./protocol";
 
 const log = createLogger("CodexAppServer");
 const CODEX_STATUS_QUERY_TIMEOUT_MS = 1_200;
@@ -28,6 +53,7 @@ const CODEX_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_STATE_FILE_MODE = 0o600;
 const CODEX_STATUS_SNAPSHOT_FILE = "codex-status.json";
+const CODEX_MODEL_LIST_MAX_PAGES = 10;
 
 type JsonRpcId = number | string;
 
@@ -64,6 +90,23 @@ type PendingRequest = {
   resolve: (value: unknown) => void;
 };
 
+/** A JSON-RPC error reply from Codex, keeping its numeric `code`. */
+export class CodexJsonRpcError extends Error {
+  readonly code: number;
+
+  readonly data: unknown;
+
+  readonly method: string;
+
+  constructor(method: string, error: JsonRpcError) {
+    super(error.message);
+    this.name = "CodexJsonRpcError";
+    this.code = error.code;
+    this.data = error.data;
+    this.method = method;
+  }
+}
+
 type CodexWireReasoningEffort = ReasoningEffort;
 
 function normalizeCodexReasoningEffort(
@@ -82,17 +125,66 @@ function normalizeCodexReasoningEffort(
   }
 }
 
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
+type CodexWireModel = {
+  defaultReasoningEffort?: CodexWireReasoningEffort | null;
+  description: string;
+  displayName: string;
+  id: string;
+  inputModalities?: string[];
+  isDefault?: boolean;
+  model: string;
+  supportedReasoningEfforts?: Array<{
+    description?: string;
+    reasoningEffort?: CodexWireReasoningEffort | null;
+  }>;
+  supportsPersonality?: boolean;
+};
+
+function toCodexModelInfo(model: CodexWireModel): CodexModelInfo {
+  return {
+    defaultReasoningEffort: normalizeCodexReasoningEffort(
+      model.defaultReasoningEffort,
+    ),
+    description: model.description,
+    displayName: model.displayName,
+    id: model.id,
+    inputModalities: model.inputModalities ?? ["text"],
+    isDefault: Boolean(model.isDefault),
+    model: model.model,
+    supportedReasoningEfforts: (model.supportedReasoningEfforts ?? [])
+      .map((option) => {
+        const normalizedEffort = normalizeCodexReasoningEffort(
+          option.reasoningEffort,
+        );
+
+        return {
+          description: option.description ?? "",
+          effort: normalizedEffort,
+          label:
+            normalizedEffort.charAt(0).toUpperCase() +
+            normalizedEffort.slice(1),
+        };
+      })
+      .filter(
+        (option, index, array) =>
+          array.findIndex((candidate) => candidate.effort === option.effort) ===
+          index,
+      ),
+    supportsPersonality: Boolean(model.supportsPersonality),
+  };
 }
 
-function getCodexStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), CODEX_STATUS_SNAPSHOT_FILE);
+function getCodexStatusSnapshotPath(
+  instance: CodexCliInstance | null | undefined,
+) {
+  return getLegacyEngineStatusFilePath(CODEX_STATUS_SNAPSHOT_FILE, instance);
 }
 
-async function writeCodexStatusSnapshot(snapshot: CodexStatusSnapshot) {
-  const snapshotPath = getCodexStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeCodexStatusSnapshot(
+  snapshotPath: string,
+  snapshot: CodexStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -106,9 +198,12 @@ async function writeCodexStatusSnapshot(snapshot: CodexStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readCodexStatusSnapshot(options: { cliPath: string }) {
+async function readCodexStatusSnapshot(
+  snapshotPath: string,
+  options: { cliPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getCodexStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<CodexStatusSnapshot>;
 
     if (
@@ -209,12 +304,7 @@ function isCodexAuthErrorMessage(message: string) {
   );
 }
 
-export type CodexApprovalDecision =
-  | "accept"
-  | "acceptForSession"
-  | "acceptWithExecpolicyAmendment"
-  | "cancel"
-  | "decline";
+export type { CodexApprovalDecision };
 
 export type CodexModelInfo = {
   defaultReasoningEffort: ReasoningEffort;
@@ -237,10 +327,77 @@ export type CodexAccountInfo =
       type: "apiKey";
     }
   | {
-      email: string;
+      email: string | null;
       planType: string;
       type: "chatgpt";
+    }
+  | {
+      type: "amazonBedrock";
+      usesCodexManagedCredentials?: boolean;
     };
+
+export type CodexConfigMergeStrategy = "replace" | "upsert";
+
+export type CodexConfigEdit = {
+  keyPath: string;
+  mergeStrategy?: CodexConfigMergeStrategy;
+  value: unknown;
+};
+
+export type CodexConfigWriteResponse = {
+  filePath: string;
+  overriddenMetadata?: {
+    effectiveValue: unknown;
+    message: string;
+    overridingLayer: unknown;
+  } | null;
+  status: "ok" | "okOverridden";
+  version: string;
+};
+
+export type CodexLoginParams =
+  | { apiKey: string; type: "apiKey" }
+  | { type: "chatgpt" }
+  | { type: "chatgptDeviceCode" };
+
+export type CodexLoginResponse =
+  | { type: "apiKey" }
+  | { authUrl: string; loginId: string; type: "chatgpt" }
+  | {
+      loginId: string;
+      type: "chatgptDeviceCode";
+      userCode: string;
+      verificationUrl: string;
+    };
+
+export type CodexRateLimitWindow = {
+  resetsAt?: number | null;
+  usedPercent: number;
+  windowDurationMins?: number | null;
+};
+
+export type CodexRateLimitSnapshot = {
+  credits?: {
+    balance?: string | null;
+    hasCredits: boolean;
+    unlimited: boolean;
+  } | null;
+  limitId?: string | null;
+  limitName?: string | null;
+  planType?: string | null;
+  primary?: CodexRateLimitWindow | null;
+  secondary?: CodexRateLimitWindow | null;
+};
+
+export type CodexSkillInfo = {
+  description: string;
+  enabled: boolean;
+  /** The skill's absolute path, which is what `skills/config/write` selects. */
+  id: string;
+  name: string;
+  path: string;
+  scope: string | null;
+};
 
 export type CodexEngineState =
   | "auth_unavailable"
@@ -277,6 +434,9 @@ type CodexStatusSnapshot = {
 };
 
 type CodexInitializeResult = {
+  codexHome?: string;
+  platformFamily?: string;
+  platformOs?: string;
   userAgent?: string;
 };
 
@@ -295,13 +455,19 @@ type CodexThread = {
 export type CodexTurn = {
   error: { message?: string } | null;
   id: string;
-  items: CodexThreadItem[];
+  /** Empty when the turn was read with `itemsView: "notLoaded"`. */
+  items?: CodexThreadItem[];
   status: "completed" | "failed" | "inProgress" | "interrupted";
 };
 
+type CodexItemStatus = "completed" | "declined" | "failed" | "inProgress";
+
+// `ThreadItem` from codex-rs/app-server-protocol v2 (rust-v0.160.1). Optional
+// fields are `Option<_>` upstream and may be omitted on the wire.
 export type CodexThreadItem =
   | {
       id: string;
+      phase?: string | null;
       text: string;
       type: "agentMessage";
     }
@@ -311,50 +477,71 @@ export type CodexThreadItem =
       type: "plan";
     }
   | {
-      content: string[];
+      content?: string[];
       id: string;
-      summary: string[];
+      summary?: string[];
       type: "reasoning";
     }
   | {
-      aggregatedOutput: string | null;
+      aggregatedOutput?: string | null;
       command: string;
-      commandActions: unknown[];
+      commandActions?: unknown[];
       cwd: string;
-      durationMs: number | null;
-      exitCode: number | null;
+      durationMs?: number | null;
+      exitCode?: number | null;
       id: string;
-      processId: string | null;
-      status: "completed" | "declined" | "failed" | "inProgress";
+      processId?: string | null;
+      status: CodexItemStatus;
       type: "commandExecution";
     }
   | {
-      changes: unknown[];
+      changes?: unknown[];
       id: string;
-      status: "completed" | "declined" | "failed" | "inProgress";
+      status: CodexItemStatus;
       type: "fileChange";
     }
   | {
-      action: unknown | null;
+      action?: unknown | null;
       id: string;
       query: string;
       type: "webSearch";
     }
   | {
       arguments: unknown;
-      durationMs: number | null;
-      error: unknown;
+      durationMs?: number | null;
+      error?: { message?: string } | string | null;
       id: string;
-      result: unknown;
+      result?: unknown;
       server: string;
       status: "completed" | "failed" | "inProgress";
       tool: string;
       type: "mcpToolCall";
     }
   | {
+      arguments: unknown;
+      contentItems?: unknown[] | null;
+      durationMs?: number | null;
+      id: string;
+      namespace?: string | null;
+      status: "completed" | "failed" | "inProgress";
+      success?: boolean | null;
+      tool: string;
+      type: "dynamicToolCall";
+    }
+  | {
       id: string;
       path: string;
       type: "imageView";
+    }
+  | {
+      failure?: unknown | null;
+      id: string;
+      /** Base64 image data; never copied into the transcript. */
+      result?: string;
+      revisedPrompt?: string | null;
+      savedPath?: string | null;
+      status: string;
+      type: "imageGeneration";
     }
   | {
       id: string;
@@ -364,7 +551,8 @@ export type CodexThreadItem =
   | {
       agentsStates: Record<string, unknown>;
       id: string;
-      prompt: string | null;
+      model?: string | null;
+      prompt?: string | null;
       receiverThreadIds: string[];
       senderThreadId: string;
       status: string;
@@ -372,8 +560,32 @@ export type CodexThreadItem =
       type: "collabAgentToolCall";
     }
   | {
+      agentPath: string;
+      agentThreadId: string;
+      id: string;
+      kind: string;
+      type: "subAgentActivity";
+    }
+  | {
+      durationMs: number;
+      id: string;
+      type: "sleep";
+    }
+  | {
       id: string;
       type: "contextCompaction";
+    }
+  | {
+      fragments?: Array<{ text?: string }>;
+      id: string;
+      type: "hookPrompt";
+    }
+  | {
+      id: string;
+      name: string;
+      namespace?: string | null;
+      output?: unknown;
+      type: "functionCallOutput";
     }
   | {
       content: Array<{
@@ -394,16 +606,14 @@ export type CodexNotificationEvent = {
 
 export type CodexApprovalRequestEvent = {
   id: string;
-  method:
-    | "item/commandExecution/requestApproval"
-    | "item/fileChange/requestApproval";
+  method: CodexApprovalRequestMethod;
   params: unknown;
   type: "approval-request";
 };
 
 export type CodexUserInputRequestEvent = {
   id: string;
-  method: "tool/requestUserInput";
+  method: CodexUserInputRequestMethod;
   params: unknown;
   type: "user-input-request";
 };
@@ -413,13 +623,19 @@ export type CodexServerEvent =
   | CodexNotificationEvent
   | CodexUserInputRequestEvent;
 
-type CodexPendingApproval = {
-  id: string;
-  method:
-    | CodexApprovalRequestEvent["method"]
-    | CodexUserInputRequestEvent["method"];
-  params: unknown;
-};
+type CodexPendingServerRequest =
+  | {
+      id: JsonRpcId;
+      kind: "approval";
+      method: CodexApprovalRequestMethod;
+      params: unknown;
+    }
+  | {
+      id: JsonRpcId;
+      kind: "user-input";
+      method: CodexUserInputRequestMethod;
+      params: unknown;
+    };
 
 function isJsonRpcResult(
   value: unknown,
@@ -456,15 +672,6 @@ function isJsonRpcNotification(
   );
 }
 
-function isApprovalRequestMethod(
-  method: string,
-): method is CodexApprovalRequestEvent["method"] {
-  return (
-    method === "item/commandExecution/requestApproval" ||
-    method === "item/fileChange/requestApproval"
-  );
-}
-
 function toCodexError(message: string, error?: unknown) {
   if (error instanceof Error) {
     return new Error(`${message}: ${error.message}`);
@@ -473,52 +680,28 @@ function toCodexError(message: string, error?: unknown) {
   return new Error(message);
 }
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
+export type CodexAppServerManagerOptions = {
+  /** The engine instance this app-server runs for (default: the default). */
+  instance?: CodexCliInstance | null;
+};
 
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
-
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(null);
-      });
-  });
-}
-
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<CodexEngineStatus>;
-} | null = null;
-
-class CodexAppServerManager {
+export class CodexAppServerManager {
   private backgroundStatusRefresh: Promise<void> | null = null;
 
-  private buffer = "";
+  private cachedStatus: {
+    expiresAt: number;
+    promise: Promise<CodexEngineStatus>;
+  } | null = null;
+
+  private readonly instance: CodexCliInstance | null;
+
+  constructor(options: CodexAppServerManagerOptions = {}) {
+    this.instance = options.instance ?? null;
+  }
+
+  // NDJSON framing of the app-server's stdout (LF-delimited; a fresh one
+  // per process so a partial line never leaks into the next process).
+  private stdoutLines = this.createStdoutSplitter();
 
   private child: ChildProcessWithoutNullStreams | null = null;
 
@@ -526,11 +709,22 @@ class CodexAppServerManager {
 
   private listeners = new Set<(event: CodexServerEvent) => void>();
 
+  private notificationListeners = new Set<
+    (event: CodexNotificationEvent) => void
+  >();
+
+  private initializeResult: CodexInitializeResult | null = null;
+
+  private lastKnownModels: CodexModelInfo[] = [];
+
   private nextRequestId = 0;
 
-  private pendingApprovals = new Map<string, CodexPendingApproval>();
+  private pendingRequests = new Map<
+    string,
+    PendingRequest & { method: string }
+  >();
 
-  private pendingRequests = new Map<string, PendingRequest>();
+  private pendingServerRequests = new Map<string, CodexPendingServerRequest>();
 
   private starting: Promise<void> | null = null;
 
@@ -560,70 +754,103 @@ class CodexAppServerManager {
     };
   }
 
-  async listModels() {
-    const response = (await this.call("model/list", {})) as {
-      data?: Array<{
-        defaultReasoningEffort?: CodexWireReasoningEffort | null;
-        description?: string;
-        displayName?: string;
-        id?: string;
-        inputModalities?: string[];
-        isDefault?: boolean;
-        model?: string;
-        supportedReasoningEfforts?: Array<{
-          description?: string;
-          reasoningEffort?: CodexWireReasoningEffort | null;
-        }>;
-        supportsPersonality?: boolean;
-      }>;
+  /**
+   * Notifications only (account/login/completed…), for listeners that are
+   * not a run: unlike `subscribe`, they do not count as someone who can
+   * answer Codex's approval requests.
+   */
+  subscribeNotifications(listener: (event: CodexNotificationEvent) => void) {
+    this.notificationListeners.add(listener);
+    return () => {
+      this.notificationListeners.delete(listener);
     };
+  }
 
-    const models: CodexModelInfo[] = [];
+  /** `initialize.userAgent` of the running app-server, if it started. */
+  getServerUserAgent() {
+    return this.initializeResult?.userAgent ?? null;
+  }
 
-    for (const model of response.data ?? []) {
-      if (
-        typeof model?.id !== "string" ||
-        typeof model?.model !== "string" ||
-        typeof model?.displayName !== "string" ||
-        typeof model?.description !== "string"
-      ) {
-        continue;
-      }
+  getServerVersion() {
+    return parseCodexVersion(this.initializeResult?.userAgent);
+  }
 
-      models.push({
-        defaultReasoningEffort: normalizeCodexReasoningEffort(
-          model.defaultReasoningEffort,
-        ),
-        description: model.description,
-        displayName: model.displayName,
-        id: model.id,
-        inputModalities: model.inputModalities ?? ["text"],
-        isDefault: Boolean(model.isDefault),
-        model: model.model,
-        supportedReasoningEfforts: (model.supportedReasoningEfforts ?? [])
-          .map((option) => {
-            const normalizedEffort = normalizeCodexReasoningEffort(
-              option.reasoningEffort,
-            );
+  /**
+   * True unless the running app-server reports a version below the protocol
+   * baseline (0.156): `turn/start.collaborationMode` is then sent natively.
+   */
+  supportsCollaborationMode() {
+    return isCodexVersionAtLeast(
+      this.getServerVersion(),
+      CODEX_PROTOCOL_BASELINE_VERSION,
+    );
+  }
 
-            return {
-              description: option.description ?? "",
-              effort: normalizedEffort,
-              label:
-                normalizedEffort.charAt(0).toUpperCase() +
-                normalizedEffort.slice(1),
-            };
-          })
-          .filter(
-            (option, index, array) =>
-              array.findIndex(
-                (candidate) => candidate.effort === option.effort,
-              ) === index,
-          ),
-        supportsPersonality: Boolean(model.supportsPersonality),
-      });
+  /** The `isDefault` model from the latest `model/list`, if any. */
+  getDefaultModel() {
+    return (
+      this.lastKnownModels.find((model) => model.isDefault) ??
+      this.lastKnownModels[0] ??
+      null
+    );
+  }
+
+  getKnownModel(modelId: string | null | undefined) {
+    if (!modelId) {
+      return null;
     }
 
+    return (
+      this.lastKnownModels.find(
+        (model) => model.id === modelId || model.model === modelId,
+      ) ?? null
+    );
+  }
+
+  async listModels() {
+    const models: CodexModelInfo[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | null = null;
+
+    for (let page = 0; page < CODEX_MODEL_LIST_MAX_PAGES; page += 1) {
+      const response = (await this.call(
+        "model/list",
+        cursor ? { cursor } : {},
+      )) as {
+        data?: Array<Partial<CodexWireModel> & { hidden?: boolean }>;
+        nextCursor?: string | null;
+      };
+
+      for (const model of response.data ?? []) {
+        if (
+          typeof model?.id !== "string" ||
+          typeof model?.model !== "string" ||
+          typeof model?.displayName !== "string" ||
+          typeof model?.description !== "string" ||
+          model.hidden === true
+        ) {
+          continue;
+        }
+
+        models.push(
+          toCodexModelInfo({
+            ...model,
+            description: model.description,
+            displayName: model.displayName,
+            id: model.id,
+            model: model.model,
+          }),
+        );
+      }
+
+      cursor = response.nextCursor ?? null;
+      if (!cursor || seenCursors.has(cursor)) {
+        break;
+      }
+      seenCursors.add(cursor);
+    }
+
+    this.lastKnownModels = models;
     return models;
   }
 
@@ -636,36 +863,33 @@ class CodexAppServerManager {
     return response;
   }
 
-  async startLogin(
-    method: "apiKey" | "chatgpt" | "external",
-    params?: { apiKey?: string; token?: string },
-  ) {
-    return (await this.call("account/login/start", {
-      method,
-      ...params,
-    })) as {
-      loginFlowUrl?: string;
-      success?: boolean;
+  /**
+   * `account/login/start`. ChatGPT login answers `{loginId, authUrl}` and
+   * finishes with an `account/login/completed` notification; device-code
+   * login answers `{loginId, verificationUrl, userCode}`.
+   */
+  async startLogin(params: CodexLoginParams) {
+    return (await this.call(
+      "account/login/start",
+      params,
+    )) as CodexLoginResponse;
+  }
+
+  async cancelLogin(loginId: string) {
+    return (await this.call("account/login/cancel", { loginId })) as {
+      status: "canceled" | "notFound";
     };
   }
 
-  async cancelLogin() {
-    await this.call("account/login/cancel", {});
-  }
-
   async logout() {
-    await this.call("account/logout", {});
+    // `account/logout` takes no params (`Option<()>` upstream); send none.
+    await this.call("account/logout", undefined);
   }
 
   async readRateLimits() {
-    return (await this.call("account/rateLimits/read", {})) as {
-      rateLimits: Array<{
-        limit: number;
-        model: string;
-        remaining: number;
-        resetAt: string;
-        type: string;
-      }>;
+    return (await this.call("account/rateLimits/read", undefined)) as {
+      rateLimits: CodexRateLimitSnapshot;
+      rateLimitsByLimitId?: Record<string, CodexRateLimitSnapshot> | null;
     };
   }
 
@@ -675,35 +899,76 @@ class CodexAppServerManager {
     };
   }
 
-  async writeConfigValue(key: string, value: unknown) {
+  /**
+   * Writes one dotted `keyPath` in the user's config.toml. A null (or
+   * missing) value removes the key.
+   */
+  async writeConfigValue(
+    keyPath: string,
+    value: unknown,
+    mergeStrategy: CodexConfigMergeStrategy = "replace",
+  ) {
     return (await this.call("config/value/write", {
-      key,
-      value,
-    })) as { config: Record<string, unknown> };
+      keyPath,
+      mergeStrategy,
+      value: value ?? null,
+    })) as CodexConfigWriteResponse;
   }
 
-  async batchWriteConfig(values: Record<string, unknown>) {
+  async batchWriteConfig(edits: CodexConfigEdit[]) {
     return (await this.call("config/batchWrite", {
-      values,
-    })) as { config: Record<string, unknown> };
+      edits: edits.map((edit) => ({
+        keyPath: edit.keyPath,
+        mergeStrategy: edit.mergeStrategy ?? "replace",
+        value: edit.value ?? null,
+      })),
+    })) as CodexConfigWriteResponse;
   }
 
-  async listSkills() {
-    return (await this.call("skills/list", {})) as {
-      skills: Array<{
-        description: string;
-        enabled: boolean;
-        id: string;
-        name: string;
+  async listSkills(options?: { cwds?: string[] }) {
+    const response = (await this.call("skills/list", {
+      ...(options?.cwds?.length ? { cwds: options.cwds } : {}),
+    })) as {
+      data?: Array<{
+        skills?: Array<{
+          description?: string;
+          enabled?: boolean;
+          name?: string;
+          path?: string;
+          scope?: string;
+        }>;
       }>;
     };
+
+    // Skills are grouped per cwd; flatten them and key each one by path,
+    // which is the selector `skills/config/write` accepts.
+    const skills = new Map<string, CodexSkillInfo>();
+    for (const entry of response.data ?? []) {
+      for (const skill of entry?.skills ?? []) {
+        if (typeof skill?.name !== "string" || typeof skill.path !== "string") {
+          continue;
+        }
+
+        skills.set(skill.path, {
+          description: skill.description ?? "",
+          enabled: skill.enabled !== false,
+          id: skill.path,
+          name: skill.name,
+          path: skill.path,
+          scope: typeof skill.scope === "string" ? skill.scope : null,
+        });
+      }
+    }
+
+    return { skills: [...skills.values()] };
   }
 
-  async writeSkillConfig(skillId: string, enabled: boolean) {
+  /** `skillPath` is a `CodexSkillInfo.id` (the skill's absolute path). */
+  async writeSkillConfig(skillPath: string, enabled: boolean) {
     return (await this.call("skills/config/write", {
       enabled,
-      skillId,
-    })) as { skill: { enabled: boolean; id: string } };
+      path: skillPath,
+    })) as { effectiveEnabled: boolean };
   }
 
   async listMcpServerStatus() {
@@ -716,8 +981,9 @@ class CodexAppServerManager {
     };
   }
 
-  async reloadMcpServer(serverName: string) {
-    await this.call("config/mcpServer/reload", { serverName });
+  /** Reloads every configured MCP server; the method takes no params. */
+  async reloadMcpServers() {
+    await this.call("config/mcpServer/reload", undefined);
   }
 
   async listExperimentalFeatures() {
@@ -740,8 +1006,18 @@ class CodexAppServerManager {
     }
   }
 
+  /** Forgets the cached status; the next getStatus() probes again. */
+  resetStatusCache() {
+    this.cachedStatus = null;
+  }
+
+  /** Ends the app-server process; the manager restarts it on next use. */
+  async dispose() {
+    await this.reloadRuntime();
+  }
+
   private cacheStatus(status: CodexEngineStatus) {
-    cachedStatus = {
+    this.cachedStatus = {
       expiresAt: Date.now() + CODEX_STATUS_CACHE_TTL_MS,
       promise: Promise.resolve(status),
     };
@@ -766,6 +1042,7 @@ class CodexAppServerManager {
           return { account, availableModels, requiresOpenaiAuth };
         })(),
         CODEX_STATUS_QUERY_TIMEOUT_MS,
+        { nullOnError: true },
       );
 
       if (!statusPayload) {
@@ -819,14 +1096,17 @@ class CodexAppServerManager {
       }
 
       const recordedAt = new Date().toISOString();
-      await writeCodexStatusSnapshot({
-        account: statusPayload.account,
-        availableModels: statusPayload.availableModels,
-        cliPath: input.resolvedCli.command,
-        cliVersion: input.cliVersion,
-        recordedAt,
-        requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
-      });
+      await writeCodexStatusSnapshot(
+        getCodexStatusSnapshotPath(this.instance),
+        {
+          account: statusPayload.account,
+          availableModels: statusPayload.availableModels,
+          cliPath: input.resolvedCli.command,
+          cliVersion: input.cliVersion,
+          recordedAt,
+          requiresOpenaiAuth: statusPayload.requiresOpenaiAuth,
+        },
+      );
 
       return buildCodexEngineStatus({
         account: statusPayload.account,
@@ -904,14 +1184,27 @@ class CodexAppServerManager {
     const forceRefresh = options?.forceRefresh ?? false;
     const now = Date.now();
 
-    if (!forceRefresh && cachedStatus && cachedStatus.expiresAt > now) {
-      return await cachedStatus.promise;
+    if (
+      !forceRefresh &&
+      this.cachedStatus &&
+      this.cachedStatus.expiresAt > now
+    ) {
+      return await this.cachedStatus.promise;
     }
 
+    const snapshotPath = getCodexStatusSnapshotPath(this.instance);
     const pending = (async () => {
-      const resolvedCli = await resolveCodexCli({ forceRefresh });
+      const resolvedCli = await resolveCodexCli({
+        forceRefresh,
+        instance: this.instance,
+      });
       if (!resolvedCli) {
-        const retainedPath = process.env.SENTINEL_CODEX_PATH?.trim() || null;
+        const retainedPath =
+          getConfiguredBinaryOverride(
+            this.instance,
+            getInstanceProcessEnv(this.instance),
+            ["SENTINEL_CODEX_PATH"],
+          )?.path ?? null;
         return buildCodexEngineStatus({
           account: null,
           authReady: false,
@@ -933,7 +1226,7 @@ class CodexAppServerManager {
 
       const cliVersion = await readCodexCliVersion(resolvedCli);
 
-      const snapshot = await readCodexStatusSnapshot({
+      const snapshot = await readCodexStatusSnapshot(snapshotPath, {
         cliPath: resolvedCli.command,
       });
 
@@ -958,7 +1251,7 @@ class CodexAppServerManager {
       });
     })();
 
-    cachedStatus = {
+    this.cachedStatus = {
       expiresAt: now + CODEX_STATUS_CACHE_TTL_MS,
       promise: pending,
     };
@@ -1042,33 +1335,74 @@ class CodexAppServerManager {
     });
   }
 
+  /**
+   * `turn/steer` appends input to the active turn; `expectedTurnId` must name
+   * that turn or Codex rejects the steer.
+   */
   async steerTurn(params: {
+    expectedTurnId: string;
     input: unknown[];
     threadId: string;
-    turnId: string;
   }) {
     return (await this.call("turn/steer", params)) as {
+      turnId: string;
+    };
+  }
+
+  /** Inline review of the working tree (the TUI's `/review` default). */
+  async startReview(threadId: string) {
+    return (await this.call("review/start", {
+      target: { type: "uncommittedChanges" },
+      threadId,
+    })) as {
+      reviewThreadId: string;
       turn: CodexTurn;
     };
   }
 
-  async startReview(threadId: string) {
-    return (await this.call("review/start", { threadId })) as {
-      review: { id: string; text: string };
+  async listThreadTurns(params: {
+    cursor?: string | null;
+    itemsView?: "full" | "notLoaded" | "summary";
+    limit?: number;
+    sortDirection?: "asc" | "desc";
+    threadId: string;
+  }) {
+    return (await this.call("thread/turns/list", params)) as {
+      backwardsCursor?: string | null;
+      data: CodexTurn[];
+      nextCursor?: string | null;
     };
   }
 
-  async rollbackThread(threadId: string, count: number) {
-    return (await this.call("thread/rollback", {
-      count,
+  /**
+   * Replaces the thread's persisted history with the prefix before
+   * `beforeTurnId`. Local file changes are not reverted.
+   */
+  async revertThread(threadId: string, beforeTurnId: string) {
+    return (await this.call("thread/revert", {
+      beforeTurnId,
       threadId,
-    })) as { thread: CodexThread };
+    })) as {
+      itemsBackwardsCursor?: string | null;
+      thread: CodexThread;
+      turnsBackwardsCursor?: string | null;
+    };
+  }
+
+  /** Drops the last `numTurns` turns from the thread's history. */
+  async revertThreadTurns(threadId: string, numTurns: number) {
+    await this.ensureStarted();
+    return await revertCodexThreadTurns(
+      (method, params) => this.call(method, params),
+      threadId,
+      numTurns,
+    );
   }
 
   async compactThread(threadId: string) {
     return (await this.call("thread/compact/start", {
       threadId,
-    })) as { thread: CodexThread };
+    })) as Record<string, never>;
   }
 
   async forkThread(threadId: string) {
@@ -1085,41 +1419,90 @@ class CodexAppServerManager {
     await this.call("thread/unarchive", { threadId });
   }
 
-  async respondToApproval(approvalId: string, decision: CodexApprovalDecision) {
+  /**
+   * Answers an approval-style server request. `declinedReason` is set when
+   * an accept had to be sent as a decline (MCP elicitations Sentinel cannot
+   * complete), so the caller can show the request as denied.
+   */
+  async respondToApproval(
+    approvalId: string,
+    decision: CodexApprovalDecision,
+  ): Promise<{ declinedReason: string | null }> {
     await this.ensureStarted();
 
-    const pending = this.pendingApprovals.get(approvalId);
-    if (!pending) {
+    const pending = this.pendingServerRequests.get(approvalId);
+    if (!pending || pending.kind !== "approval") {
       throw new Error("That Codex approval request is no longer active.");
     }
 
-    this.pendingApprovals.delete(approvalId);
+    this.pendingServerRequests.delete(approvalId);
     this.writeMessage({
-      id: approvalId,
-      result: { decision },
+      id: pending.id,
+      result: buildCodexApprovalResult(
+        pending.method,
+        pending.params,
+        decision,
+      ),
     });
+
+    return {
+      declinedReason:
+        pending.method === "mcpServer/elicitation/request"
+          ? getCodexMcpElicitationDeclineReason(pending.params, decision)
+          : null,
+    };
+  }
+
+  /**
+   * Declines a pending approval or question without an answer from the
+   * user, the way an unclaimed request is declined. Unattended runs
+   * (automations) use it: nobody could answer. False when the request is no
+   * longer pending.
+   */
+  declineServerRequest(requestId: string) {
+    const pending = this.pendingServerRequests.get(requestId);
+    if (!pending) {
+      return false;
+    }
+
+    this.pendingServerRequests.delete(requestId);
+    this.writeMessage({
+      id: pending.id,
+      result: buildCodexDeclinedServerRequestResult(
+        pending.method,
+        pending.params,
+      ),
+    });
+    return true;
   }
 
   async respondToUserInput(requestId: string, response: string) {
     await this.ensureStarted();
 
-    const pending = this.pendingApprovals.get(requestId);
-    if (!pending) {
+    const pending = this.pendingServerRequests.get(requestId);
+    if (!pending || pending.kind !== "user-input") {
       throw new Error("That Codex user input request is no longer active.");
     }
 
-    this.pendingApprovals.delete(requestId);
+    this.pendingServerRequests.delete(requestId);
     this.writeMessage({
-      id: requestId,
-      result: { response },
+      id: pending.id,
+      result: buildCodexUserInputResult(
+        pending.method,
+        pending.params,
+        response,
+      ),
     });
   }
 
   private async startProcess() {
-    const child = await spawnCodexCli(["app-server"]);
+    const child = await spawnCodexCli(["app-server"], {
+      instance: this.instance,
+    });
     this.child = child;
-    this.buffer = "";
+    this.stdoutLines = this.createStdoutSplitter();
     this.initialized = false;
+    this.initializeResult = null;
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
@@ -1145,24 +1528,39 @@ class CodexAppServerManager {
     });
 
     try {
-      await this.callRaw("initialize", {
-        capabilities: null,
-        clientInfo: {
-          name: "Sentinel",
-          version: "0.1.0-alpha.1",
-        },
-      });
+      try {
+        this.initializeResult = (await this.callRaw(
+          "initialize",
+          buildCodexInitializeParams(),
+        )) as CodexInitializeResult;
+      } catch (error) {
+        // A second `initialize` on a live connection is rejected; the
+        // connection is still usable, so finish the handshake.
+        if (
+          !(error instanceof CodexJsonRpcError) ||
+          !isCodexAlreadyInitializedError(error)
+        ) {
+          throw error;
+        }
+      }
+
+      this.writeMessage({ method: "initialized" });
       this.initialized = true;
     } catch (error) {
       this.resetProcess(
         toCodexError("Failed to initialize Codex app-server", error),
       );
+      // A process that failed the handshake is unusable; do not leave it
+      // running detached from the manager.
+      if (!child.killed) {
+        child.kill();
+      }
       throw error;
     }
   }
 
   private resetProcess(error: Error) {
-    cachedStatus = null;
+    this.cachedStatus = null;
 
     if (this.child) {
       this.child.removeAllListeners();
@@ -1171,9 +1569,9 @@ class CodexAppServerManager {
     }
 
     this.child = null;
-    this.buffer = "";
+    this.stdoutLines = this.createStdoutSplitter();
     this.initialized = false;
-    this.pendingApprovals.clear();
+    this.pendingServerRequests.clear();
 
     for (const pending of this.pendingRequests.values()) {
       pending.reject(error);
@@ -1181,31 +1579,33 @@ class CodexAppServerManager {
     this.pendingRequests.clear();
   }
 
+  private createStdoutSplitter() {
+    return createLineSplitter(
+      (rawLine) => {
+        const line = rawLine.trim();
+        if (!line) {
+          return;
+        }
+
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line) as unknown;
+        } catch (error) {
+          log.error("invalid_json", { error, line });
+          return;
+        }
+
+        this.handleMessage(parsed);
+      },
+      {
+        onOverflow: (bufferedChars) =>
+          log.error("stdout_line_too_long", { bufferedChars }),
+      },
+    );
+  }
+
   private handleStdout(chunk: string) {
-    this.buffer += chunk;
-
-    while (true) {
-      const newlineIndex = this.buffer.indexOf("\n");
-      if (newlineIndex === -1) {
-        break;
-      }
-
-      const line = this.buffer.slice(0, newlineIndex).trim();
-      this.buffer = this.buffer.slice(newlineIndex + 1);
-      if (!line) {
-        continue;
-      }
-
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line) as unknown;
-      } catch (error) {
-        log.error("invalid_json", { error, line });
-        continue;
-      }
-
-      this.handleMessage(parsed);
-    }
+    this.stdoutLines.push(chunk);
   }
 
   private handleMessage(message: unknown) {
@@ -1218,7 +1618,7 @@ class CodexAppServerManager {
 
       this.pendingRequests.delete(id);
       if ("error" in message) {
-        pending.reject(new Error(message.error.message));
+        pending.reject(new CodexJsonRpcError(pending.method, message.error));
         return;
       }
 
@@ -1227,54 +1627,101 @@ class CodexAppServerManager {
     }
 
     if (isJsonRpcServerRequest(message)) {
-      const id = String(message.id);
-      if (isApprovalRequestMethod(message.method)) {
-        this.pendingApprovals.set(id, {
-          id,
-          method: message.method,
-          params: message.params,
-        });
-        this.emit({
-          id,
-          method: message.method,
-          params: message.params,
-          type: "approval-request",
-        });
-        return;
-      }
-
-      if (message.method === "tool/requestUserInput") {
-        this.pendingApprovals.set(id, {
-          id,
-          method: message.method,
-          params: message.params,
-        });
-        this.emit({
-          id,
-          method: "tool/requestUserInput",
-          params: message.params,
-          type: "user-input-request",
-        });
-        return;
-      }
-
-      this.writeMessage({
-        error: {
-          code: -32601,
-          message: `Unsupported server request: ${message.method}`,
-        },
-        id: message.id,
-      });
+      this.handleServerRequest(message);
       return;
     }
 
     if (isJsonRpcNotification(message)) {
-      this.emit({
+      if (message.method === "serverRequest/resolved") {
+        // Codex resolved the request itself (interrupt, auto-review, …), so
+        // a late answer from the UI must not be written back.
+        const params = message.params as { requestId?: unknown } | undefined;
+        if (
+          typeof params?.requestId === "string" ||
+          typeof params?.requestId === "number"
+        ) {
+          this.pendingServerRequests.delete(String(params.requestId));
+        }
+      }
+
+      const event: CodexNotificationEvent = {
         method: message.method,
         params: message.params,
         type: "notification",
-      });
+      };
+      this.emit(event);
+      for (const listener of this.notificationListeners) {
+        listener(event);
+      }
     }
+  }
+
+  private handleServerRequest(message: JsonRpcRequestMessage) {
+    const id = String(message.id);
+
+    if (
+      this.listeners.size === 0 &&
+      (isCodexApprovalRequestMethod(message.method) ||
+        isCodexUserInputRequestMethod(message.method))
+    ) {
+      // No Sentinel run is listening (for example a turn that kept running
+      // after Stop), so nobody could answer; decline instead of leaving
+      // Codex blocked on the request.
+      log.warn("unclaimed_server_request_declined", {
+        method: message.method,
+      });
+      this.writeMessage({
+        id: message.id,
+        result: buildCodexDeclinedServerRequestResult(
+          message.method,
+          message.params,
+        ),
+      });
+      return;
+    }
+
+    if (isCodexApprovalRequestMethod(message.method)) {
+      this.pendingServerRequests.set(id, {
+        id: message.id,
+        kind: "approval",
+        method: message.method,
+        params: message.params,
+      });
+      this.emit({
+        id,
+        method: message.method,
+        params: message.params,
+        type: "approval-request",
+      });
+      return;
+    }
+
+    if (isCodexUserInputRequestMethod(message.method)) {
+      this.pendingServerRequests.set(id, {
+        id: message.id,
+        kind: "user-input",
+        method: message.method,
+        params: message.params,
+      });
+      this.emit({
+        id,
+        method: message.method,
+        params: message.params,
+        type: "user-input-request",
+      });
+      return;
+    }
+
+    // Dynamic tools, external auth tokens, attestation and client clocks are
+    // capabilities Sentinel never advertises.
+    log.debug("unsupported_server_request", { method: message.method });
+    this.writeMessage({
+      error: {
+        code: CODEX_METHOD_NOT_FOUND_ERROR_CODE,
+        message: `Unsupported server request: ${message.method}`,
+      },
+      id: message.id,
+    });
   }
 
   private emit(event: CodexServerEvent) {
@@ -1292,17 +1739,23 @@ class CodexAppServerManager {
     const id = String(++this.nextRequestId);
 
     return await new Promise<unknown>((resolve, reject) => {
-      this.pendingRequests.set(id, { reject, resolve });
-      this.writeMessage({
-        id,
-        method,
-        params,
-      });
+      this.pendingRequests.set(id, { method, reject, resolve });
+      try {
+        this.writeMessage({
+          id,
+          method,
+          ...(params === undefined ? {} : { params }),
+        });
+      } catch (error) {
+        this.pendingRequests.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
   private writeMessage(
     message:
+      | (JsonRpcNotificationMessage & { id?: never; result?: never })
       | (JsonRpcRequestMessage & { result?: never; error?: never })
       | (JsonRpcResultMessage & { method?: never; params?: never })
       | (JsonRpcErrorMessage & { method?: never; params?: never }),
@@ -1317,16 +1770,32 @@ class CodexAppServerManager {
   }
 }
 
-let codexAppServerManager: CodexAppServerManager | null = null;
+const codexAppServerManagers = getInstanceResources<CodexAppServerManager>(
+  "codex-app-server",
+  {
+    dispose: (manager) => manager.dispose(),
+    onDisposeError: (error, instanceId) =>
+      log.warn("dispose_failed", { error, instanceId }),
+  },
+);
 
 export function resetCodexEngineStatusCache() {
-  cachedStatus = null;
+  for (const manager of codexAppServerManagers.values()) {
+    manager.resetStatusCache();
+  }
 }
 
-export function getCodexAppServerManager() {
-  if (!codexAppServerManager) {
-    codexAppServerManager = new CodexAppServerManager();
-  }
-
-  return codexAppServerManager;
+/**
+ * The app-server manager for an instance: one process per instance, keyed
+ * by its runtime configuration (binary, CODEX_HOME, env), so instances with
+ * different homes never share a process and a configuration change starts a
+ * fresh one. The old one keeps serving whoever holds it until the instance
+ * change retires it. Without an instance, the default instance's manager.
+ */
+export function getCodexAppServerManager(instance?: CodexCliInstance | null) {
+  return codexAppServerManagers.get(
+    instance?.id ?? "codex",
+    getInstanceRuntimeKey(instance),
+    () => new CodexAppServerManager({ instance }),
+  );
 }

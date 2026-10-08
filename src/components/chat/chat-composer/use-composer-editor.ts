@@ -7,6 +7,10 @@ import { ReactRenderer, useEditor } from "@tiptap/react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { ChatEngine } from "@/server/db/enums";
+import {
+  resolveComposerSlashCommands,
+  type ComposerSlashCommand,
+} from "@/lib/ai/chat/engines/slash-commands";
 import type { WorkspaceFileResult } from "@/lib/workspace/file-search";
 
 import { PathMention, PathMentionPluginKey } from "./extensions/path-mention";
@@ -33,55 +37,9 @@ type SkillListItem = {
   target: string;
 };
 
-type SlashCommandDefinition = {
-  command: string;
-  description: string;
-  mode: "execute" | "insert";
-};
+type SlashCommandDefinition = ComposerSlashCommand;
 
 type SuggestionKeyDownHandler = ((event: KeyboardEvent) => boolean) | null;
-
-const HARNESS_SLASH_COMMANDS: Partial<
-  Record<ChatEngine, SlashCommandDefinition[]>
-> = {
-  claude: [
-    "clear",
-    "compact",
-    "config",
-    "cost",
-    "doctor",
-    "help",
-    "init",
-    "login",
-    "logout",
-    "memory",
-    "model",
-    "permissions",
-    "resume",
-    "status",
-  ].map((command) => ({
-    command,
-    description: `Run Claude /${command}`,
-    mode: "insert" as const,
-  })),
-  codex: [
-    {
-      command: "compact",
-      description: "Compact Codex context",
-      mode: "execute",
-    },
-    {
-      command: "review",
-      description: "Start Codex review mode",
-      mode: "execute",
-    },
-    {
-      command: "rollback",
-      description: "Undo the last Codex turn",
-      mode: "execute",
-    },
-  ],
-};
 
 function normalizeSuggestionQuery(query: string) {
   return query
@@ -101,8 +59,22 @@ function getSlashCommandMatchScore(
   return null;
 }
 
+/** The commands a driver offers before its instance reports its own. */
 export function getHarnessSlashCommands(engine: ChatEngine) {
-  return HARNESS_SLASH_COMMANDS[engine] ?? [];
+  return resolveComposerSlashCommands({ driver: engine });
+}
+
+/**
+ * The slash menu's commands that a skill entry does not already cover
+ * (Claude lists its skills among its commands).
+ */
+export function withoutSkillCommands(
+  commands: readonly SlashCommandDefinition[],
+  skillNames: ReadonlySet<string>,
+) {
+  return commands.filter(
+    (command) => !skillNames.has(command.command.trim().toLowerCase()),
+  );
 }
 
 function getSkillMatchScore(skill: SkillListItem, normalizedQuery: string) {
@@ -443,6 +415,7 @@ export function useComposerEditor({
   promptSeed,
   promptSeedKey,
   selectedEngine,
+  slashCommands,
 }: {
   activeWorkspaceId: string | null;
   isBusy: boolean;
@@ -456,6 +429,8 @@ export function useComposerEditor({
   promptSeed?: string;
   promptSeedKey?: string | number;
   selectedEngine: ChatEngine;
+  /** The selected instance's commands (its driver's defaults when absent). */
+  slashCommands?: SlashCommandDefinition[];
 }) {
   const placeholderText = isThread ? "Ask follow-up changes" : "Ask anything";
   const addBrowserFilesRef = useRef(onAddBrowserFiles);
@@ -469,6 +444,9 @@ export function useComposerEditor({
 
   const slashCommandRef = useRef(onSlashCommand);
   slashCommandRef.current = onSlashCommand;
+
+  const slashCommandsRef = useRef(slashCommands);
+  slashCommandsRef.current = slashCommands;
 
   const selectedEngineRef = useRef(selectedEngine);
   selectedEngineRef.current = selectedEngine;
@@ -558,8 +536,11 @@ export function useComposerEditor({
   const slashItems = useCallback(
     ({ query }: { query: string }): SuggestionItem[] => {
       const normalizedQuery = normalizeSuggestionQuery(query);
-      const commands = getHarnessSlashCommands(
-        selectedEngineRef.current,
+      const skills = skillItems({ query });
+      const commands = withoutSkillCommands(
+        slashCommandsRef.current ??
+          getHarnessSlashCommands(selectedEngineRef.current),
+        new Set(skills.map((skill) => skill.label.trim().toLowerCase())),
       ).filter(
         (command) =>
           command.mode === "insert" || Boolean(slashCommandRef.current),
@@ -596,10 +577,12 @@ export function useComposerEditor({
           kind: "provider-command" as const,
           label: `/${command.command}`,
           meta: selectedEngineRef.current,
-          sublabel: command.description,
+          sublabel: command.inputHint
+            ? `${command.description} ${command.inputHint}`
+            : command.description,
         }));
 
-      return [...commandItems, ...skillItems({ query })];
+      return [...commandItems, ...skills];
     },
     [skillItems],
   );

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import type { SessionConfig } from "@github/copilot-sdk";
 
@@ -11,6 +11,7 @@ import {
   getCopilotClientManager,
   normalizeCopilotErrorMessage,
 } from "@/lib/ai/chat/engines/copilot-sdk";
+import { toCodexReasoningEffort } from "@/lib/ai/chat/engines/codex-app-server/models";
 import {
   getReasoningProviderOptions,
   type ReasoningEffort,
@@ -101,7 +102,7 @@ type GenerateClaudeDependencies = {
     args: string[];
     cwd: string;
     env: NodeJS.ProcessEnv;
-  }) => ChildProcessLike;
+  }) => ChildProcessLike | Promise<ChildProcessLike>;
 };
 
 type CopilotCommitSessionLike = {
@@ -141,6 +142,20 @@ const CODEX_TIMEOUT_MS = 180_000;
 const CLAUDE_TIMEOUT_MS = 180_000;
 const COPILOT_TIMEOUT_MS = 180_000;
 const CODEX_DEFAULT_REASONING_EFFORT = "low";
+
+// `--tools ""` removes every built-in tool (the --json-schema
+// StructuredOutput tool stays), `--strict-mcp-config` without --mcp-config
+// loads no MCP servers, and `dontAsk` denies instead of prompting.
+const CLAUDE_COMMIT_MESSAGE_LOCKDOWN_ARGS = [
+  "--settings",
+  JSON.stringify({ disableAllHooks: true }),
+  "--tools",
+  "",
+  "--disable-slash-commands",
+  "--strict-mcp-config",
+  "--permission-mode",
+  "dontAsk",
+];
 
 const COMMIT_MESSAGE_OUTPUT_SCHEMA = z.object({
   body: z.string(),
@@ -370,6 +385,7 @@ function mapClaudeEffort(effort: ReasoningEffort | null | undefined) {
       return "medium";
     case "high":
     case "xhigh":
+    case "max":
       return "high";
     case "none":
     case "minimal":
@@ -386,6 +402,7 @@ function mapCopilotEffort(effort: ReasoningEffort | null | undefined) {
       return "medium";
     case "high":
     case "xhigh":
+    case "max":
       return "high";
     case "none":
     case "minimal":
@@ -426,6 +443,47 @@ async function cleanupTempDirectory(directory: string) {
   await rm(directory, { force: true, recursive: true }).catch(() => undefined);
 }
 
+async function loadClaudeSdkEngine() {
+  return await import("@/lib/ai/chat/engines/claude-sdk");
+}
+
+/**
+ * Runs the Claude Code CLI Sentinel resolved for the Claude engine (not a bare
+ * `claude` from PATH, which GUI launches often lack), through the same
+ * launcher the engine uses so npm-shim installs work without `node` on PATH.
+ */
+async function spawnResolvedClaudeCli(input: {
+  args: string[];
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}) {
+  const { buildClaudeCliLaunch, resolveClaudeCodeRuntime } =
+    await loadClaudeSdkEngine();
+  const runtime = await resolveClaudeCodeRuntime();
+  if (!runtime.executablePath) {
+    throw new Error("Claude Code is not installed or not available on PATH.");
+  }
+
+  const launch = buildClaudeCliLaunch({
+    args: input.args,
+    command: runtime.executablePath,
+    // The runtime env carries the managed PATH/HOME the binary was verified
+    // with; keep it over the caller's copy of process.env.
+    env: {
+      ...input.env,
+      ...runtime.env,
+      CLAUDE_AGENT_SDK_CLIENT_APP:
+        input.env.CLAUDE_AGENT_SDK_CLIENT_APP ?? "sentinel",
+    },
+  });
+  return spawn(launch.command, launch.args, {
+    cwd: input.cwd,
+    env: launch.env as NodeJS.ProcessEnv,
+    stdio: ["pipe", "pipe", "pipe"],
+    windowsHide: true,
+  }) as ChildProcessWithoutNullStreams;
+}
+
 async function loadSpawnCodexCli() {
   const { spawnCodexCli } = await import("@/lib/ai/chat/engines/codex-cli");
   return spawnCodexCli;
@@ -444,17 +502,16 @@ export async function generateSentinelCommitMessage(
     throw new Error("No enabled model is available for commit generation.");
   }
 
-  const result = await generateObject({
-    model: model.languageModel as Parameters<typeof generateObject>[0]["model"],
-    output: "object",
+  const result = await generateText({
+    model: model.languageModel as Parameters<typeof generateText>[0]["model"],
+    output: Output.object({ schema: COMMIT_MESSAGE_OUTPUT_SCHEMA }),
     prompt: buildCommitMessagePrompt(input.context),
-    schema: COMMIT_MESSAGE_OUTPUT_SCHEMA,
     ...(model.providerOptions
       ? { providerOptions: model.providerOptions }
       : {}),
   });
 
-  return normalizeCommitResult(result.object);
+  return normalizeCommitResult(result.output);
 }
 
 export async function generateCodexCommitMessage(
@@ -483,7 +540,8 @@ export async function generateCodexCommitMessage(
     await writeFile(outputPath, "", "utf8");
 
     const reasoningEffort =
-      input.reasoningEffort ?? CODEX_DEFAULT_REASONING_EFFORT;
+      toCodexReasoningEffort(input.reasoningEffort) ??
+      CODEX_DEFAULT_REASONING_EFFORT;
     const child = await createProcess({
       args: [
         "exec",
@@ -524,26 +582,10 @@ export async function generateClaudeCommitMessage(
   input: GenerateClaudeCommitMessageInput,
   dependencies?: GenerateClaudeDependencies,
 ) {
-  const spawnProcess =
-    dependencies?.spawnProcess ??
-    (({
-      args,
-      cwd,
-      env,
-    }: {
-      args: string[];
-      cwd: string;
-      env: NodeJS.ProcessEnv;
-    }) =>
-      spawn("claude", args, {
-        cwd,
-        env,
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true,
-      }) as ChildProcessWithoutNullStreams);
+  const spawnProcess = dependencies?.spawnProcess ?? spawnResolvedClaudeCli;
 
   const mappedEffort = mapClaudeEffort(input.reasoningEffort ?? null);
-  const child = spawnProcess({
+  const child = await spawnProcess({
     args: [
       "-p",
       "--output-format",
@@ -553,7 +595,11 @@ export async function generateClaudeCommitMessage(
       "--model",
       input.modelId,
       ...(mappedEffort ? ["--effort", mappedEffort] : []),
-      "--dangerously-skip-permissions",
+      // The prompt carries the repository diff, which is untrusted text, so
+      // the one-shot runs with no tools, MCP servers, skills or hooks, and
+      // denies anything that would need approval; the structured output
+      // needs none of them. Flags follow t3code's ClaudeTextGeneration (MIT).
+      ...CLAUDE_COMMIT_MESSAGE_LOCKDOWN_ARGS,
     ],
     cwd: input.context.repoRoot,
     env: {
@@ -606,9 +652,8 @@ export async function generateCopilotCommitMessage(
       availableTools: [],
       clientName: "sentinel",
       model: input.modelId,
-      onPermissionRequest: () => ({
-        kind: "denied-no-approval-rule-and-could-not-request-from-user",
-      }),
+      // The session has no tools, so nothing should ask; refuse if it does.
+      onPermissionRequest: () => ({ kind: "user-not-available" }),
       ...(mapCopilotEffort(input.reasoningEffort)
         ? { reasoningEffort: mapCopilotEffort(input.reasoningEffort) }
         : {}),

@@ -7,16 +7,23 @@ import {
   type Query as ClaudeQuery,
   type SDKAssistantMessage,
   type SDKLocalCommandOutputMessage,
-  type SDKMessage,
   type SDKResultMessage,
   type SDKToolProgressMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import {
+  defaultInstanceIdForDriver,
+  type ResolvedEngineInstance,
+} from "@/lib/ai/chat/engines/contract";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import {
   buildClaudeSdkBaseOptions,
   buildClaudeThreadState,
+  getCachedClaudeModels,
   resolveClaudeCodeRuntime,
+  resolveClaudeSdkEffort,
 } from "@/lib/ai/chat/engines/claude-sdk";
 import {
   getClaudeThreadState,
@@ -26,6 +33,7 @@ import {
   mergeThreadMessageMetadata,
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
 
@@ -39,9 +47,18 @@ import {
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
 import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
+import {
   createThreadEventChannel,
   type ThreadEventChannel,
 } from "../thread-chat/run-state";
+import {
+  buildHistoryReplayPrefix,
+  getReplayHistory,
+  joinPromptPrefixes,
+} from "../history-replay";
 import {
   buildActiveThreadMessages,
   buildFirstUserMessageTitle,
@@ -55,15 +72,36 @@ import {
   resolveClaudePromptResponse,
 } from "./event-helpers";
 import {
+  buildClaudeAskUserQuestionResult,
   buildClaudePermissionResult,
   normalizeClaudePermissionInput,
   resolveClaudePermissionInput,
 } from "./permissions";
 import {
+  getClaudeDispatchSkillNames,
+  getClaudeSkillRoots,
+  planClaudeSkillDispatch,
+} from "./skill-dispatch";
+import {
+  recordClaudeRateLimitEvent,
+  reportClaudeRateLimitUsage,
+  type ClaudeRateLimitRecord,
+} from "./rate-limits";
+import {
+  applyClaudeTaskToolResult,
+  buildClaudeTaskToolOutput,
+  isClaudeTaskToolName,
+  listClaudeTasks,
+  seedClaudeTasksFromMessages,
+  type ClaudeTaskSnapshot,
+} from "./tasks";
+import {
   extractClaudeAssistantToolResultBlock,
+  extractClaudeStructuredToolResult,
   extractClaudeUserToolResults,
 } from "./tool-output";
 import { buildPlanModePromptPreamble } from "../plan-mode-instructions";
+import { isUnattendedRun, UNATTENDED_DECLINE_MESSAGE } from "../unattended";
 import { serializeComposerContextToText } from "@/lib/composer-context/serialize";
 import { getToolPermissionMode, getWorkspaceRootPath } from "../workspace";
 import {
@@ -181,6 +219,8 @@ type ClaudeMirrorState = {
   requestedModelId: string | null;
   responseModelId: string | null;
   sessionId: string;
+  // Task* tool state accumulated by task id (see ./tasks).
+  tasks: Map<string, ClaudeTaskSnapshot>;
   text: string;
   textOrder: number;
   reasoningText: string;
@@ -196,6 +236,15 @@ type ClaudeMirrorState = {
   } | null;
 };
 
+// An AskUserQuestion call awaiting the user. `resolve` is set once Claude Code
+// asks canUseTool; `response` holds an answer that arrived before that.
+type ClaudePendingQuestion = {
+  input?: Record<string, unknown>;
+  resolve?: (result: PermissionResult) => void;
+  response?: string;
+  toolCallId: string;
+};
+
 type ClaudeInputQueue<T> = {
   close(): void;
   enqueue(value: T): void;
@@ -208,6 +257,10 @@ export type ActiveClaudeRunControl = {
   eventChannel: ThreadEventChannel;
   exitPlanModeSwitched: boolean;
   inputQueue: ClaudeInputQueue<SDKUserMessage>;
+  // Latest rate_limit_event of this run, for usage-limit surfaces.
+  latestRateLimit: ClaudeRateLimitRecord | null;
+  /** The engine instance whose account the run's rate limits belong to. */
+  usageInstanceId: string;
   pendingResponseWatchers: Set<string>;
   pendingApprovals: Map<
     string,
@@ -217,14 +270,7 @@ export type ActiveClaudeRunControl = {
       toolCallId: string;
     }
   >;
-  pendingQuestions: Map<
-    string,
-    {
-      input?: Record<string, unknown>;
-      resolve?: (result: PermissionResult) => void;
-      toolCallId: string;
-    }
-  >;
+  pendingQuestions: Map<string, ClaudePendingQuestion>;
   query: ClaudeQuery;
   runId: string;
   sessionId: string;
@@ -339,6 +385,7 @@ function createClaudeMirrorState(input: {
   requestedModelId: string | null;
   responseModelId: string | null;
   sessionId: string;
+  tasks?: Map<string, ClaudeTaskSnapshot>;
   threadId: string;
 }): ClaudeMirrorState {
   return {
@@ -348,6 +395,7 @@ function createClaudeMirrorState(input: {
     requestedModelId: input.requestedModelId,
     responseModelId: input.responseModelId,
     sessionId: input.sessionId,
+    tasks: input.tasks ?? new Map(),
     text: "",
     textOrder: -1,
     threadId: input.threadId,
@@ -431,10 +479,33 @@ function parseDataUrl(url: string) {
   };
 }
 
+type ClaudeUserContentBlock = Exclude<
+  SDKUserMessage["message"]["content"],
+  string
+>[number];
+
+// Image types the Messages API accepts in base64 image blocks.
+const CLAUDE_IMAGE_MEDIA_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function isClaudeImageMediaType(
+  mediaType: string,
+): mediaType is "image/gif" | "image/jpeg" | "image/png" | "image/webp" {
+  return CLAUDE_IMAGE_MEDIA_TYPES.has(mediaType);
+}
+
 function buildClaudeUserPrompt(
   message: ThreadUIMessage,
   sessionId: string,
-  options?: { promptPrefix?: string | null },
+  options?: {
+    promptPrefix?: string | null;
+    /** Folders the run's Claude Code reads skills from (dispatch only). */
+    skillRoots?: readonly string[];
+  },
 ): SDKUserMessage {
   const textParts = message.parts.filter(
     (
@@ -449,13 +520,21 @@ function buildClaudeUserPrompt(
       part.type === "file",
   );
 
-  const content: Array<Record<string, unknown>> = [];
-  let text = textParts
+  const content: ClaudeUserContentBlock[] = [];
+  const userText = textParts
     .map((part) => part.text.trim())
     .filter(Boolean)
     .join("\n\n");
 
   const composerContext = message.metadata?.composerContext;
+  // A Claude skill chip ($name) becomes Claude Code's own `/name` command,
+  // sent as the last text block (skill-dispatch.ts).
+  const dispatch = planClaudeSkillDispatch(
+    userText,
+    getClaudeDispatchSkillNames(composerContext, options?.skillRoots ?? []),
+  );
+  let text = dispatch ? (dispatch.leadingText ?? "") : userText;
+
   if (
     composerContext &&
     ((composerContext.paths?.length ?? 0) > 0 ||
@@ -493,6 +572,14 @@ function buildClaudeUserPrompt(
       continue;
     }
 
+    if (!isClaudeImageMediaType(parsed.mediaType)) {
+      content.push({
+        text: `Attached image type is not supported by Claude: ${part.filename ?? parsed.mediaType}`,
+        type: "text",
+      });
+      continue;
+    }
+
     content.push({
       source: {
         data: parsed.data,
@@ -501,6 +588,10 @@ function buildClaudeUserPrompt(
       },
       type: "image",
     });
+  }
+
+  if (dispatch) {
+    content.push({ text: dispatch.commandText, type: "text" });
   }
 
   return {
@@ -581,28 +672,6 @@ function createClaudeInputQueue<T>(): ClaudeInputQueue<T> {
   };
 }
 
-function buildClaudeQuestionResponse(input: {
-  approvalId: string;
-  response: string;
-  sessionId: string;
-}) {
-  return {
-    message: {
-      content: input.response,
-      role: "user",
-    },
-    parent_tool_use_id: input.approvalId,
-    session_id: input.sessionId,
-    tool_use_result: {
-      action: "accept",
-      answers: {
-        response: input.response,
-      },
-    },
-    type: "user",
-  } satisfies SDKUserMessage;
-}
-
 function buildClaudePermissionMode(
   threadMode: "chat" | "plan",
   permissionMode: "default" | "full",
@@ -616,7 +685,9 @@ function buildClaudePermissionMode(
 
 async function buildClaudeRuntimeOptions(input: {
   cwd: string;
+  instance: ResolvedEngineInstance | null;
   permissionMode: "default" | "full";
+  reasoningEffort: ReasoningEffort | null;
   requestedModelId: string | null;
   sessionId: string;
   threadMode: "chat" | "plan";
@@ -626,7 +697,14 @@ async function buildClaudeRuntimeOptions(input: {
     input.threadMode,
     input.permissionMode,
   );
-  const runtime = await resolveClaudeCodeRuntime();
+  const runtime = await resolveClaudeCodeRuntime({
+    instance: input.instance,
+  });
+  const effort = resolveClaudeSdkEffort({
+    modelId: input.requestedModelId,
+    models: await getCachedClaudeModels(runtime.executablePath),
+    reasoningEffort: input.reasoningEffort,
+  });
 
   return {
     options: buildClaudeSdkBaseOptions({
@@ -638,6 +716,7 @@ async function buildClaudeRuntimeOptions(input: {
           }
         : { permissionMode: claudePermissionMode }),
       cwd: input.cwd,
+      ...(effort ? { effort } : {}),
       env: runtime.env,
       ...(runtime.executablePath
         ? { pathToClaudeCodeExecutable: runtime.executablePath }
@@ -649,10 +728,19 @@ async function buildClaudeRuntimeOptions(input: {
               allowUnsandboxedCommands: false,
               autoAllowBashIfSandboxed: true,
               enabled: true,
+              // Agent SDK 0.2.91+ fails the run when the sandbox cannot start
+              // (e.g. Linux without bubblewrap). Keep running unsandboxed
+              // instead; Bash then goes through approvals rather than the
+              // sandbox auto-allow.
+              failIfUnavailable: false,
               filesystem: {
                 allowWrite: input.workspaceRoot ? [input.workspaceRoot] : [],
               },
             },
+      // Stream reasoning summaries into thinking blocks (adaptive is the
+      // CLI's `enabled` on models without adaptive thinking).
+      settings: { showThinkingSummaries: true },
+      thinking: { display: "summarized", type: "adaptive" },
       toolConfig: {
         askUserQuestion: { previewFormat: "markdown" },
       },
@@ -892,9 +980,7 @@ async function drainQueuedClaudeFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
-        ...(nextFollowUp.reasoningEffort
-          ? { reasoningEffort: nextFollowUp.reasoningEffort }
-          : {}),
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -902,6 +988,8 @@ async function drainQueuedClaudeFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -920,7 +1008,6 @@ async function applyClaudePromptResponse(
       return false;
     }
 
-    control.pendingQuestions.delete(response.approvalId);
     control.pendingResponseWatchers.delete(response.approvalId);
 
     const existingQuestion = control.state.tools.get(response.approvalId);
@@ -933,17 +1020,19 @@ async function applyClaudePromptResponse(
       });
     }
 
-    control.inputQueue.enqueue(
-      buildClaudeQuestionResponse({
-        approvalId: response.approvalId,
-        response: response.response,
-        sessionId: control.sessionId,
-      }),
-    );
-    pendingQuestion.resolve?.({
-      behavior: "allow",
-      updatedInput: normalizeClaudePermissionInput(pendingQuestion.input),
-    });
+    if (pendingQuestion.resolve) {
+      control.pendingQuestions.delete(response.approvalId);
+      pendingQuestion.resolve(
+        buildClaudeAskUserQuestionResult({
+          response: response.response,
+          toolInput: pendingQuestion.input ?? existingQuestion?.input,
+        }),
+      );
+    } else {
+      // Claude Code has not asked canUseTool for this question yet; answer it
+      // when it does.
+      pendingQuestion.response = response.response;
+    }
   } else {
     const pendingApproval = control.pendingApprovals.get(response.approvalId);
     if (!pendingApproval) {
@@ -1181,14 +1270,34 @@ function updateClaudeMirrorFromToolResult(
     return;
   }
 
+  const structuredResult = extractClaudeStructuredToolResult(message);
   for (const result of results) {
     const existing = state.tools.get(result.toolCallId);
+    const name = existing?.name ?? result.toolName;
+    let output = result.output;
+
+    if (isClaudeTaskToolName(name) && result.state === "output-available") {
+      const taskOutput =
+        structuredResult?.toolCallId === result.toolCallId
+          ? structuredResult.output
+          : result.output;
+      applyClaudeTaskToolResult(state.tasks, {
+        input: existing?.input,
+        output: taskOutput,
+        toolName: name,
+      });
+      output = buildClaudeTaskToolOutput({
+        output: taskOutput,
+        sessionId: state.sessionId,
+        tasks: listClaudeTasks(state.tasks),
+      });
+    }
 
     upsertClaudeTool(state, {
       ...(result.errorText ? { errorText: result.errorText } : {}),
       id: result.toolCallId,
-      name: existing?.name ?? result.toolName,
-      output: result.output,
+      name,
+      output,
       state: result.state,
     });
   }
@@ -1327,6 +1436,29 @@ async function finishClaudeRun(
   }
 }
 
+// A "success" result with is_error carries the API error text (auth, usage
+// limits, ...) in `result`; error subtypes list theirs in `errors`.
+function getClaudeResultOutcome(message: SDKResultMessage): {
+  errorMessage: string | null;
+  status: "completed" | "error";
+} {
+  if (message.subtype !== "success") {
+    return {
+      errorMessage: (message.errors ?? []).join("\n") || "Claude run failed.",
+      status: "error",
+    };
+  }
+
+  if (message.is_error) {
+    return {
+      errorMessage: message.result.trim() || "Claude run failed.",
+      status: "error",
+    };
+  }
+
+  return { errorMessage: null, status: "completed" };
+}
+
 async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
   try {
     for await (const message of control.query) {
@@ -1391,9 +1523,26 @@ async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
             }
           }
           break;
-        case "result":
+        case "rate_limit_event":
+          control.latestRateLimit = recordClaudeRateLimitEvent(message);
+          reportClaudeRateLimitUsage({
+            info: message.rate_limit_info,
+            instanceId: control.usageInstanceId,
+            userId: control.userId,
+          });
+          log.debug("claude_rate_limit_event", {
+            rateLimitType: message.rate_limit_info.rateLimitType,
+            resetsAt: message.rate_limit_info.resetsAt,
+            status: message.rate_limit_info.status,
+            threadId: control.threadId,
+            utilization: message.rate_limit_info.utilization,
+          });
+          break;
+        case "result": {
           updateClaudeUsageFromResult(control.state, message);
+          const outcome = getClaudeResultOutcome(message);
           if (
+            outcome.status === "completed" &&
             !control.state.text.trim() &&
             message.subtype === "success" &&
             message.result.trim()
@@ -1403,15 +1552,15 @@ async function consumeClaudeQuery(control: ActiveClaudeRunControl) {
           }
 
           await finishClaudeRun(control, {
-            errorMessage:
-              message.subtype === "success"
-                ? null
-                : (message.errors ?? []).join("\n") || "Claude run failed.",
+            errorMessage: outcome.errorMessage,
             finishReason: message.stop_reason,
-            status: message.subtype === "success" ? "completed" : "error",
+            status: outcome.status,
             threadStatus: "idle",
           });
           return;
+        }
+        // Other stream messages (status, api_retry, task_*, hooks,
+        // compact_boundary, ...) do not change the mirror.
       }
     }
   } catch (error) {
@@ -1484,6 +1633,8 @@ export async function stopClaudeThreadRun(
 export async function runClaudeThreadChat(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
 ) {
   if (request.trigger === "submit-tool-approval") {
     const latestAssistant = request.messages
@@ -1576,6 +1727,7 @@ export async function runClaudeThreadChat(
     threadMode,
     "claude",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
+    instance?.id,
   );
 
   const workspaceRoot = await getWorkspaceRootPath(
@@ -1583,13 +1735,18 @@ export async function runClaudeThreadChat(
     request.userId,
     request.threadId,
   );
-  const workspacePermissionMode = await getToolPermissionMode(
-    request.userId,
-    request.workspaceId,
-    request.threadId,
+  const workspacePermissionMode = resolveSupportedPermissionMode(
+    await getToolPermissionMode(
+      request.userId,
+      request.workspaceId,
+      request.threadId,
+    ),
+    DRIVER_CATALOG.claude.capabilities.permissionModes,
   );
+  // Null under another instance or home: a fresh Claude session starts.
   const existingClaudeState = getClaudeThreadState(
     existingThread?.chatEngineState,
+    instance,
   );
   const requestedModelId =
     request.modelId ?? existingClaudeState?.modelId ?? null;
@@ -1608,9 +1765,17 @@ export async function runClaudeThreadChat(
           "Plan Mode is active for this fresh Claude session. Follow the full contract below for the first response and continue honoring it until the mode changes.",
         )
       : null;
+  // A fresh session (another instance or home, no stored state, or a mode
+  // change such as "Implement plan") gets the conversation so far in its
+  // first prompt.
+  const historyReplayPrefix = shouldResumeExistingSession
+    ? null
+    : buildHistoryReplayPrefix(getReplayHistory(transcript, request));
   const { options, permissionMode } = await buildClaudeRuntimeOptions({
     cwd,
+    instance: instance ?? null,
     permissionMode: workspacePermissionMode,
+    reasoningEffort: request.reasoningEffort ?? null,
     requestedModelId,
     sessionId,
     threadMode,
@@ -1627,6 +1792,11 @@ export async function runClaudeThreadChat(
     requestedModelId,
     responseModelId: requestedModelId,
     sessionId,
+    // Task ids belong to the Claude session, so only a resumed session
+    // continues a task list, and only the one stored for that session.
+    tasks: shouldResumeExistingSession
+      ? seedClaudeTasksFromMessages(transcript, sessionId)
+      : undefined,
     threadId: request.threadId,
   });
 
@@ -1658,6 +1828,7 @@ export async function runClaudeThreadChat(
       engine: "claude",
       modelId: requestedModelId,
       mode: threadMode,
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       reasoningEffort: request.reasoningEffort ?? null,
     });
     void beginThreadRepoCheckpointRun({
@@ -1673,6 +1844,7 @@ export async function runClaudeThreadChat(
         permissionMode,
         sessionId,
       }),
+      instance,
     );
     launchClaudeThreadTitleGeneration({
       eventChannel,
@@ -1681,6 +1853,7 @@ export async function runClaudeThreadChat(
       request,
     });
 
+    const unattended = isUnattendedRun(request);
     const pendingApprovals = new Map<
       string,
       {
@@ -1689,14 +1862,7 @@ export async function runClaudeThreadChat(
         toolCallId: string;
       }
     >();
-    const pendingQuestions = new Map<
-      string,
-      {
-        input?: Record<string, unknown>;
-        resolve?: (result: PermissionResult) => void;
-        toolCallId: string;
-      }
-    >();
+    const pendingQuestions = new Map<string, ClaudePendingQuestion>();
     const pendingResponseWatchers = new Set<string>();
     let control: ActiveClaudeRunControl | null = null;
     const claudeQuery = query({
@@ -1708,12 +1874,33 @@ export async function runClaudeThreadChat(
           ? { resume: existingClaudeState!.sessionId }
           : { sessionId }),
         canUseTool: async (toolName, input, permissionOptions) => {
+          // Nobody answers an unattended run (an automation). Full access
+          // bypasses permissions, so only what would ask the user lands here.
+          if (unattended) {
+            return buildClaudePermissionResult({
+              approved: false,
+              message: UNATTENDED_DECLINE_MESSAGE,
+            });
+          }
+
           return await new Promise<PermissionResult>((resolve) => {
             const approvalId = permissionOptions.toolUseID;
             const normalizedToolName = normalizeClaudeSdkToolName(toolName);
             const normalizedInput = normalizeClaudePermissionInput(input);
 
             if (normalizedToolName === "claude_user_input") {
+              const answeredEarly = pendingQuestions.get(approvalId)?.response;
+              if (answeredEarly !== undefined) {
+                pendingQuestions.delete(approvalId);
+                resolve(
+                  buildClaudeAskUserQuestionResult({
+                    response: answeredEarly,
+                    toolInput: normalizedInput,
+                  }),
+                );
+                return;
+              }
+
               pendingQuestions.set(approvalId, {
                 input: normalizedInput,
                 resolve,
@@ -1757,6 +1944,7 @@ export async function runClaudeThreadChat(
       eventChannel,
       exitPlanModeSwitched: false,
       inputQueue,
+      latestRateLimit: null,
       pendingResponseWatchers,
       pendingApprovals,
       pendingQuestions,
@@ -1765,6 +1953,7 @@ export async function runClaudeThreadChat(
       sessionId,
       state: mirror,
       threadId: request.threadId,
+      usageInstanceId: instance?.id ?? defaultInstanceIdForDriver("claude"),
       userId: request.userId,
       workspaceId: request.workspaceId,
     };
@@ -1778,7 +1967,13 @@ export async function runClaudeThreadChat(
     }
     inputQueue.enqueue(
       buildClaudeUserPrompt(request.message!, sessionId, {
-        promptPrefix: planModePromptPrefix,
+        // The replayed history ends by introducing the new message.
+        promptPrefix: joinPromptPrefixes(
+          planModePromptPrefix,
+          historyReplayPrefix,
+        ),
+        // The environment the CLI was started with (instance home included).
+        skillRoots: getClaudeSkillRoots({ cwd, env: options.env ?? {} }),
       }),
     );
 

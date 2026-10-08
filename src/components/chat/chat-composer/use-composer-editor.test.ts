@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   filterSkillsForEngine,
   getHarnessSlashCommands,
+  withoutSkillCommands,
   getSkillSuggestionTitle,
 } from "./use-composer-editor";
 
@@ -254,5 +255,19 @@ describe("getHarnessSlashCommands", () => {
 
   it("does not add provider commands for Sentinel", () => {
     expect(getHarnessSlashCommands("sentinel")).toEqual([]);
+  });
+});
+
+describe("withoutSkillCommands", () => {
+  it("drops commands a listed skill already offers", () => {
+    expect(
+      withoutSkillCommands(
+        [
+          { command: "review", description: "Review", mode: "insert" },
+          { command: "compact", description: "Compact", mode: "insert" },
+        ],
+        new Set(["review"]),
+      ).map((command) => command.command),
+    ).toEqual(["compact"]);
   });
 });

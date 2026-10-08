@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { engineInstanceIdSchema } from "@/lib/ai/chat/engines/contract/ids";
+import { engineOptionSelectionSchema } from "@/lib/ai/chat/engines/contract/models";
+import { MAX_ENGINE_OPTION_SELECTIONS } from "@/lib/ai/chat/engines/model-options";
 import { REASONING_EFFORTS } from "@/lib/ai/providers/models";
 import { THREAD_MODES } from "@/lib/plan";
 import { permissionModeSchema } from "@/schemas/security.schema";
@@ -24,7 +27,7 @@ const jsonValueSchema: z.ZodType<
     z.boolean(),
     z.null(),
     z.array(jsonValueSchema),
-    z.record(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
   ]),
 );
 
@@ -102,9 +105,11 @@ export const threadListSchema = z
 
 export const threadCreateSchema = z.object({
   engine: chatEngineSchema.optional().default("sentinel"),
+  /** The instance of `engine` the thread binds to; omitted: the default. */
+  engineInstanceId: engineInstanceIdSchema.optional(),
   mode: z.enum(THREAD_MODES).optional().default("chat"),
   summary: optionalText(500).optional().default(""),
-  threadId: z.string().uuid().optional(),
+  threadId: z.guid().optional(),
   title: z.string().trim().min(1, "Thread title is required.").max(200),
   workspaceId: z.string().min(1).optional(),
 });
@@ -130,8 +135,14 @@ const reasoningEffortSchema = z.enum(REASONING_EFFORTS);
 export const threadSettingsSchema = z
   .object({
     engine: chatEngineSchema.optional(),
+    /** Only applied together with `engine` (see updateThreadChatSettings). */
+    engineInstanceId: engineInstanceIdSchema.nullish(),
     mode: z.enum(THREAD_MODES).optional(),
     modelId: z.string().trim().min(1).optional(),
+    modelOptions: z
+      .array(engineOptionSelectionSchema)
+      .max(MAX_ENGINE_OPTION_SELECTIONS)
+      .nullish(),
     reasoningEffort: reasoningEffortSchema.nullish(),
     threadId: z.string().min(1),
   })
@@ -140,6 +151,7 @@ export const threadSettingsSchema = z
       value.engine !== undefined ||
       value.mode !== undefined ||
       value.modelId !== undefined ||
+      value.modelOptions !== undefined ||
       value.reasoningEffort !== undefined,
     {
       message: "At least one setting must be provided.",

@@ -44,10 +44,7 @@ export type ShellCommandCompletedOutput = {
 };
 
 export type ShellCommandBackgroundStatus =
-  | "completed"
-  | "failed"
-  | "running"
-  | "stopped";
+  "completed" | "failed" | "running" | "stopped";
 
 export type ShellCommandBackgroundOutput = {
   backgroundTaskId: string;
@@ -76,16 +73,10 @@ export type ShellCommandOutput =
 export type ShellCommandResult = ShellCommandCompletedOutput;
 
 export type ShellCommandFailureKind =
-  | "missing_command"
-  | "missing_toolchain"
-  | "other"
-  | "permission";
+  "missing_command" | "missing_toolchain" | "other" | "permission";
 
 export type ShellCommandSuggestedNextAction =
-  | "install"
-  | "inspect"
-  | "none"
-  | "retry";
+  "install" | "inspect" | "none" | "retry";
 
 export type ShellCommandStreamEvent =
   | { output: ShellCommandRunningOutput; type: "running" }

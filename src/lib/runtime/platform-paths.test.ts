@@ -59,4 +59,31 @@ describe("platform path helpers", () => {
     expect(preferred).toContain("/home/sentinel/.bun/bin");
     expect(preferred).toContain("/usr/bin");
   });
+
+  it("adds the OpenCode install script directory ahead of Homebrew", () => {
+    const preferred = buildPreferredExecutablePathValue("", {
+      env: { HOME: "/Users/sentinel", NODE_ENV: "test" },
+      platform: "darwin",
+    }).split(":");
+
+    expect(preferred).toContain("/Users/sentinel/.opencode/bin");
+    expect(preferred.indexOf("/Users/sentinel/.opencode/bin")).toBeLessThan(
+      preferred.indexOf("/opt/homebrew/bin"),
+    );
+  });
+
+  it("adds OpenCode's Windows install locations", () => {
+    const preferred = buildPreferredExecutablePathValue("", {
+      env: {
+        ChocolateyInstall: "C:\\ProgramData\\chocolatey",
+        NODE_ENV: "test",
+        USERPROFILE: "C:\\Users\\sentinel",
+      },
+      platform: "win32",
+    });
+
+    expect(preferred).toContain("C:\\Users\\sentinel\\.opencode\\bin");
+    expect(preferred).toContain("C:\\Users\\sentinel\\scoop\\shims");
+    expect(preferred).toContain("C:\\ProgramData\\chocolatey\\bin");
+  });
 });

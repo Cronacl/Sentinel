@@ -1,52 +1,84 @@
 import "server-only";
 
-import { execFile, spawn, type ChildProcessByStdio } from "node:child_process";
-import { constants as fsConstants } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Readable, Writable } from "node:stream";
 import {
   query,
   type AccountInfo,
-  type ModelInfo,
   type Options,
+  type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { createLogger } from "@/lib/logger";
-import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
-import {
-  applyPrivateFsMode,
-  getSentinelStateRoot,
-} from "@/lib/runtime/local-state";
+import { applyPrivateFsMode } from "@/lib/runtime/local-state";
 import {
   buildManagedExecutablePathValue,
-  buildPreferredExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
+import { withTimeout } from "@/lib/runtime/process/with-timeout";
+import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import { getLegacyEngineStatusFilePath } from "@/lib/ai/chat/engines/platform/paths";
+import {
+  getLoginShellMarkers,
+  lookupInLoginShell,
+  parseLoginShellLookupOutput,
+} from "@/lib/ai/chat/engines/platform/runtime/login-shell";
+import {
+  findExecutableInPath,
+  getConfiguredBinaryOverride,
+  getExecutableNames,
+  getInstanceProcessEnv,
+  getInstanceRuntimeKey,
+  isExecutableFile,
+  isReadableFile,
+  listWindowsWhereCandidates,
+  recordResolvedBinary,
+  resolveFromLoginShellLookup,
+  type EngineBinaryInstance,
+} from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
+import {
+  readFirstOutputLine,
+  runCommandProbe,
+} from "@/lib/ai/chat/engines/platform/runtime/version-probe";
 import type {
   ClaudePermissionMode,
   ClaudeThreadState,
 } from "@/lib/ai/chat/engines/types";
-import type { ReasoningEffort } from "@/lib/ai/providers/models";
+
+import {
+  buildClaudeCliLaunch,
+  createClaudeNodeScriptSpawner,
+  isClaudeNodeScript,
+  resolveClaudeWindowsLauncherShim,
+} from "./executable";
+import { toClaudeModelInfo, type ClaudeModelInfo } from "./models";
+
+export {
+  buildClaudeCliLaunch,
+  isClaudeNodeScript,
+  resolveClaudeWindowsLauncherShim,
+} from "./executable";
+export {
+  buildClaudeFallbackModels,
+  resolveClaudeContextWindow,
+  resolveClaudeSdkEffort,
+  toClaudeModelInfo,
+  type ClaudeModelInfo,
+} from "./models";
 
 const log = createLogger("ClaudeSdk");
 const CLAUDE_STATUS_CACHE_TTL_MS = 15_000;
 const CLAUDE_SETTING_SOURCES = ["user", "project", "local"] as const;
-const CLAUDE_CODE_PATH_START_MARKER = "__SENTINEL_CLAUDE_PATH_START__";
-const CLAUDE_CODE_PATH_END_MARKER = "__SENTINEL_CLAUDE_PATH_END__";
-const CLAUDE_SHELL_PATH_START_MARKER = "__SENTINEL_CLAUDE_SHELL_PATH_START__";
-const CLAUDE_SHELL_PATH_END_MARKER = "__SENTINEL_CLAUDE_SHELL_PATH_END__";
+const CLAUDE_LOGIN_SHELL_MARKERS = getLoginShellMarkers("claude");
+const CLAUDE_LEGACY_ENV_KEYS = ["SENTINEL_CLAUDE_PATH", "CLAUDE_PATH"] as const;
 const CLAUDE_RUNTIME_CACHE_TTL_MS = 15_000;
 const CLAUDE_BINARY_VERIFY_TIMEOUT_MS = 1_500;
-const SHELL_LOOKUP_TIMEOUT_MS = 1_200;
 const CLAUDE_STATUS_QUERY_TIMEOUT_MS = 3_000;
 const CLAUDE_STATUS_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 const LOCAL_STATE_DIRECTORY_MODE = 0o700;
 const LOCAL_STATE_FILE_MODE = 0o600;
 const CLAUDE_STATUS_SNAPSHOT_FILE = "claude-status.json";
 
-type ClaudeSdkEffort = "low" | "medium" | "high" | "max";
 export type ClaudeEngineState =
   | "auth_unavailable"
   | "error"
@@ -64,28 +96,23 @@ export type ResolvedClaudeCodeRuntime = {
   binaryVersion: string | null;
   env: NodeJS.ProcessEnv;
   executablePath: string | null;
+  /** How the binary was found; null when it was not. */
+  source: EngineInstallSource | null;
 };
 
-export type ClaudeModelInfo = {
-  contextWindow?: number;
-  defaultReasoningEffort: ReasoningEffort;
+/** A slash command the CLI's initialize response lists for the session. */
+export type ClaudeSlashCommandInfo = {
+  argumentHint?: string;
   description: string;
-  displayName: string;
-  id: string;
-  inputModalities: string[];
-  isDefault: boolean;
-  model: string;
-  supportedReasoningEfforts: Array<{
-    description: string;
-    effort: ReasoningEffort;
-    label: string;
-  }>;
+  name: string;
 };
 
 export type ClaudeEngineStatus = {
   account: AccountInfo | null;
   authReady: boolean;
   availableModels: ClaudeModelInfo[];
+  /** Slash commands (and skills) the CLI offers; absent when unknown. */
+  commands?: ClaudeSlashCommandInfo[];
   binaryDetected: boolean;
   binaryPath: string | null;
   binaryVersion: string | null;
@@ -100,107 +127,50 @@ export type ClaudeEngineStatus = {
 type ClaudeStatusSnapshot = {
   account: AccountInfo | null;
   availableModels: ClaudeModelInfo[];
+  commands?: ClaudeSlashCommandInfo[];
   binaryPath: string;
   binaryVersion: string | null;
   recordedAt: string;
 };
 
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-): Promise<T | null> {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timeoutId = setTimeout(() => {
-      if (settled) {
-        return;
-      }
+// Status caches per instance (and per configuration of it). `generation`
+// invalidates a background refresh that a reset overtook.
+type ClaudeStatusState = {
+  backgroundRefresh: Promise<void> | null;
+  cachedStatus: {
+    expiresAt: number;
+    promise: Promise<ClaudeEngineStatus>;
+  } | null;
+  generation: number;
+};
+const statusStates = new Map<string, ClaudeStatusState>();
 
-      settled = true;
-      resolve(null);
-    }, timeoutMs);
+// One cached resolution per instance (and per configuration of it).
+const cachedRuntimes = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ResolvedClaudeCodeRuntime> }
+>();
 
-    void promise
-      .then((value) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch(() => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        clearTimeout(timeoutId);
-        resolve(null);
-      });
-  });
-}
-
-let cachedStatus: {
-  expiresAt: number;
-  promise: Promise<ClaudeEngineStatus>;
-} | null = null;
-let cachedRuntime: {
-  expiresAt: number;
-  promise: Promise<ResolvedClaudeCodeRuntime>;
-} | null = null;
-let backgroundStatusRefresh: Promise<void> | null = null;
-let backgroundStatusRefreshGeneration = 0;
-
-function getLocalStateDirectory() {
-  return getSentinelStateRoot();
-}
-
-function getClaudeStatusSnapshotPath() {
-  return path.join(getLocalStateDirectory(), CLAUDE_STATUS_SNAPSHOT_FILE);
-}
-
-function setProcessClaudeCodePath(executablePath: string | null) {
-  if (executablePath?.trim()) {
-    process.env.SENTINEL_CLAUDE_PATH = executablePath;
-    return;
+function getStatusState(key: string) {
+  let state = statusStates.get(key);
+  if (!state) {
+    state = { backgroundRefresh: null, cachedStatus: null, generation: 0 };
+    statusStates.set(key, state);
   }
-
-  delete process.env.SENTINEL_CLAUDE_PATH;
+  return state;
 }
 
-function isPersistableClaudeCodePath(executablePath: string) {
-  const normalized = executablePath.replaceAll("\\", "/");
-  return !normalized.includes("/fnm_multishells/");
-}
-
-async function persistResolvedClaudeCodePath(
-  executablePath: string | null,
-  options?: { persist?: boolean },
+function getClaudeStatusSnapshotPath(
+  instance: ClaudeRuntimeInstance | null | undefined,
 ) {
-  const persist = options?.persist ?? Boolean(executablePath?.trim());
-
-  try {
-    if (persist && executablePath) {
-      await setLocalRuntimeEnvValue("SENTINEL_CLAUDE_PATH", executablePath);
-      return;
-    }
-
-    if (executablePath) {
-      setProcessClaudeCodePath(executablePath);
-    }
-  } catch (error) {
-    if (executablePath) {
-      setProcessClaudeCodePath(executablePath);
-    }
-    log.warn("persist_claude_path_failed", { error });
-  }
+  return getLegacyEngineStatusFilePath(CLAUDE_STATUS_SNAPSHOT_FILE, instance);
 }
 
-async function writeClaudeStatusSnapshot(snapshot: ClaudeStatusSnapshot) {
-  const snapshotPath = getClaudeStatusSnapshotPath();
-  const localStateDirectory = getLocalStateDirectory();
+async function writeClaudeStatusSnapshot(
+  snapshotPath: string,
+  snapshot: ClaudeStatusSnapshot,
+) {
+  const localStateDirectory = path.dirname(snapshotPath);
 
   await mkdir(localStateDirectory, {
     mode: LOCAL_STATE_DIRECTORY_MODE,
@@ -214,9 +184,12 @@ async function writeClaudeStatusSnapshot(snapshot: ClaudeStatusSnapshot) {
   await applyPrivateFsMode(snapshotPath, LOCAL_STATE_FILE_MODE);
 }
 
-async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
+async function readClaudeStatusSnapshot(
+  snapshotPath: string,
+  options: { binaryPath: string },
+) {
   try {
-    const rawSnapshot = await readFile(getClaudeStatusSnapshotPath(), "utf8");
+    const rawSnapshot = await readFile(snapshotPath, "utf8");
     const parsed = JSON.parse(rawSnapshot) as Partial<ClaudeStatusSnapshot>;
 
     if (
@@ -237,9 +210,11 @@ async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
       return null;
     }
 
+    const commands = toClaudeSlashCommandInfos(parsed.commands);
     return {
       account: (parsed.account as AccountInfo | null | undefined) ?? null,
       availableModels: parsed.availableModels as ClaudeModelInfo[],
+      ...(commands.length > 0 ? { commands } : {}),
       binaryPath: parsed.binaryPath,
       binaryVersion:
         typeof parsed.binaryVersion === "string" ? parsed.binaryVersion : null,
@@ -250,196 +225,91 @@ async function readClaudeStatusSnapshot(options: { binaryPath: string }) {
   }
 }
 
-function normalizeClaudeEffort(effort: ClaudeSdkEffort): ReasoningEffort {
-  switch (effort) {
-    case "low":
-    case "medium":
-    case "high":
-      return effort;
-    case "max":
-      return "high";
-  }
-}
-
-function normalizeClaudeReasoningEfforts(model: ModelInfo) {
-  const levels = (model.supportedEffortLevels ?? ["low", "medium", "high"])
-    .map(normalizeClaudeEffort)
-    .filter(
-      (effort, index, array) =>
-        array.indexOf(effort) === index &&
-        (effort === "low" || effort === "medium" || effort === "high"),
-    );
-
-  return levels.map((effort) => ({
-    description: `${model.displayName} supports ${effort} reasoning effort.`,
-    effort,
-    label: effort[0]!.toUpperCase() + effort.slice(1),
-  }));
-}
-
-function getClaudeModelInputModalities(model: ModelInfo) {
-  return model.description.toLowerCase().includes("vision")
-    ? ["text", "image"]
-    : ["text"];
-}
-
-const CLAUDE_CONTEXT_WINDOWS: Record<string, number> = {
-  "claude-opus-4-6": 1_000_000,
-  "claude-sonnet-4-6": 1_000_000,
-  "claude-opus-4-5": 200_000,
-  "claude-haiku-4-5": 200_000,
-  "claude-sonnet-4-5": 200_000,
-  "claude-sonnet-4-5-20250929": 200_000,
-  "claude-opus-4-1": 200_000,
-  "claude-opus-4-0": 200_000,
-  "claude-sonnet-4-0": 200_000,
-  "claude-4-sonnet-20250514": 200_000,
-  "claude-3-7-sonnet-latest": 200_000,
-  "claude-3-7-sonnet-20250219": 200_000,
-  "claude-3-5-sonnet-20241022": 200_000,
-  "claude-3-5-haiku-latest": 200_000,
-  "claude-3-5-haiku-20241022": 200_000,
-};
-
-function resolveClaudeContextWindow(model: ModelInfo) {
-  return CLAUDE_CONTEXT_WINDOWS[model.value];
-}
-
-function toClaudeModelInfo(model: ModelInfo): ClaudeModelInfo {
-  const supportedReasoningEfforts = normalizeClaudeReasoningEfforts(model);
-
-  return {
-    contextWindow: resolveClaudeContextWindow(model),
-    defaultReasoningEffort: supportedReasoningEfforts[0]?.effort ?? "medium",
-    description: model.description,
-    displayName: model.displayName,
-    id: model.value,
-    inputModalities: getClaudeModelInputModalities(model),
-    isDefault: false,
-    model: model.value,
-    supportedReasoningEfforts,
-  };
-}
-
-export function resolveClaudeSdkExecutable(command: string) {
-  if (command === "node" || command === "bun") {
-    return process.execPath;
-  }
-
-  return command;
-}
-
-function getExecutableNames(command: string) {
-  if (process.platform !== "win32") {
-    return [command];
-  }
-
-  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-    .split(";")
-    .map((extension) => extension.trim())
-    .filter(Boolean);
-
-  const names = new Set<string>([command]);
-  const lowerCommand = command.toLowerCase();
-  for (const extension of pathExt) {
-    if (lowerCommand.endsWith(extension.toLowerCase())) {
-      continue;
-    }
-
-    names.add(`${command}${extension}`);
-  }
-
-  return [...names];
-}
-
-async function isExecutable(candidatePath: string) {
-  try {
-    await access(
-      candidatePath,
-      process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function findExecutableInPath(
+/**
+ * File names to look for when resolving `command` in a PATH directory. On
+ * Windows only PATHEXT names can run: npm also writes an extension-less sh
+ * script named `claude` next to `claude.cmd`, and picking it first would hide
+ * the runnable shim (the .cmd is then followed to the package entry).
+ */
+export function getClaudeExecutableNames(
   command: string,
-  pathValue?: string | null,
+  options?: { pathExt?: string; platform?: NodeJS.Platform },
 ) {
-  if (!pathValue) {
-    return null;
-  }
-
-  const searchPaths = pathValue
-    .split(path.delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  for (const directory of searchPaths) {
-    for (const executableName of getExecutableNames(command)) {
-      const candidatePath = path.join(directory, executableName);
-      if (await isExecutable(candidatePath)) {
-        return candidatePath;
-      }
-    }
-  }
-
-  return null;
+  return getExecutableNames(command, { ...options, strategy: "pathext" });
 }
+
+const CLAUDE_NAME_OPTIONS = { strategy: "pathext" } as const;
 
 async function verifyClaudeExecutable(
   candidatePath: string,
   env: NodeJS.ProcessEnv,
 ) {
-  if (!(await isExecutable(candidatePath))) {
+  // The SDK cannot spawn Windows npm shims (.cmd), so follow them to the
+  // package entry first; this is a no-op elsewhere.
+  const executablePath = resolveClaudeWindowsLauncherShim(candidatePath);
+  // Node scripts run under process.execPath, so they only need to be readable.
+  const isLaunchable = isClaudeNodeScript(executablePath)
+    ? await isReadableFile(executablePath)
+    : await isExecutableFile(executablePath);
+  if (!isLaunchable) {
     return null;
   }
 
-  const output = await new Promise<{
-    stderr: string;
-    stdout: string;
-  } | null>((resolve) => {
-    execFile(
-      candidatePath,
-      ["--version"],
-      {
-        env,
-        timeout: CLAUDE_BINARY_VERIFY_TIMEOUT_MS,
-        windowsHide: true,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          resolve(null);
-          return;
-        }
-
-        resolve({ stderr, stdout });
-      },
-    );
+  const launch = buildClaudeCliLaunch({
+    args: ["--version"],
+    command: executablePath,
+    env,
   });
-
-  if (!output) {
+  const output = await runCommandProbe({
+    args: launch.args,
+    command: launch.command,
+    env: launch.env as NodeJS.ProcessEnv,
+    timeoutMs: CLAUDE_BINARY_VERIFY_TIMEOUT_MS,
+  });
+  if (output.error) {
     return null;
   }
-
-  const version =
-    `${output.stdout}\n${output.stderr}`
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean) ?? null;
 
   return {
-    binaryVersion: version,
-    executablePath: candidatePath,
+    binaryVersion: readFirstOutputLine(output.stdout, output.stderr),
+    executablePath,
   };
+}
+
+/**
+ * The initialize response's `commands`, kept to what the composer can use:
+ * a name, a description and an argument hint.
+ */
+export function toClaudeSlashCommandInfos(
+  commands: unknown,
+): ClaudeSlashCommandInfo[] {
+  if (!Array.isArray(commands)) {
+    return [];
+  }
+  return commands.flatMap((command): ClaudeSlashCommandInfo[] => {
+    const record = command as Record<string, unknown> | null;
+    if (typeof record?.name !== "string" || !record.name.trim()) {
+      return [];
+    }
+    return [
+      {
+        ...(typeof record.argumentHint === "string" &&
+        record.argumentHint.trim()
+          ? { argumentHint: record.argumentHint.trim() }
+          : {}),
+        description:
+          typeof record.description === "string" ? record.description : "",
+        name: record.name.trim(),
+      },
+    ];
+  });
 }
 
 function buildClaudeEngineStatus(input: {
   account: AccountInfo | null;
   authReady: boolean;
   availableModels: ClaudeModelInfo[];
+  commands?: ClaudeSlashCommandInfo[];
   binaryDetected: boolean;
   binaryPath: string | null;
   binaryVersion: string | null;
@@ -455,6 +325,9 @@ function buildClaudeEngineStatus(input: {
     binaryDetected: input.binaryDetected,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
+    ...(input.commands && input.commands.length > 0
+      ? { commands: input.commands }
+      : {}),
     engine: "claude" as const,
     error: input.error,
     lastSuccessfulProbeAt: input.lastSuccessfulProbeAt,
@@ -474,6 +347,7 @@ function buildCachedClaudeStatus(input: {
     authReady: input.snapshot.availableModels.length > 0,
     availableModels: input.snapshot.availableModels,
     binaryDetected: true,
+    commands: input.snapshot.commands,
     binaryPath: input.binaryPath,
     binaryVersion: input.binaryVersion,
     error: null,
@@ -498,345 +372,256 @@ export function isClaudeEngineAvailable(status: ClaudeEngineStatus) {
   return status.state === "ready" || status.state === "timeout_no_cache";
 }
 
-function getPreferredPathValue(pathValue?: string | null) {
-  return buildPreferredExecutablePathValue(pathValue);
-}
-
-async function getManagedPathValue(pathValue?: string | null) {
-  return buildManagedExecutablePathValue(pathValue);
-}
-
-function buildLoginShellLookupArgs(script: string) {
-  return ["-l", "-c", script];
-}
-
-function buildPosixShellLookupScript() {
-  return [
-    "if command -v claude >/dev/null 2>&1; then",
-    `  printf '%s\\n' '${CLAUDE_CODE_PATH_START_MARKER}'`,
-    "  command -v claude",
-    `  printf '%s\\n' '${CLAUDE_CODE_PATH_END_MARKER}'`,
-    "fi",
-    `printf '%s\\n' '${CLAUDE_SHELL_PATH_START_MARKER}'`,
-    `printf '%s\\n' "$PATH"`,
-    `printf '%s\\n' '${CLAUDE_SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
-function buildFishShellLookupScript() {
-  return [
-    "if command -v claude >/dev/null 2>/dev/null",
-    `  printf '%s\\n' '${CLAUDE_CODE_PATH_START_MARKER}'`,
-    "  command -v claude",
-    `  printf '%s\\n' '${CLAUDE_CODE_PATH_END_MARKER}'`,
-    "end",
-    `printf '%s\\n' '${CLAUDE_SHELL_PATH_START_MARKER}'`,
-    "printf '%s\\n' (string join : -- $PATH)",
-    `printf '%s\\n' '${CLAUDE_SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
 export function parseClaudeShellLookupOutput(
   stdout: string,
 ): ClaudeShellLookupResult {
-  const lines = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const readBlock = (startMarker: string, endMarker: string) => {
-    const startIndex = lines.indexOf(startMarker);
-    const endIndex = lines.indexOf(endMarker);
-
-    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-      return [];
-    }
-
-    return lines.slice(startIndex + 1, endIndex);
-  };
-
-  const claudePathBlock = readBlock(
-    CLAUDE_CODE_PATH_START_MARKER,
-    CLAUDE_CODE_PATH_END_MARKER,
-  );
-  const pathBlock = readBlock(
-    CLAUDE_SHELL_PATH_START_MARKER,
-    CLAUDE_SHELL_PATH_END_MARKER,
-  );
-
-  const claudePath =
-    claudePathBlock.find((line) => path.basename(line).startsWith("claude")) ??
-    null;
-  const pathValue = pathBlock.find(Boolean) ?? null;
-
-  return {
-    claudePath,
-    pathValue,
-  };
+  const { commandPath, pathValue } = parseLoginShellLookupOutput(stdout, {
+    commandBasenamePrefix: "claude",
+    markers: CLAUDE_LOGIN_SHELL_MARKERS,
+  });
+  return { claudePath: commandPath, pathValue };
 }
 
-async function resolveClaudeCodeRuntimeFromWindowsWhere() {
-  if (process.platform !== "win32") {
-    return null;
-  }
+export type ClaudeRuntimeInstance = EngineBinaryInstance;
 
-  const stdout = await new Promise<string>((resolve, reject) => {
-    execFile("where", ["claude"], { env: process.env }, (error, output) => {
-      if (error) {
-        reject(error);
-        return;
-      }
+/**
+ * Resolution order: the instance's binaryPath, else (default instance)
+ * SENTINEL_CLAUDE_PATH or CLAUDE_PATH; then the managed PATH, `where` on
+ * Windows and the login shell. Every candidate must answer `--version`.
+ * Without an instance this is the default instance on process.env.
+ */
+async function resolveClaudeCodeRuntimeUncached(
+  instance: ClaudeRuntimeInstance | null | undefined,
+): Promise<ResolvedClaudeCodeRuntime> {
+  const processEnv = getInstanceProcessEnv(instance);
+  const homeEnv = {
+    ...processEnv,
+    HOME: getPlatformHomeDirectory({ env: processEnv }),
+  };
+  const preferredPath = await buildManagedExecutablePathValue(processEnv.PATH, {
+    env: processEnv,
+  });
+  const baseEnv = { ...homeEnv, PATH: preferredPath };
+  const isDefault = !instance || instance.isDefault;
 
-      resolve(output.trim());
-    });
-  }).catch(() => null);
-
-  if (!stdout) {
-    return null;
-  }
-
-  const candidates = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  for (const candidatePath of candidates) {
-    const env = {
-      ...process.env,
-      HOME: getPlatformHomeDirectory(),
-    };
-    const verified = await verifyClaudeExecutable(candidatePath, env);
-    if (verified) {
-      return {
-        binaryDetected: true,
-        binaryVersion: verified.binaryVersion,
-        env,
-        executablePath: verified.executablePath,
-      } satisfies ResolvedClaudeCodeRuntime;
+  const accept = async (
+    candidatePath: string | null,
+    env: NodeJS.ProcessEnv,
+    source: EngineInstallSource,
+  ): Promise<ResolvedClaudeCodeRuntime | null> => {
+    const verified = candidatePath
+      ? await verifyClaudeExecutable(candidatePath, env)
+      : null;
+    if (!verified) {
+      return null;
     }
-  }
 
-  return null;
-}
-
-async function resolveClaudeCodeRuntimeFromShell() {
-  if (process.platform === "win32") {
-    return null;
-  }
-
-  const shellPath = process.env.SHELL?.trim() || "/bin/zsh";
-  const shellName = path.basename(shellPath).toLowerCase();
-  const shellLookupScript =
-    shellName === "fish"
-      ? buildFishShellLookupScript()
-      : buildPosixShellLookupScript();
-
-  const stdout = await new Promise<string>((resolve, reject) => {
-    execFile(
-      shellPath,
-      buildLoginShellLookupArgs(shellLookupScript),
+    await recordResolvedBinary(
       {
-        env: {
-          ...process.env,
-          HOME: getPlatformHomeDirectory(),
-          TERM: process.env.TERM ?? "dumb",
-        },
-        timeout: SHELL_LOOKUP_TIMEOUT_MS,
+        path: verified.executablePath,
+        source,
+        version: verified.binaryVersion,
       },
-      (error, shellStdout) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(shellStdout.trim());
+      {
+        instanceId: instance?.id ?? "claude",
+        legacyEnvKey: isDefault ? "SENTINEL_CLAUDE_PATH" : null,
       },
     );
-  }).catch(() => null);
+    return {
+      binaryDetected: true,
+      binaryVersion: verified.binaryVersion,
+      env,
+      executablePath: verified.executablePath,
+      source,
+    };
+  };
 
-  if (!stdout) {
-    return null;
+  const override = getConfiguredBinaryOverride(
+    instance,
+    processEnv,
+    CLAUDE_LEGACY_ENV_KEYS,
+  );
+  const fromOverride = override
+    ? await accept(override.path, baseEnv, override.source)
+    : null;
+  if (fromOverride) {
+    return fromOverride;
   }
 
-  const { claudePath, pathValue } = parseClaudeShellLookupOutput(stdout);
-  const resolvedCommand =
-    (claudePath && (await isExecutable(claudePath)) ? claudePath : null) ??
-    (await findExecutableInPath("claude", pathValue));
+  const fromPath = await accept(
+    await findExecutableInPath("claude", preferredPath, CLAUDE_NAME_OPTIONS),
+    baseEnv,
+    "managed-path",
+  );
+  if (fromPath) {
+    return fromPath;
+  }
 
-  const env = {
-    ...process.env,
-    HOME: getPlatformHomeDirectory(),
-    ...(pathValue ? { PATH: pathValue } : {}),
-  };
-  const verifiedCommand = resolvedCommand
-    ? await verifyClaudeExecutable(resolvedCommand, env)
-    : null;
+  for (const candidate of await listWindowsWhereCandidates("claude", {
+    env: processEnv,
+  })) {
+    const fromWhere = await accept(candidate, homeEnv, "login-shell");
+    if (fromWhere) {
+      return fromWhere;
+    }
+  }
 
-  if (!verifiedCommand) {
-    return null;
+  const fromShell = await resolveFromLoginShellLookup(
+    await lookupInLoginShell({
+      command: "claude",
+      commandBasenamePrefix: "claude",
+      env: processEnv,
+      markers: CLAUDE_LOGIN_SHELL_MARKERS,
+    }),
+    {
+      ...CLAUDE_NAME_OPTIONS,
+      accept: async (candidatePath, env) => {
+        const runtime = await accept(
+          candidatePath,
+          env as NodeJS.ProcessEnv,
+          "login-shell",
+        );
+        return runtime
+          ? {
+              env: runtime.env,
+              path: runtime.executablePath!,
+              source: "login-shell",
+              version: runtime.binaryVersion,
+            }
+          : null;
+      },
+      baseEnv: homeEnv,
+      command: "claude",
+    },
+  );
+  if (fromShell) {
+    return {
+      binaryDetected: true,
+      binaryVersion: fromShell.version,
+      env: fromShell.env as NodeJS.ProcessEnv,
+      executablePath: fromShell.path,
+      source: "login-shell",
+    };
   }
 
   return {
-    binaryDetected: true,
-    binaryVersion: verifiedCommand.binaryVersion,
-    env,
-    executablePath: verifiedCommand.executablePath,
-  } satisfies ResolvedClaudeCodeRuntime;
+    binaryDetected: false,
+    binaryVersion: null,
+    env: homeEnv,
+    executablePath: null,
+    source: null,
+  };
 }
 
 export async function resolveClaudeCodeRuntime(options?: {
   forceRefresh?: boolean;
+  instance?: ClaudeRuntimeInstance | null;
 }) {
-  const forceRefresh = options?.forceRefresh ?? false;
+  const key = getInstanceRuntimeKey(options?.instance);
   const now = Date.now();
+  const cached = cachedRuntimes.get(key);
 
-  if (!forceRefresh && cachedRuntime && cachedRuntime.expiresAt > now) {
-    return await cachedRuntime.promise;
+  if (!options?.forceRefresh && cached && cached.expiresAt > now) {
+    return await cached.promise;
   }
 
-  const promise = (async () => {
-    const preferredPath = await getManagedPathValue(process.env.PATH);
-    const baseEnv = {
-      ...process.env,
-      HOME: getPlatformHomeDirectory(),
-      PATH: preferredPath,
-    };
-    const overridePath =
-      process.env.SENTINEL_CLAUDE_PATH?.trim() ||
-      process.env.CLAUDE_PATH?.trim();
-    if (overridePath) {
-      const verifiedOverride = await verifyClaudeExecutable(
-        overridePath,
-        baseEnv,
-      );
-      if (verifiedOverride) {
-        const runtime = {
-          binaryDetected: true,
-          binaryVersion: verifiedOverride.binaryVersion,
-          env: baseEnv,
-          executablePath: verifiedOverride.executablePath,
-        } satisfies ResolvedClaudeCodeRuntime;
-        await persistResolvedClaudeCodePath(runtime.executablePath, {
-          persist: isPersistableClaudeCodePath(runtime.executablePath),
-        });
-        return runtime;
-      }
-    }
-
-    const directCommand = await findExecutableInPath("claude", preferredPath);
-    if (directCommand) {
-      const verifiedDirectCommand = await verifyClaudeExecutable(
-        directCommand,
-        baseEnv,
-      );
-      if (verifiedDirectCommand) {
-        const runtime = {
-          binaryDetected: true,
-          binaryVersion: verifiedDirectCommand.binaryVersion,
-          env: baseEnv,
-          executablePath: verifiedDirectCommand.executablePath,
-        } satisfies ResolvedClaudeCodeRuntime;
-        await persistResolvedClaudeCodePath(runtime.executablePath, {
-          persist: isPersistableClaudeCodePath(runtime.executablePath),
-        });
-        return runtime;
-      }
-    }
-
-    const windowsWhereCommand =
-      await resolveClaudeCodeRuntimeFromWindowsWhere();
-    if (windowsWhereCommand) {
-      await persistResolvedClaudeCodePath(windowsWhereCommand.executablePath, {
-        persist: isPersistableClaudeCodePath(
-          windowsWhereCommand.executablePath,
-        ),
-      });
-      return windowsWhereCommand;
-    }
-
-    const shellRuntime = await resolveClaudeCodeRuntimeFromShell();
-    if (shellRuntime) {
-      await persistResolvedClaudeCodePath(shellRuntime.executablePath, {
-        persist: isPersistableClaudeCodePath(shellRuntime.executablePath),
-      });
-      return shellRuntime;
-    }
-
-    const runtime = {
-      binaryDetected: false,
-      binaryVersion: null,
-      env: {
-        ...process.env,
-        HOME: getPlatformHomeDirectory(),
-      },
-      executablePath: null,
-    } satisfies ResolvedClaudeCodeRuntime;
-    return runtime;
-  })();
-
-  cachedRuntime = {
+  const promise = resolveClaudeCodeRuntimeUncached(options?.instance);
+  cachedRuntimes.set(key, {
     expiresAt: now + CLAUDE_RUNTIME_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return await promise;
 }
 
 export function resetClaudeCodeRuntimeCache() {
-  cachedRuntime = null;
+  cachedRuntimes.clear();
 }
 
 export function resetClaudeEngineStatusCache() {
-  cachedStatus = null;
-  backgroundStatusRefresh = null;
-  backgroundStatusRefreshGeneration += 1;
+  for (const state of statusStates.values()) {
+    state.cachedStatus = null;
+    state.backgroundRefresh = null;
+    state.generation += 1;
+  }
+}
+
+/**
+ * Forgets an instance's last-known-good status: the in-memory caches and the
+ * on-disk snapshot. A probe answers an empty model list or a failure (how a
+ * signed-out Claude Code looks) from that snapshot for up to 7 days, so after
+ * a sign-in or sign-out the next probe must report what Claude Code says now.
+ */
+export async function forgetClaudeEngineStatus(
+  instance?: ClaudeRuntimeInstance | null,
+) {
+  const state = statusStates.get(getInstanceRuntimeKey(instance));
+  if (state) {
+    state.cachedStatus = null;
+    state.backgroundRefresh = null;
+    state.generation += 1;
+  }
+  await rm(getClaudeStatusSnapshotPath(instance), { force: true });
+}
+
+/**
+ * Task* tools are off by default on Opus 4.8, Sonnet 5 and newer since Agent
+ * SDK 0.3.233/0.3.268. Naming them in `allowedTools` keeps them registered on
+ * top of the `claude_code` preset (an explicit `tools` list would freeze the
+ * surface at today's tool names) and pre-approves them, which is safe because
+ * they only touch the session's own task list.
+ *
+ * Grep/Glob are deliberately not named: `allowedTools` approves without
+ * asking, so Claude Code would skip canUseTool for searches outside the
+ * workspace. Native builds search through Bash `find`/`grep` instead (Agent
+ * SDK 0.3.162), which keeps Bash's sandbox and approval rules; Node-script
+ * (cli.js) builds keep Grep/Glob as preset tools that go through canUseTool.
+ */
+export const CLAUDE_SDK_TASK_TOOLS = [
+  "TaskCreate",
+  "TaskGet",
+  "TaskList",
+  "TaskUpdate",
+] as const;
+
+/**
+ * `options.env` replaces the CLI's environment since Agent SDK 0.2.113, so
+ * always start from process.env and layer the runtime env on top.
+ */
+export function buildClaudeSdkEnv(
+  env?: Options["env"],
+): NonNullable<Options["env"]> {
+  const mergedEnv = { ...process.env, ...env };
+
+  return {
+    ...mergedEnv,
+    CLAUDE_AGENT_SDK_CLIENT_APP:
+      mergedEnv.CLAUDE_AGENT_SDK_CLIENT_APP ?? "sentinel",
+  };
 }
 
 export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
-  const baseEnv = options?.env ?? process.env;
-  const runtimeEnv = {
-    ...baseEnv,
-    CLAUDE_AGENT_SDK_CLIENT_APP:
-      baseEnv.CLAUDE_AGENT_SDK_CLIENT_APP ??
-      process.env.CLAUDE_AGENT_SDK_CLIENT_APP ??
-      "sentinel",
-  };
+  const executablePath = options?.pathToClaudeCodeExecutable;
+  // Native binaries are spawned by the SDK itself; only Node-script CLIs (npm
+  // shims, cli.js) need Sentinel's launcher.
+  const nodeScriptSpawner =
+    !options?.spawnClaudeCodeProcess &&
+    executablePath &&
+    isClaudeNodeScript(executablePath)
+      ? createClaudeNodeScriptSpawner({ onStderr: options?.stderr })
+      : null;
 
   return {
     ...options,
+    allowedTools: [
+      ...new Set([...CLAUDE_SDK_TASK_TOOLS, ...(options?.allowedTools ?? [])]),
+    ],
     cwd: options?.cwd ?? process.cwd(),
-    env: runtimeEnv,
-    spawnClaudeCodeProcess: (spawnOptions) => {
-      const child: ChildProcessByStdio<Writable, Readable, null> = spawn(
-        resolveClaudeSdkExecutable(spawnOptions.command),
-        spawnOptions.args,
-        {
-          cwd: spawnOptions.cwd,
-          env: {
-            ...spawnOptions.env,
-            NODE_ENV: spawnOptions.env.NODE_ENV ?? process.env.NODE_ENV,
-          } as NodeJS.ProcessEnv,
-          signal: spawnOptions.signal,
-          stdio: ["pipe", "pipe", "ignore"],
-          windowsHide: true,
-        },
-      );
-
-      return {
-        stdin: child.stdin,
-        stdout: child.stdout,
-        get killed() {
-          return child.killed;
-        },
-        get exitCode() {
-          return child.exitCode;
-        },
-        kill: child.kill.bind(child),
-        on: child.on.bind(child),
-        once: child.once.bind(child),
-        off: child.off.bind(child),
-      };
-    },
+    env: buildClaudeSdkEnv(options?.env),
+    // Omitted, the CLI follows the settings `defaultMode` (possibly `auto`)
+    // since Agent SDK 0.3.286; Sentinel always chooses the mode itself.
+    permissionMode: options?.permissionMode ?? "default",
+    ...(nodeScriptSpawner ? { spawnClaudeCodeProcess: nodeScriptSpawner } : {}),
     persistSession: options?.persistSession ?? true,
     settingSources: options?.settingSources ?? [...CLAUDE_SETTING_SOURCES],
     systemPrompt: options?.systemPrompt ?? {
@@ -847,14 +632,65 @@ export function buildClaudeSdkBaseOptions(options?: Partial<Options>): Options {
   };
 }
 
-async function readClaudeStatus(options?: {
+/**
+ * A prompt stream that never yields: the status probe only needs the CLI's
+ * initialize response, and must never send a turn to the API.
+ */
+export function createIdleClaudePrompt(
+  signal: AbortSignal,
+): AsyncIterable<SDKUserMessage> {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next: () =>
+          new Promise<IteratorResult<SDKUserMessage>>((resolve) => {
+            const finish = () => resolve({ done: true, value: undefined });
+            if (signal.aborted) {
+              finish();
+              return;
+            }
+            signal.addEventListener("abort", finish, { once: true });
+          }),
+        return: () => Promise.resolve({ done: true, value: undefined }),
+      };
+    },
+  };
+}
+
+/**
+ * Models from the last successful status probe of this binary, without
+ * probing. Null when no snapshot exists yet.
+ */
+export async function getCachedClaudeModels(
+  executablePath: string | null | undefined,
+  instance?: ClaudeRuntimeInstance | null,
+) {
+  if (!executablePath) {
+    return null;
+  }
+
+  const snapshot = await readClaudeStatusSnapshot(
+    getClaudeStatusSnapshotPath(instance),
+    { binaryPath: executablePath },
+  );
+  return snapshot?.availableModels ?? null;
+}
+
+async function readClaudeStatus(options: {
   forceRefreshRuntime?: boolean;
+  instance?: ClaudeRuntimeInstance | null;
+  state: ClaudeStatusState;
 }): Promise<ClaudeEngineStatus> {
+  const { instance, state } = options;
   const runtime = await resolveClaudeCodeRuntime({
-    forceRefresh: options?.forceRefreshRuntime,
+    forceRefresh: options.forceRefreshRuntime,
+    instance,
   });
   if (!runtime.binaryDetected || !runtime.executablePath) {
-    const retainedPath = process.env.SENTINEL_CLAUDE_PATH?.trim() || null;
+    const retainedPath =
+      getConfiguredBinaryOverride(instance, getInstanceProcessEnv(instance), [
+        "SENTINEL_CLAUDE_PATH",
+      ])?.path ?? null;
     return buildClaudeEngineStatus({
       account: null,
       authReady: false,
@@ -871,24 +707,26 @@ async function readClaudeStatus(options?: {
     });
   }
 
-  const snapshot = await readClaudeStatusSnapshot({
+  const snapshotPath = getClaudeStatusSnapshotPath(instance);
+  const snapshot = await readClaudeStatusSnapshot(snapshotPath, {
     binaryPath: runtime.executablePath,
   });
 
-  if (!options?.forceRefreshRuntime && snapshot) {
-    if (!backgroundStatusRefresh) {
-      const refreshGeneration = backgroundStatusRefreshGeneration;
+  if (!options.forceRefreshRuntime && snapshot) {
+    if (!state.backgroundRefresh) {
+      const refreshGeneration = state.generation;
       const refreshPromise = probeClaudeStatus({
         fallbackSnapshot: snapshot,
         runtime,
+        snapshotPath,
       })
         .then((status) => {
           if (
-            refreshGeneration === backgroundStatusRefreshGeneration &&
+            refreshGeneration === state.generation &&
             !status.usedCachedStatus &&
             status.state === "ready"
           ) {
-            cachedStatus = {
+            state.cachedStatus = {
               expiresAt: Date.now() + CLAUDE_STATUS_CACHE_TTL_MS,
               promise: Promise.resolve(status),
             };
@@ -896,13 +734,13 @@ async function readClaudeStatus(options?: {
         })
         .finally(() => {
           if (
-            refreshGeneration === backgroundStatusRefreshGeneration &&
-            backgroundStatusRefresh === refreshPromise
+            refreshGeneration === state.generation &&
+            state.backgroundRefresh === refreshPromise
           ) {
-            backgroundStatusRefresh = null;
+            state.backgroundRefresh = null;
           }
         });
-      backgroundStatusRefresh = refreshPromise;
+      state.backgroundRefresh = refreshPromise;
     }
 
     return buildCachedClaudeStatus({
@@ -915,31 +753,60 @@ async function readClaudeStatus(options?: {
   return await probeClaudeStatus({
     fallbackSnapshot: snapshot,
     runtime,
+    snapshotPath,
+  });
+}
+
+/**
+ * Options for a query that only talks to the CLI (status probe, usage
+ * read) and never sends a turn: no MCP servers, IDE or hooks.
+ */
+export function buildClaudeIdleQueryOptions(
+  runtime: Pick<ResolvedClaudeCodeRuntime, "env" | "executablePath">,
+) {
+  return buildClaudeSdkBaseOptions({
+    cwd: process.cwd(),
+    // The probe runs on every status refresh: keep it from connecting
+    // MCP servers or IDEs, or running the user's hooks (t3code
+    // ClaudeProvider.ts buildClaudeCapabilitiesProbeQueryOptions, MIT).
+    env: {
+      ...runtime.env,
+      CLAUDE_CODE_AUTO_CONNECT_IDE: "0",
+      CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL: "1",
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+    },
+    includePartialMessages: false,
+    maxTurns: 1,
+    mcpServers: {},
+    pathToClaudeCodeExecutable: runtime.executablePath ?? undefined,
+    persistSession: false,
+    settings: { disableAllHooks: true },
+    stderr: () => {},
+    strictMcpConfig: true,
   });
 }
 
 async function probeClaudeStatus(input: {
   fallbackSnapshot: ClaudeStatusSnapshot | null;
   runtime: ResolvedClaudeCodeRuntime;
+  snapshotPath: string;
 }): Promise<ClaudeEngineStatus> {
   let claudeQuery: ReturnType<typeof query> | null = null;
+  // Ends the idle prompt stream once the probe is done.
+  const promptAbortController = new AbortController();
 
   try {
     claudeQuery = query({
-      prompt: "",
-      options: buildClaudeSdkBaseOptions({
-        cwd: process.cwd(),
-        env: input.runtime.env,
-        includePartialMessages: false,
-        maxTurns: 1,
-        pathToClaudeCodeExecutable: input.runtime.executablePath ?? undefined,
-        persistSession: false,
-      }),
+      prompt: createIdleClaudePrompt(promptAbortController.signal),
+      options: buildClaudeIdleQueryOptions(input.runtime),
     });
 
+    // A failure counts as no answer, like a timeout; `finally` closes the
+    // query either way.
     const initialization = await withTimeout(
       claudeQuery.initializationResult(),
       CLAUDE_STATUS_QUERY_TIMEOUT_MS,
+      { nullOnError: true },
     );
 
     if (!initialization) {
@@ -991,10 +858,12 @@ async function probeClaudeStatus(input: {
     }
 
     const availableModels = models.map(toClaudeModelInfo);
+    const commands = toClaudeSlashCommandInfos(initialization.commands);
     const recordedAt = new Date().toISOString();
-    await writeClaudeStatusSnapshot({
+    await writeClaudeStatusSnapshot(input.snapshotPath, {
       account,
       availableModels,
+      ...(commands.length > 0 ? { commands } : {}),
       binaryPath: input.runtime.executablePath!,
       binaryVersion: input.runtime.binaryVersion,
       recordedAt,
@@ -1005,6 +874,7 @@ async function probeClaudeStatus(input: {
       authReady: true,
       availableModels,
       binaryDetected: true,
+      commands,
       binaryPath: input.runtime.executablePath,
       binaryVersion: input.runtime.binaryVersion,
       error: null,
@@ -1041,17 +911,24 @@ async function probeClaudeStatus(input: {
     });
   } finally {
     claudeQuery?.close();
+    promptAbortController.abort();
   }
 }
 
 export async function getClaudeEngineStatus(options?: {
   forceRefresh?: boolean;
+  instance?: ClaudeRuntimeInstance | null;
 }) {
   const forceRefresh = options?.forceRefresh ?? false;
   const now = Date.now();
+  const state = getStatusState(getInstanceRuntimeKey(options?.instance));
 
-  if (!forceRefresh && cachedStatus && cachedStatus.expiresAt > now) {
-    return await cachedStatus.promise;
+  if (
+    !forceRefresh &&
+    state.cachedStatus &&
+    state.cachedStatus.expiresAt > now
+  ) {
+    return await state.cachedStatus.promise;
   }
 
   if (forceRefresh) {
@@ -1060,8 +937,10 @@ export async function getClaudeEngineStatus(options?: {
 
   const pending = readClaudeStatus({
     forceRefreshRuntime: forceRefresh,
+    instance: options?.instance,
+    state,
   });
-  cachedStatus = {
+  state.cachedStatus = {
     expiresAt: now + CLAUDE_STATUS_CACHE_TTL_MS,
     promise: pending,
   };

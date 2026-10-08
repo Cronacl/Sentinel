@@ -16,8 +16,10 @@ import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
 import {
+  BUILTIN_PERMISSION_MODES,
   DEFAULT_PERMISSION_MODE,
   PERMISSION_MODE_OPTIONS,
+  getPermissionModeOptions,
   type PermissionMode,
 } from "@/lib/security";
 import { api } from "@/trpc/react";
@@ -53,13 +55,14 @@ type ComposerWorkspaceBarProps = {
   ) => void;
   onDraftProjectModeChange?: (mode: DraftProjectMode) => void;
   onSetupPendingChange?: (isPending: boolean) => void;
+  /** Modes the selected engine supports; the menu offers only these. */
+  permissionModes?: readonly PermissionMode[];
   repoThreadId?: string;
   showBranchSwitcher: boolean;
 };
 
 type ComposerRepoContextSnapshot =
-  | (ComposerWorkspaceBarRepoContext & RepoThreadUiContext)
-  | null;
+  (ComposerWorkspaceBarRepoContext & RepoThreadUiContext) | null;
 
 function getPermissionModeLabel(value: PermissionMode) {
   return (
@@ -77,10 +80,15 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   onDraftPreparedWorktreeChange,
   onDraftProjectModeChange,
   onSetupPendingChange,
+  permissionModes = BUILTIN_PERMISSION_MODES,
   repoThreadId,
   showBranchSwitcher,
 }: ComposerWorkspaceBarProps) {
   const utils = api.useUtils();
+  const permissionModeOptions = useMemo(
+    () => getPermissionModeOptions(permissionModes),
+    [permissionModes],
+  );
   const [permissionPopoverOpen, setPermissionPopoverOpen] = useState(false);
   const [projectModePopoverOpen, setProjectModePopoverOpen] = useState(false);
   const [permissionOverride, setPermissionOverride] =
@@ -1017,7 +1025,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                 ) : null}
               </button>
 
-              {PERMISSION_MODE_OPTIONS.map((option) => (
+              {permissionModeOptions.map((option) => (
                 <button
                   className="flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                   key={option.value}

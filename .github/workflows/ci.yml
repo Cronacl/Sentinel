@@ -4,11 +4,27 @@ on:
   pull_request:
     paths:
       - "src/**"
+      - "scripts/**"
+      - "desktop/**"
+      - "manifests/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - "next.config.js"
+      - ".github/**"
   push:
     branches:
       - main
     paths:
       - "src/**"
+      - "scripts/**"
+      - "desktop/**"
+      - "manifests/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - "next.config.js"
+      - ".github/**"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -35,6 +51,14 @@ jobs:
           filters: |
             source:
               - 'src/**'
+              - 'scripts/**'
+              - 'desktop/**'
+              - 'manifests/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'tsconfig.json'
+              - 'next.config.js'
+              - '.github/**'
 
   pr-metadata:
     if: github.event_name == 'pull_request'
@@ -117,4 +141,27 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Run tests
-        run: bun run test
+        run: node scripts/run-tests.mjs --jobs 3
+
+  build:
+    name: build
+    needs: changes
+    if: ${{ needs.changes.outputs.source == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SKIP_ENV_VALIDATION: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      SENTINEL_SKIP_STARTUP_TASKS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        run: bun run build
+
+      - name: Tripwires
+        run: node scripts/verify/tripwires.mjs

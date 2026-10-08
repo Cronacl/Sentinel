@@ -26,7 +26,7 @@ const createAgentUIStream = mock(async (args) => {
     });
   }
   if (aiState.latestInputTokens != null) {
-    await args.onStepFinish?.({
+    await args.onStepEnd?.({
       usage: { inputTokens: aiState.latestInputTokens },
     });
   }
@@ -44,12 +44,15 @@ const createGateway = mock((_options = {}) => ({
     kind: "gateway-language-model",
     modelId,
   })),
-  textEmbeddingModel: mock((modelId: string) => ({
+  embeddingModel: mock((modelId: string) => ({
     kind: "gateway-embedding-model",
     modelId,
   })),
 }));
-const createUIMessageStream = mock(({ execute, onFinish }) => {
+// The provider factory wraps xAI models in a default-settings middleware.
+const defaultSettingsMiddleware = mock((options) => options);
+const wrapLanguageModel = mock(({ model }) => model);
+const createUIMessageStream = mock(({ execute, onEnd }) => {
   const writer = {
     merge: mock(() => {}),
     write: mock((chunk) => {
@@ -59,7 +62,7 @@ const createUIMessageStream = mock(({ execute, onFinish }) => {
 
   const done = (async () => {
     await execute({ writer });
-    await onFinish?.({ responseMessage: aiState.assistantResponseMessage });
+    await onEnd?.({ responseMessage: aiState.assistantResponseMessage });
   })();
 
   return { done, writer };
@@ -89,7 +92,7 @@ const readUIMessageStream = mock(async function* () {
   yield aiState.assistantResponseMessage;
 });
 const smoothStream = mock(() => undefined);
-const stepCountIs = mock(() => ({ kind: "stop-when" }));
+const isStepCount = mock(() => ({ kind: "stop-when" }));
 const tool = mock((config) => config);
 
 class MockToolLoopAgent {
@@ -426,24 +429,29 @@ const validateUIMessages = mock(async ({ messages }) => messages);
 
 mock.module("ai", () => ({
   Output,
-  createAgentUIStream,
   createGateway,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  defaultSettingsMiddleware,
   experimental_generateVideo,
   generateImage,
   generateText,
   generateId,
   hasToolCall,
+  isStepCount,
   readUIMessageStream,
   smoothStream,
-  stepCountIs,
   tool,
   ToolLoopAgent: MockToolLoopAgent,
   validateUIMessages,
+  wrapLanguageModel,
 }));
 
 mock.module("server-only", () => ({}));
+
+mock.module("../../agent/ui-stream", () => ({
+  createThreadAgentUIStream: createAgentUIStream,
+}));
 
 mock.module("../attachments", () => ({
   createAttachmentDownloadHandler,
@@ -881,18 +889,31 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+// Deadline-based so the suite does not flake when the machine is busy
+// (fixed iteration counts or sleeps were too short under parallel runs).
+async function waitUntil(
+  condition: () => boolean,
+  description: string,
+  timeoutMs = 2_000,
+) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (!condition()) {
+    if (Date.now() > deadline) {
+      throw new Error(`Timed out waiting for ${description}.`);
+    }
+    await flushAsyncWork();
+  }
+}
+
 async function waitForMockCall(
   fn: { mock: { calls: unknown[] } },
   minCalls = 1,
 ) {
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    if (fn.mock.calls.length >= minCalls) {
-      return;
-    }
-    await flushAsyncWork();
-  }
-
-  throw new Error(`Timed out waiting for ${minCalls} mock call(s).`);
+  await waitUntil(
+    () => fn.mock.calls.length >= minCalls,
+    `${minCalls} mock call(s)`,
+  );
 }
 
 function createDeferred() {
@@ -1343,7 +1364,13 @@ describe("runThreadChat bootstrap failure recovery", () => {
     });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitUntil(
+      () =>
+        serializeThreadStreamEvent.mock.calls.some(
+          ([event]: [{ type?: string }]) => event?.type === "run.failed",
+        ),
+      "the run.failed event",
+    );
 
     expect(response.status).toBe(202);
     expect(buildPersistedAssistantMessage).toHaveBeenCalledWith(
@@ -1366,6 +1393,18 @@ describe("runThreadChat bootstrap failure recovery", () => {
         type: "run.finished",
       }),
     );
+  });
+
+  it("keeps UI stream error text instead of the AI SDK's redacted default", async () => {
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await waitForMockCall(createAgentUIStream);
+
+    const [streamOptions] = createUIMessageStream.mock.calls.at(-1) ?? [];
+    const [agentStreamOptions] = createAgentUIStream.mock.calls.at(-1) ?? [];
+    const error = { error: { message: "Provider request failed." } };
+
+    expect(streamOptions.onError(error)).toBe("Provider request failed.");
+    expect(agentStreamOptions.onError(error)).toBe("Provider request failed.");
   });
 
   it("persists an inline assistant error when bootstrap fails after the user turn is committed", async () => {
@@ -1631,6 +1670,45 @@ describe("runThreadChat startup latency", () => {
       "mcp_filesystem__read_file",
     );
     expect(aiTestState.prepared?.tools).toHaveProperty("github_search");
+  });
+
+  it("passes the persisted plan task statuses to the agent", async () => {
+    const task = {
+      createdAt: new Date(),
+      description: null,
+      title: "Task",
+      updatedAt: new Date(),
+    };
+    getThreadPlanState.mockImplementation(async () => ({
+      pendingQuestionSet: null,
+      plan: {
+        audience: "technical",
+        createdAt: new Date(),
+        document: "# Plan",
+        goal: "Ship the feature",
+        id: "plan-1",
+        summary: "Current implementation plan",
+        tasks: [
+          { ...task, id: "task-1", status: "completed" },
+          { ...task, id: "task-2", status: "pending" },
+        ],
+        threadId: "thread-1",
+        title: "Plan",
+        updatedAt: new Date(),
+      },
+    }));
+
+    await runThreadChat(createSubmitRequest(), "user-1");
+    await waitForMockCall(createAgentUIStream);
+
+    // Task tracking in the agent loop starts from these, so a continuation
+    // run does not treat the tasks it has not touched as resolved.
+    expect(
+      createAgentUIStream.mock.calls.at(-1)?.[0].options.planTasks,
+    ).toEqual([
+      { id: "task-1", status: "completed" },
+      { id: "task-2", status: "pending" },
+    ]);
   });
 
   it("keeps optional preflight fallback behavior non-fatal", async () => {
@@ -3517,8 +3595,8 @@ describe("runThreadChat approvals and lifecycle", () => {
     discoverProjectAwareness.mockImplementation(() => projectDiscovery.promise);
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    await flushAsyncWork();
+    await waitForMockCall(createAgentUIStream);
+    await waitForMockCall(getSystemPrompt);
 
     expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalled();

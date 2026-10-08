@@ -1,6 +1,5 @@
 import "server-only";
 
-import { OAuth2Client } from "google-auth-library";
 import { calendar_v3, google } from "googleapis";
 
 export type CalendarEntry = {
@@ -76,7 +75,7 @@ export class GoogleCalendarService {
   private calendar: calendar_v3.Calendar;
 
   constructor(accessToken: string) {
-    const auth = new OAuth2Client();
+    const auth = new google.auth.OAuth2();
     auth.setCredentials({ access_token: accessToken });
     this.calendar = google.calendar({ version: "v3", auth });
   }

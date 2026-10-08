@@ -47,6 +47,16 @@ function getWindowsExecutableCandidateEntries(env: EnvLike, homePath: string) {
     localAppData ? path.win32.join(localAppData, "fnm") : null,
     env.NVM_SYMLINK?.trim(),
     env.NVM_HOME?.trim(),
+    // OpenCode's install script under Git Bash uses $HOME/.opencode/bin; its
+    // other documented Windows installs go through Scoop or Chocolatey shims.
+    path.win32.join(homePath, ".opencode", "bin"),
+    path.win32.join(
+      env.SCOOP?.trim() || path.win32.join(homePath, "scoop"),
+      "shims",
+    ),
+    env.ChocolateyInstall?.trim()
+      ? path.win32.join(env.ChocolateyInstall.trim(), "bin")
+      : null,
     programFiles ? path.win32.join(programFiles, "nodejs") : null,
     programFilesX86 ? path.win32.join(programFilesX86, "nodejs") : null,
     localAppData
@@ -79,6 +89,9 @@ function getPosixExecutableCandidateEntries(homePath: string) {
     path.join(homePath, ".nvm", "current", "bin"),
     path.join(homePath, ".fnm", "current", "bin"),
     path.join(homePath, "Library", "pnpm"),
+    // OpenCode's official install script (opencode.ai/install) always installs
+    // to ~/.opencode/bin and only edits shell rc files to put it on PATH.
+    path.join(homePath, ".opencode", "bin"),
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/opt/local/bin",

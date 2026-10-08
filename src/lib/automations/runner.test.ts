@@ -105,15 +105,64 @@ describe("executeAutomationRun", () => {
       expect(runThreadChat).toHaveBeenCalledWith(
         expect.objectContaining({
           engine,
+          interactive: false,
           modelId: `${engine}-model`,
-          ...(engine === "cursor" || engine === "opencode"
-            ? { toolsEnabled: false }
-            : {}),
         }),
         "user-1",
       );
     });
   }
+
+  it("runs on the automation's instance with its model options, unattended", async () => {
+    db.query = {
+      automations: {
+        findFirst: mock(async () => ({
+          chatEngine: "opencode",
+          chatEngineInstanceId: "opencode-work",
+          id: "automation-1",
+          modelId: "openai/gpt-5",
+          modelOptions: [
+            { id: "agent", value: "build" },
+            { id: "variant", value: "high" },
+            { id: "", value: "dropped" },
+          ],
+          prompt: "Review the codebase.",
+          reasoningEffort: null,
+          scheduleCron: null,
+          scheduleDayOfWeek: null,
+          scheduleTime: "09:00",
+          scheduleType: "daily",
+          status: "active",
+          title: "Daily review",
+          userId: "user-1",
+          workspace: {
+            id: "workspace-1",
+            isArchived: false,
+          },
+          workspaceId: "workspace-1",
+        })),
+      },
+    };
+    allowRunToStart();
+
+    await executeAutomationRun("automation-1");
+
+    const [input] = runThreadChat.mock.calls[0];
+    expect(input).toEqual(
+      expect.objectContaining({
+        engine: "opencode",
+        engineInstanceId: "opencode-work",
+        interactive: false,
+        modelOptions: [
+          { id: "agent", value: "build" },
+          { id: "variant", value: "high" },
+        ],
+      }),
+    );
+    // Tools are no longer switched off per engine: unattended runs decline
+    // what would ask instead.
+    expect(input).not.toHaveProperty("toolsEnabled");
+  });
 
   it("fails fast and pauses active automations when the workspace is archived", async () => {
     db.query = {
@@ -470,8 +519,8 @@ describe("executeAutomationRun", () => {
     expect(runThreadChat).toHaveBeenCalledWith(
       expect.objectContaining({
         engine: "cursor",
+        interactive: false,
         modelId: "gpt-5.4",
-        toolsEnabled: false,
       }),
       "user-1",
     );
@@ -524,8 +573,8 @@ describe("executeAutomationRun", () => {
     expect(runThreadChat).toHaveBeenCalledWith(
       expect.objectContaining({
         engine: "opencode",
+        interactive: false,
         modelId: "openai/gpt-5",
-        toolsEnabled: false,
       }),
       "user-1",
     );

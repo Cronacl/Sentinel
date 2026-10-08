@@ -59,12 +59,7 @@ import { api, type RouterOutputs } from "@/trpc/react";
 type SkillListItem = RouterOutputs["skills"]["list"]["skills"][number];
 type RegistryItem = RouterOutputs["skills"]["registry"][number];
 type SkillInstallTarget =
-  | "claude"
-  | "codex"
-  | "copilot"
-  | "cursor"
-  | "opencode"
-  | "sentinel";
+  "claude" | "codex" | "copilot" | "cursor" | "opencode" | "sentinel";
 type InstalledSkillAction = Pick<SkillListItem, "name" | "scope" | "target">;
 
 type UnifiedSkill = {
@@ -972,23 +967,27 @@ export default function SkillsPage() {
     refetchInterval: 2_000,
   });
   const registry = api.skills.registry.useQuery();
-  const engines = api.engines.list.useQuery();
+  const engines = api.engines.composerCatalog.useQuery();
 
   const installMutation = api.skills.install.useMutation();
 
   const allSkills = skills.data?.skills ?? [];
   const registryEntries = registry.data ?? [];
   const codexAvailable = Boolean(
-    engines.data?.find((engine) => engine.engine === "codex")?.isAvailable,
+    engines.data?.options.find((engine) => engine.engine === "codex")
+      ?.isAvailable,
   );
   const copilotAvailable = Boolean(
-    engines.data?.find((engine) => engine.engine === "copilot")?.isAvailable,
+    engines.data?.options.find((engine) => engine.engine === "copilot")
+      ?.isAvailable,
   );
   const cursorAvailable = Boolean(
-    engines.data?.find((engine) => engine.engine === "cursor")?.isAvailable,
+    engines.data?.options.find((engine) => engine.engine === "cursor")
+      ?.isAvailable,
   );
   const openCodeAvailable = Boolean(
-    engines.data?.find((engine) => engine.engine === "opencode")?.isAvailable,
+    engines.data?.options.find((engine) => engine.engine === "opencode")
+      ?.isAvailable,
   );
 
   const isLoading =

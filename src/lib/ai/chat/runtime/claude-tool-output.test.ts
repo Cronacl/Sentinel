@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   extractClaudeAssistantToolResultBlock,
+  extractClaudeStructuredToolResult,
   extractClaudeUserToolResults,
   normalizeClaudeToolOutput,
 } from "./claude-tool-output";
@@ -185,5 +186,53 @@ describe("extractClaudeUserToolResults", () => {
         toolName: "claude_bash",
       },
     ]);
+  });
+});
+
+describe("extractClaudeStructuredToolResult", () => {
+  it("pairs tool_use_result with the message's single tool_result block", () => {
+    expect(
+      extractClaudeStructuredToolResult({
+        message: {
+          content: [
+            {
+              content: "Task #1 created successfully: Run tests",
+              tool_use_id: "tool-create",
+              type: "tool_result",
+            },
+          ],
+          role: "user",
+        },
+        parent_tool_use_id: null,
+        tool_use_result: { task: { id: "1", subject: "Run tests" } },
+        type: "user",
+      }),
+    ).toEqual({
+      output: { task: { id: "1", subject: "Run tests" } },
+      toolCallId: "tool-create",
+    });
+  });
+
+  it("ignores messages without a structured result or with several tool results", () => {
+    expect(
+      extractClaudeStructuredToolResult({
+        message: {
+          content: [{ content: "ok", tool_use_id: "a", type: "tool_result" }],
+        },
+        type: "user",
+      }),
+    ).toBeNull();
+    expect(
+      extractClaudeStructuredToolResult({
+        message: {
+          content: [
+            { content: "ok", tool_use_id: "a", type: "tool_result" },
+            { content: "ok", tool_use_id: "b", type: "tool_result" },
+          ],
+        },
+        tool_use_result: { success: true },
+        type: "user",
+      }),
+    ).toBeNull();
   });
 });

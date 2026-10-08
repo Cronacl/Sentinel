@@ -6,6 +6,7 @@ import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import {
   ThreadActionError,
   applyRunFailedEventToMessages,
+  buildThreadEngineRequestFields,
   didSnapshotCommitMessage,
   fetchThreadSessionSnapshot,
   formatClientTimingLog,
@@ -93,6 +94,67 @@ describe("mergeThreadSessionStateFromSnapshot", () => {
     );
 
     expect(result).toBe(current);
+  });
+
+  it("applies snapshots that only change a dynamic tool's display fields", () => {
+    const toolMessage = (title: string, kind: string): ThreadUIMessage => ({
+      id: "assistant-1",
+      metadata: { revision: 5 },
+      parts: [
+        {
+          callProviderMetadata: { sentinel: { agentLabel: "Cursor", kind } },
+          input: { path: "src/index.ts" },
+          state: "input-available",
+          title,
+          toolCallId: "tool-1",
+          toolName: "cursor_read",
+          type: "dynamic-tool",
+        },
+      ],
+      role: "assistant",
+    });
+    const current = {
+      activeRunId: "run-1",
+      chatEngine: "cursor" as const,
+      composerState: { pendingActionCount: 0 },
+      connectionState: "connected" as const,
+      errorMessage: null,
+      lastAppliedRevision: 5,
+      lastSyncedAt: 123,
+      messages: [toolMessage("Read file", "read")],
+      queuedFollowUps: [],
+      threadId: "thread-1",
+      threadTitle: "Thread title",
+      threadStatus: "streaming" as const,
+    };
+
+    for (const next of [
+      toolMessage("Read src/index.ts", "read"),
+      toolMessage("Read file", "edit"),
+    ]) {
+      const result = mergeThreadSessionStateFromSnapshot(
+        current,
+        createSnapshot({
+          activeRunId: "run-1",
+          chatEngine: "cursor",
+          messages: [next],
+          queuedFollowUps: [],
+          threadId: "thread-1",
+          threadStatus: "streaming",
+        }),
+        "connected",
+      );
+
+      expect(result).not.toBe(current);
+      const { callProviderMetadata, title } = next.parts[0] as {
+        callProviderMetadata: unknown;
+        title: string;
+      };
+      expect(result.messages[0]?.parts[0]).toMatchObject({
+        callProviderMetadata,
+        title,
+      });
+    }
   });
 
   it("preserves newer local messages while applying queue and status updates", () => {
@@ -795,5 +857,39 @@ describe("hasActiveThreadRun", () => {
     expect(hasActiveThreadRun("run-1", "awaiting_approval")).toBe(true);
     expect(hasActiveThreadRun("run-1", "idle")).toBe(false);
     expect(hasActiveThreadRun(null, "streaming")).toBe(false);
+  });
+});
+
+describe("buildThreadEngineRequestFields", () => {
+  it("keeps default-instance requests exactly as before", () => {
+    expect(
+      buildThreadEngineRequestFields({
+        engine: "codex",
+        engineInstanceId: "codex",
+        modelId: "gpt-5.4",
+        reasoningEffort: "high",
+      }),
+    ).toEqual({ engine: "codex", modelId: "gpt-5.4", reasoningEffort: "high" });
+    expect(
+      buildThreadEngineRequestFields({ engine: "sentinel", modelId: "m" }),
+    ).toEqual({ engine: "sentinel", modelId: "m" });
+  });
+
+  it("carries another instance and the model's option selections", () => {
+    expect(
+      buildThreadEngineRequestFields({
+        engine: "opencode",
+        engineInstanceId: "opencode-work",
+        modelId: "openai/gpt-5",
+        modelOptions: [{ id: "agent", value: "plan" }],
+        reasoningEffort: null,
+      }),
+    ).toEqual({
+      engine: "opencode",
+      engineInstanceId: "opencode-work",
+      modelId: "openai/gpt-5",
+      // The server derives the OpenCode agent/variant fields from these.
+      modelOptions: [{ id: "agent", value: "plan" }],
+    });
   });
 });

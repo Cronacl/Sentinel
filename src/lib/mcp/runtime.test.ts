@@ -185,6 +185,14 @@ describe("mcp runtime", () => {
         OPENAI_API_KEY: "key",
       },
     });
+    const clientConfigs = createMCPClient.mock.calls.map(([config]) => config);
+    const httpConfig = clientConfigs.find(
+      (config) => config.transport.type === "http",
+    );
+    expect(httpConfig?.transport.redirect).toBe("follow");
+    expect(
+      clientConfigs.map((config) => config.protocolVersionDiscovery),
+    ).toEqual([false, false]);
 
     const second = await loadMcpTools({
       entries: [

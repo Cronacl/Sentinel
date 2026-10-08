@@ -1,13 +1,13 @@
 import {
   generateText,
   hasToolCall,
-  stepCountIs,
+  isStepCount,
   ToolLoopAgent,
   type StopCondition,
   type ToolSet,
   type Experimental_DownloadFunction,
 } from "ai";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import type { ImageGenerationRuntime } from "@/lib/ai/providers/images";
 import type { VideoGenerationRuntime } from "@/lib/ai/providers/videos";
 import type { PermissionMode } from "@/lib/security";
@@ -26,10 +26,13 @@ import { computeLatentToolSummary } from "../tools/selection";
 import { buildToolRoutingEvidence, routeToolExposure } from "../tools/router";
 import { buildTools } from "../tools";
 import { buildThreadAgentInstructions } from "../context/instructions";
+import { declineUserApprovalsWhenUnattended } from "./unattended-approval";
 
 // ---------------------------------------------------------------------------
 // Call options schema
 // ---------------------------------------------------------------------------
+
+type TaskSnapshot = { id: string; status: string };
 
 const threadAgentCallOptionsSchema = z.object({
   agentRole: z.enum(["primary", "subagent"]).optional(),
@@ -37,9 +40,14 @@ const threadAgentCallOptionsSchema = z.object({
   globalSkillsBasePath: z.string().nullable().optional(),
   imageGenerationRuntime: z.custom<ImageGenerationRuntime>(),
   integrationTools: z.custom<ToolSet>().optional(),
+  /** False in unattended runs (automations): approvals are declined. */
+  interactive: z.boolean().optional(),
   memoryRuntime: z.custom<MemoryRuntimeState>(),
   mcpTools: z.custom<ToolSet>().optional(),
   permissionMode: z.custom<PermissionMode>(),
+  // Task statuses of the thread plan when the run started, so task tracking
+  // sees tasks created by earlier runs.
+  planTasks: z.array(z.custom<TaskSnapshot>()).optional(),
   preferredProjectRoot: z.string().nullable().optional(),
   promptContext: z.custom<ThreadPromptContext>(),
   resolvedModelId: z.string().optional(),
@@ -69,38 +77,60 @@ export type ThreadAgentCallOptions = z.infer<
 // Custom stop condition: all tasks resolved
 // ---------------------------------------------------------------------------
 
-type TaskSnapshot = { id: string; status: string };
+type TaskSteps = Array<{ toolResults?: unknown[] }>;
 
-function extractTaskState(steps: Array<{ toolResults?: unknown[] }>) {
-  const tasks = new Map<string, string>();
+// Applies this run's manage_task results on top of the plan's task statuses
+// from when the run started. `touched` stays false until this run changes a
+// task, so tasks left over from earlier runs never end or steer a run alone.
+function extractTaskState(
+  steps: TaskSteps,
+  initialTasks: ReadonlyMap<string, string>,
+) {
+  const tasks = new Map(initialTasks);
+  let touched = false;
   for (const step of steps) {
     for (const result of (step.toolResults ?? []) as Array<{
       toolName?: string;
-      result?: { action?: string; task?: TaskSnapshot | null };
+      output?: { action?: string; task?: TaskSnapshot | null };
     }>) {
       if (result.toolName !== "manage_task") continue;
-      const task = result.result?.task;
+      const task = result.output?.task;
       if (!task?.id) continue;
-      if (result.result?.action === "delete") {
+      touched = true;
+      if (result.output?.action === "delete") {
         tasks.delete(task.id);
       } else {
         tasks.set(task.id, task.status);
       }
     }
   }
-  return tasks;
+  return { tasks, touched };
 }
 
 const TERMINAL_TASK_STATUSES = new Set(["completed", "blocked"]);
 
-const allTasksResolved: StopCondition<ToolSet> = ({ steps }) => {
-  const tasks = extractTaskState(steps);
-  if (tasks.size === 0) return false;
+function areTasksResolved({
+  tasks,
+  touched,
+}: ReturnType<typeof extractTaskState>) {
+  if (!touched || tasks.size === 0) return false;
   for (const status of tasks.values()) {
     if (!TERMINAL_TASK_STATUSES.has(status)) return false;
   }
   return true;
-};
+}
+
+// Stops the step after the one that resolved the last open task: that step
+// lets the model report back, but it cannot keep working past it. A step
+// that opens new tasks keeps the run going.
+function createAllTasksResolvedCondition(
+  getInitialTasks: () => ReadonlyMap<string, string>,
+): StopCondition<ToolSet> {
+  return ({ steps }) =>
+    steps.length > 1 &&
+    areTasksResolved(extractTaskState(steps.slice(0, -1), getInitialTasks())) &&
+    areTasksResolved(extractTaskState(steps, getInitialTasks()));
+}
 
 // ---------------------------------------------------------------------------
 // prepareStep helpers
@@ -132,12 +162,14 @@ const VALIDATION_ADDON = [
   "Do not mark a task as completed until the changes are validated.",
 ].join("\n");
 
+// No step number here: the text only changes with the task counts, so it does
+// not break prompt-prefix caching on every step.
 function buildStepProgressAddon(
-  steps: Array<{ toolResults?: unknown[] }>,
-  stepNumber: number,
+  steps: TaskSteps,
+  initialTasks: ReadonlyMap<string, string>,
 ) {
-  const tasks = extractTaskState(steps);
-  if (tasks.size === 0) return "";
+  const { tasks, touched } = extractTaskState(steps, initialTasks);
+  if (!touched || tasks.size === 0) return "";
 
   const completed = [...tasks.values()].filter((s) => s === "completed").length;
   const blocked = [...tasks.values()].filter((s) => s === "blocked").length;
@@ -147,32 +179,24 @@ function buildStepProgressAddon(
 
   return [
     "",
-    `## Step Progress (step ${stepNumber})`,
+    "## Step Progress",
     `Tasks: ${completed}/${tasks.size} completed${blocked > 0 ? `, ${blocked} blocked` : ""}, ${remaining} remaining.`,
     "Keep working through remaining tasks. Do not stop until all tasks are completed or blocked.",
   ].join("\n");
 }
 
 function mergeToolRoutingContext(
-  experimentalContext: unknown,
+  runtimeContext: Record<string, unknown> | undefined,
   toolRouting: unknown,
-) {
+): Record<string, unknown> | undefined {
   if (!toolRouting) {
-    return experimentalContext;
+    return runtimeContext;
   }
 
-  if (
-    experimentalContext &&
-    typeof experimentalContext === "object" &&
-    !Array.isArray(experimentalContext)
-  ) {
-    return {
-      ...experimentalContext,
-      toolRouting,
-    };
-  }
-
-  return { toolRouting };
+  return {
+    ...runtimeContext,
+    toolRouting,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -196,13 +220,14 @@ export function createThreadAgent({
 }: {
   attachmentDownload?: Experimental_DownloadFunction;
   languageModel: unknown;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
 }) {
   let cachedInstructions: string | undefined;
   let cachedActiveToolNames: string[] = [];
   let cachedAllToolNames: string[] = [];
   let cachedPromptContext: ThreadPromptContext | null = null;
   let cachedInitialActiveTools: string[] = [];
+  let cachedPlanTasks: ReadonlyMap<string, string> = new Map();
   let cachedResolvedProviderId: AIProvider | undefined;
   let cachedRoutingAudit: unknown = null;
   let cachedRoutingEvidenceSignature: string | null = null;
@@ -219,13 +244,17 @@ export function createThreadAgent({
       : {}),
     model,
     ...(providerOptions ? { providerOptions } : {}),
+    // Context compaction feeds its summary back as a synthetic system message
+    // built server-side (runtime/context-compaction.ts); AI SDK 7 rejects
+    // system messages in the prompt unless this is set.
+    allowSystemInMessages: true,
     callOptionsSchema: threadAgentCallOptionsSchema,
     stopWhen: [
-      stepCountIs(MAX_AGENT_STEPS),
+      isStepCount(MAX_AGENT_STEPS),
       hasToolCall("ask_question"),
-      allTasksResolved,
+      createAllTasksResolvedCondition(() => cachedPlanTasks),
     ],
-    experimental_repairToolCall: async ({ toolCall, inputSchema, error }) => {
+    repairToolCall: async ({ toolCall, inputSchema, error }) => {
       if (isNoSuchToolError(error)) {
         return null;
       }
@@ -234,7 +263,7 @@ export function createThreadAgent({
       const result = await generateText({
         model,
         ...(providerOptions ? { providerOptions } : {}),
-        system: [
+        instructions: [
           "You are a tool call repair agent.",
           "The user will provide a malformed tool call and the JSON Schema for that tool.",
           "Return ONLY a valid JSON object that conforms to the schema. Do not wrap in markdown.",
@@ -294,6 +323,9 @@ export function createThreadAgent({
       cachedAllToolNames = allToolNames;
       cachedPromptContext = promptContext;
       cachedInitialActiveTools = initialActiveTools;
+      cachedPlanTasks = new Map(
+        (options.planTasks ?? []).map((task) => [task.id, task.status]),
+      );
       cachedResolvedProviderId = options.resolvedProviderId;
       cachedRoutingAudit = initialRouting.audit;
       cachedRoutingEvidenceSignature = null;
@@ -302,14 +334,22 @@ export function createThreadAgent({
       return {
         ...settings,
         activeTools: initialActiveTools as never[],
-        experimental_context: {
+        instructions,
+        runtimeContext: {
+          ...settings.runtimeContext,
           toolRouting: initialRouting.audit,
         },
-        instructions,
+        // Nobody answers an unattended run: what would ask is declined.
+        ...(options.interactive === false
+          ? { toolApproval: declineUserApprovalsWhenUnattended }
+          : {}),
         tools,
       };
     },
-    prepareStep: async ({ experimental_context, stepNumber, steps }) => {
+    // AI SDK 7 carries instructions returned here forward to later steps, so
+    // every branch returns the full instructions for this step; otherwise a
+    // step directive would stick to every step after it.
+    prepareStep: async ({ runtimeContext, stepNumber, steps }) => {
       const promptContext = cachedPromptContext;
       let activeToolNames = cachedActiveToolNames;
 
@@ -383,46 +423,31 @@ export function createThreadAgent({
         MUTATION_TOOLS.has(c.toolName),
       );
 
-      const progressAddon = buildStepProgressAddon(steps, stepNumber);
+      const progressAddon = buildStepProgressAddon(steps, cachedPlanTasks);
+      const stepSettings = {
+        activeTools: activeToolNames as never[],
+        runtimeContext: mergeToolRoutingContext(
+          runtimeContext,
+          cachedRoutingAudit,
+        ),
+      };
       if (stepNumber >= 3 && !hasCreatedTasks) {
         return {
-          activeTools: activeToolNames as never[],
-          experimental_context: mergeToolRoutingContext(
-            experimental_context,
-            cachedRoutingAudit,
-          ),
-          system: baseSystem + TASK_ENFORCEMENT_ADDON + progressAddon,
+          ...stepSettings,
+          instructions: baseSystem + TASK_ENFORCEMENT_ADDON + progressAddon,
         };
       }
 
       if (lastStepHadMutations) {
         return {
-          activeTools: activeToolNames as never[],
-          experimental_context: mergeToolRoutingContext(
-            experimental_context,
-            cachedRoutingAudit,
-          ),
-          system: baseSystem + VALIDATION_ADDON + progressAddon,
-        };
-      }
-
-      if (progressAddon) {
-        return {
-          activeTools: activeToolNames as never[],
-          experimental_context: mergeToolRoutingContext(
-            experimental_context,
-            cachedRoutingAudit,
-          ),
-          system: baseSystem + progressAddon,
+          ...stepSettings,
+          instructions: baseSystem + VALIDATION_ADDON + progressAddon,
         };
       }
 
       return {
-        activeTools: activeToolNames as never[],
-        experimental_context: mergeToolRoutingContext(
-          experimental_context,
-          cachedRoutingAudit,
-        ),
+        ...stepSettings,
+        instructions: baseSystem + progressAddon,
       };
     },
   });

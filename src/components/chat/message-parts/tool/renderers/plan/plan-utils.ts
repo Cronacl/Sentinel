@@ -5,10 +5,7 @@ import { useRef } from "react";
 import type { ThreadPlanAudience } from "@/lib/plan";
 
 export type PlanToolName =
-  | "ask_question"
-  | "create_plan"
-  | "manage_task"
-  | "update_plan";
+  "ask_question" | "create_plan" | "manage_task" | "update_plan";
 
 export type PlanDraftPart = {
   input?: unknown;

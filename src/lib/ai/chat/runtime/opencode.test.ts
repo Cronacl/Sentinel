@@ -43,30 +43,58 @@ const getWorkspaceRootPath = mock(async () => "/tmp/workspace");
 const beginThreadRepoCheckpointRun = mock(async () => true);
 const clearThreadRepoCheckpointRun = mock(async () => {});
 const finalizeThreadRepoCheckpointRun = mock(async () => "checkpoint-1");
-const startOpenCodeSession = mock(async () => ({
-  client: {
-    event: {
-      subscribe: mock(async () => ({
-        stream: (async function* () {})(),
-      })),
+type MockOpenCodeSessionOverrides = {
+  permissionReply?: (...args: any[]) => Promise<unknown>;
+  promptAsync?: (...args: any[]) => Promise<unknown>;
+  questionReject?: (...args: any[]) => Promise<unknown>;
+  questionReply?: (...args: any[]) => Promise<unknown>;
+  serverExited?: Promise<{ code: number | null; signal: string | null }>;
+  stream?: AsyncIterable<unknown>;
+};
+
+// A stream that stays open, like a live server that has not emitted anything
+// yet. (An ended stream now means the server went away.)
+function createPendingStream(): AsyncIterable<unknown> {
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        next: () => new Promise<IteratorResult<unknown>>(() => {}),
+      };
     },
-    permission: {
-      reply: mock(async () => {}),
+  };
+}
+
+function createMockOpenCodeSession(
+  overrides: MockOpenCodeSessionOverrides = {},
+) {
+  return {
+    client: {
+      event: {
+        subscribe: mock(async () => ({
+          stream: overrides.stream ?? createPendingStream(),
+        })),
+      },
+      permission: {
+        reply: mock(overrides.permissionReply ?? (async () => {})),
+      },
+      question: {
+        reject: mock(overrides.questionReject ?? (async () => {})),
+        reply: mock(overrides.questionReply ?? (async () => {})),
+      },
+      session: {
+        abort: mock(async () => {}),
+        promptAsync: mock(overrides.promptAsync ?? (async () => {})),
+      },
     },
-    question: {
-      reject: mock(async () => {}),
-      reply: mock(async () => {}),
+    server: {
+      close: mock(() => {}),
+      exited: overrides.serverExited ?? new Promise(() => {}),
     },
-    session: {
-      abort: mock(async () => {}),
-      promptAsync: mock(async () => {}),
-    },
-  },
-  server: {
-    close: mock(() => {}),
-  },
-  sessionId: "opencode-session-1",
-}));
+    sessionId: "opencode-session-1",
+  };
+}
+
+const startOpenCodeSession = mock(async () => createMockOpenCodeSession());
 
 mock.module("server-only", () => ({}));
 
@@ -75,7 +103,9 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   openCodeQuestionId: mock((id: string) => id),
   parseOpenCodeModelSlug: mock(() => "openai/gpt-5.2"),
   startOpenCodeSession,
-  toOpenCodePermissionReply: mock(() => "allow"),
+  toOpenCodePermissionReply: mock((approved: boolean) =>
+    approved ? "allow" : "reject",
+  ),
   toOpenCodeQuestionAnswers: mock(() => []),
 }));
 
@@ -133,6 +163,8 @@ mock.module("./workspace", () => ({
 }));
 
 const { runOpenCodeThreadChat } = await import("./opencode");
+const { resolveOpenCodeSessionError } =
+  await import("./opencode/event-helpers");
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -185,6 +217,39 @@ function createEventQueue() {
   };
 }
 
+const SESSION_ID = "opencode-session-1";
+
+function buildRunRequest(threadId: string, text: string) {
+  return {
+    message: {
+      id: `${threadId}-user`,
+      metadata: {},
+      parts: [{ text, type: "text" }],
+      role: "user",
+    },
+    modelId: "openai/gpt-5.2",
+    threadId,
+    trigger: "submit-user-message",
+    userId: "user-1",
+    workspaceId: "workspace-1",
+  } as any;
+}
+
+async function flushEvents() {
+  for (let tick = 0; tick < 3; tick += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+function findLastAssistantUpsert(status: string) {
+  return upsertMessage.mock.calls
+    .map((call: unknown[]) => call[1] as any)
+    .findLast(
+      (message: any) =>
+        message?.role === "assistant" && message?.metadata?.status === status,
+    );
+}
+
 describe("runOpenCodeThreadChat", () => {
   beforeEach(() => {
     ensureThread.mockClear();
@@ -216,48 +281,14 @@ describe("runOpenCodeThreadChat", () => {
     startOpenCodeSession.mockClear();
     getToolPermissionMode.mockImplementation(async () => "default");
     getWorkspaceRootPath.mockImplementation(async () => "/tmp/workspace");
-    startOpenCodeSession.mockImplementation(async () => ({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: (async function* () {})(),
-          })),
-        },
-        permission: {
-          reply: mock(async () => {}),
-        },
-        question: {
-          reject: mock(async () => {}),
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync: mock(async () => {}),
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    }));
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession(),
+    );
   });
 
   it("shows a visible startup label before the OpenCode session is ready", async () => {
-    const sessionStart = createDeferred<{
-      client: {
-        event: { subscribe: () => Promise<{ stream: AsyncIterable<unknown> }> };
-        permission: { reply: () => Promise<void> };
-        question: { reply: () => Promise<void> };
-        session: {
-          abort: () => Promise<void>;
-          promptAsync: () => Promise<void>;
-        };
-      };
-      server: {
-        close: () => void;
-      };
-      sessionId: string;
-    }>();
+    const sessionStart =
+      createDeferred<ReturnType<typeof createMockOpenCodeSession>>();
     startOpenCodeSession.mockImplementation(() => sessionStart.promise);
 
     const responsePromise = runOpenCodeThreadChat(
@@ -288,60 +319,20 @@ describe("runOpenCodeThreadChat", () => {
       }),
     );
 
-    sessionStart.resolve({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: (async function* () {})(),
-          })),
-        },
-        permission: {
-          reply: mock(async () => {}),
-        },
-        question: {
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync: mock(async () => {}),
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    });
+    sessionStart.resolve(createMockOpenCodeSession());
 
     const response = await responsePromise;
     expect(response.headers.get("Content-Type")).toBe("text/event-stream");
   });
 
   it("persists compactable assistant failure metadata for OpenCode prompt errors", async () => {
-    startOpenCodeSession.mockImplementation(async () => ({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: (async function* () {})(),
-          })),
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        promptAsync: async () => {
+          throw new Error("OpenCode provider failed\nstack: noisy details");
         },
-        permission: {
-          reply: mock(async () => {}),
-        },
-        question: {
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync: mock(async () => {
-            throw new Error("OpenCode provider failed\nstack: noisy details");
-          }),
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    }));
+      }),
+    );
 
     const response = await runOpenCodeThreadChat(
       {
@@ -380,29 +371,11 @@ describe("runOpenCodeThreadChat", () => {
   it("returns the event stream before the OpenCode prompt finishes", async () => {
     const prompt = createDeferred<void>();
     const promptAsync = mock(() => prompt.promise);
-    startOpenCodeSession.mockImplementation(async () => ({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: (async function* () {})(),
-          })),
-        },
-        permission: {
-          reply: mock(async () => {}),
-        },
-        question: {
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync,
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    }));
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        promptAsync,
+      }),
+    );
 
     const response = await runOpenCodeThreadChat(
       {
@@ -437,30 +410,11 @@ describe("runOpenCodeThreadChat", () => {
 
   it("anchors OpenCode runs to the resolved workspace and finalizes checkpoints on idle", async () => {
     const events = createEventQueue();
-    startOpenCodeSession.mockImplementation(async () => ({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: events.stream,
-          })),
-        },
-        permission: {
-          reply: mock(async () => {}),
-        },
-        question: {
-          reject: mock(async () => {}),
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync: mock(async () => {}),
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    }));
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        stream: events.stream,
+      }),
+    );
 
     const response = await runOpenCodeThreadChat(
       {
@@ -506,6 +460,7 @@ describe("runOpenCodeThreadChat", () => {
     expect(updateOpenCodeThreadState).toHaveBeenCalledWith(
       "thread-checkpoint-1",
       expect.objectContaining({ cwd: "/tmp/workspace" }),
+      undefined,
     );
 
     events.close();
@@ -515,30 +470,12 @@ describe("runOpenCodeThreadChat", () => {
     const events = createEventQueue();
     const permissionReply = mock(async () => {});
     getToolPermissionMode.mockImplementation(async () => "full");
-    startOpenCodeSession.mockImplementation(async () => ({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: events.stream,
-          })),
-        },
-        permission: {
-          reply: permissionReply,
-        },
-        question: {
-          reject: mock(async () => {}),
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync: mock(async () => {}),
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    }));
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        stream: events.stream,
+        permissionReply,
+      }),
+    );
 
     await runOpenCodeThreadChat(
       {
@@ -581,35 +518,69 @@ describe("runOpenCodeThreadChat", () => {
       "thread-permission-1",
       "awaiting_approval",
     );
+  });
 
+  it("declines permission requests in unattended runs without full access", async () => {
+    const events = createEventQueue();
+    const permissionReply = mock(async () => {});
+    getToolPermissionMode.mockImplementation(async () => "default");
+    setThreadStatus.mockClear();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        stream: events.stream,
+        permissionReply,
+      }),
+    );
+
+    await runOpenCodeThreadChat(
+      {
+        interactive: false,
+        message: {
+          id: "user-unattended-1",
+          metadata: {},
+          parts: [{ text: "Run tests", type: "text" }],
+          role: "user",
+        },
+        modelId: "openai/gpt-5.2",
+        threadId: "thread-unattended-1",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      null,
+    );
+
+    events.push({
+      properties: {
+        always: [],
+        id: "permission-1",
+        metadata: { command: "bun test" },
+        patterns: ["bun test"],
+        permission: "shell",
+        sessionID: "opencode-session-1",
+      },
+      type: "permission.asked",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(permissionReply).toHaveBeenCalledWith({
+      reply: "reject",
+      requestID: "permission-1",
+    });
+    expect(setThreadStatus).not.toHaveBeenCalledWith(
+      "thread-unattended-1",
+      "awaiting_approval",
+    );
     events.close();
   });
 
   it("persists streaming text deltas before full part updates arrive", async () => {
     const events = createEventQueue();
-    startOpenCodeSession.mockImplementation(async () => ({
-      client: {
-        event: {
-          subscribe: mock(async () => ({
-            stream: events.stream,
-          })),
-        },
-        permission: {
-          reply: mock(async () => {}),
-        },
-        question: {
-          reply: mock(async () => {}),
-        },
-        session: {
-          abort: mock(async () => {}),
-          promptAsync: mock(async () => {}),
-        },
-      },
-      server: {
-        close: mock(() => {}),
-      },
-      sessionId: "opencode-session-1",
-    }));
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        stream: events.stream,
+      }),
+    );
 
     await runOpenCodeThreadChat(
       {
@@ -669,7 +640,716 @@ describe("runOpenCodeThreadChat", () => {
         type: "message.upsert",
       }),
     );
+  });
 
+  it("replays a 1.18-shaped event sequence into reasoning, text and tool parts", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ stream: events.stream }),
+    );
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-replay-1", "Run the tests"),
+      null,
+    );
+
+    // Hand-built (no live turn is ever run): shapes from @opencode-ai/sdk
+    // 1.18.35 types.gen.d.ts, order from opencode 1.18.35
+    // session/processor.ts (reasoning-start publishes the reasoning part, then
+    // its deltas use field "text" like answer text). Every event now carries
+    // an `id`; heartbeats/status events have no handler.
+    for (const event of [
+      { id: "evt-1", properties: {}, type: "server.connected" },
+      {
+        id: "evt-2",
+        properties: {
+          info: { id: "msg-user", role: "user", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        id: "evt-3",
+        properties: {
+          part: {
+            id: "part-user",
+            messageID: "msg-user",
+            sessionID: SESSION_ID,
+            text: "Run the tests",
+            type: "text",
+          },
+          sessionID: SESSION_ID,
+          time: 1,
+        },
+        type: "message.part.updated",
+      },
+      {
+        id: "evt-4",
+        properties: {
+          info: {
+            id: "msg-assistant",
+            role: "assistant",
+            sessionID: SESSION_ID,
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        id: "evt-4a",
+        properties: {
+          part: {
+            id: "part-reasoning",
+            messageID: "msg-assistant",
+            sessionID: SESSION_ID,
+            text: "",
+            time: { start: 1 },
+            type: "reasoning",
+          },
+          sessionID: SESSION_ID,
+          time: 1,
+        },
+        type: "message.part.updated",
+      },
+      {
+        id: "evt-4b",
+        properties: {
+          delta: "The user wants ",
+          field: "text",
+          messageID: "msg-assistant",
+          partID: "part-reasoning",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        id: "evt-4c",
+        properties: {
+          delta: "the test suite run.",
+          field: "text",
+          messageID: "msg-assistant",
+          partID: "part-reasoning",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        id: "evt-4d",
+        properties: {
+          part: {
+            id: "part-text",
+            messageID: "msg-assistant",
+            sessionID: SESSION_ID,
+            text: "",
+            time: { start: 2 },
+            type: "text",
+          },
+          sessionID: SESSION_ID,
+          time: 2,
+        },
+        type: "message.part.updated",
+      },
+      {
+        id: "evt-5",
+        properties: {
+          delta: "Running ",
+          field: "text",
+          messageID: "msg-assistant",
+          partID: "part-text",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        id: "evt-6",
+        properties: {
+          delta: "the tests.",
+          field: "text",
+          messageID: "msg-assistant",
+          partID: "part-text",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        id: "evt-7",
+        properties: {
+          part: {
+            callID: "call-1",
+            id: "part-tool",
+            messageID: "msg-assistant",
+            sessionID: SESSION_ID,
+            state: {
+              input: { command: "bun test" },
+              status: "running",
+              time: { start: 1 },
+            },
+            tool: "bash",
+            type: "tool",
+          },
+          sessionID: SESSION_ID,
+          time: 2,
+        },
+        type: "message.part.updated",
+      },
+      {
+        id: "evt-8",
+        properties: {
+          part: {
+            callID: "call-1",
+            id: "part-tool",
+            messageID: "msg-assistant",
+            sessionID: SESSION_ID,
+            state: {
+              input: { command: "bun test" },
+              metadata: {},
+              output: "1 pass",
+              status: "completed",
+              time: { end: 3, start: 1 },
+              title: "bun test",
+            },
+            tool: "bash",
+            type: "tool",
+          },
+          sessionID: SESSION_ID,
+          time: 3,
+        },
+        type: "message.part.updated",
+      },
+      { id: "evt-9", properties: {}, type: "server.heartbeat" },
+      {
+        id: "evt-10",
+        properties: { sessionID: SESSION_ID, status: { type: "idle" } },
+        type: "session.status",
+      },
+      {
+        id: "evt-11",
+        properties: { sessionID: SESSION_ID },
+        type: "session.idle",
+      },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    const completed = findLastAssistantUpsert("completed");
+    expect(completed?.parts).toEqual([
+      { text: "The user wants the test suite run.", type: "reasoning" },
+      {
+        input: { command: "bun test" },
+        output: "1 pass",
+        state: "output-available",
+        toolCallId: "call-1",
+        toolName: "opencode_bash",
+        type: "dynamic-tool",
+      },
+      { text: "Running the tests.", type: "text" },
+    ]);
+    expect(setThreadStatus).toHaveBeenLastCalledWith("thread-replay-1", "idle");
+  });
+
+  it("sends promptAsync with the sessionID, parts, agent and variant", async () => {
+    const promptAsync = mock(async () => {});
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ promptAsync }),
+    );
+
+    await runOpenCodeThreadChat(
+      {
+        ...buildRunRequest("thread-prompt-1", "Plan the change"),
+        openCode: { variant: "high" },
+        threadMode: "plan",
+      } as any,
+      null,
+    );
+
+    expect(promptAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agent: "plan",
+        parts: [
+          expect.objectContaining({
+            text: expect.stringContaining("Plan the change"),
+            type: "text",
+          }),
+        ],
+        sessionID: SESSION_ID,
+        variant: "high",
+      }),
+    );
+  });
+
+  it("surfaces the session.error data.message instead of a generic failure", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ stream: events.stream }),
+    );
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-session-error-1", "Inspect the repo"),
+      null,
+    );
+    events.push({
+      id: "evt-error",
+      properties: {
+        error: {
+          data: { isRetryable: false, message: "Rate limit exceeded" },
+          name: "APIError",
+        },
+        sessionID: SESSION_ID,
+      },
+      type: "session.error",
+    });
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("error")?.metadata).toEqual(
+      expect.objectContaining({ errorMessage: "Rate limit exceeded" }),
+    );
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-session-error-1",
+      "idle",
+    );
+  });
+
+  it("treats a MessageAbortedError session.error as a cancellation", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ stream: events.stream }),
+    );
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-aborted-1", "Inspect the repo"),
+      null,
+    );
+    events.push({
+      id: "evt-aborted",
+      properties: {
+        error: { data: { message: "Aborted" }, name: "MessageAbortedError" },
+        sessionID: SESSION_ID,
+      },
+      type: "session.error",
+    });
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("cancelled")).toBeDefined();
+    expect(findLastAssistantUpsert("error")).toBeUndefined();
+  });
+
+  it("keeps the run and server alive while OpenCode compacts after a context overflow", async () => {
+    const events = createEventQueue();
+    const session = createMockOpenCodeSession({ stream: events.stream });
+    startOpenCodeSession.mockImplementation(async () => session);
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-overflow-1", "Summarise the thread"),
+      null,
+    );
+
+    // opencode 1.18.35 processor.ts `halt` with compaction.auto (the default):
+    // session.error(ContextOverflowError), then a compaction summary message,
+    // then a fresh assistant message continues the turn.
+    for (const event of [
+      {
+        properties: {
+          info: { id: "msg-a1", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          error: {
+            data: { message: "prompt is too long: 210000 tokens > 200000" },
+            name: "ContextOverflowError",
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "session.error",
+      },
+      {
+        properties: {
+          info: {
+            id: "msg-summary",
+            mode: "compaction",
+            role: "assistant",
+            sessionID: SESSION_ID,
+            summary: true,
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "## Goal\nInternal compaction summary",
+          field: "text",
+          messageID: "msg-summary",
+          partID: "part-summary",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    expect(session.server.close).not.toHaveBeenCalled();
+    expect(findLastAssistantUpsert("error")).toBeUndefined();
+
+    for (const event of [
+      {
+        properties: {
+          info: { id: "msg-a2", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "Here is the summary.",
+          field: "text",
+          messageID: "msg-a2",
+          partID: "part-a2",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      { properties: { sessionID: SESSION_ID }, type: "session.idle" },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    const completed = findLastAssistantUpsert("completed");
+    expect(completed?.parts).toEqual([
+      { text: "Here is the summary.", type: "text" },
+    ]);
+    expect(findLastAssistantUpsert("error")).toBeUndefined();
+    expect(session.server.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails with the overflow message when OpenCode goes idle without recovering", async () => {
+    const events = createEventQueue();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ stream: events.stream }),
+    );
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-overflow-2", "Summarise the thread"),
+      null,
+    );
+    // compaction.auto=false: the error is followed straight by idle.
+    for (const event of [
+      {
+        properties: {
+          info: { id: "msg-a1", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "Partial answer",
+          field: "text",
+          messageID: "msg-a1",
+          partID: "part-a1",
+          sessionID: SESSION_ID,
+        },
+        type: "message.part.delta",
+      },
+      {
+        properties: {
+          error: {
+            data: { message: "prompt is too long" },
+            name: "ContextOverflowError",
+          },
+          sessionID: SESSION_ID,
+        },
+        type: "session.error",
+      },
+      // A late update to the overflowing message is not a recovery.
+      {
+        properties: {
+          info: { id: "msg-a1", role: "assistant", sessionID: SESSION_ID },
+          sessionID: SESSION_ID,
+        },
+        type: "message.updated",
+      },
+      { properties: { sessionID: SESSION_ID }, type: "session.idle" },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("completed")).toBeUndefined();
+    expect(findLastAssistantUpsert("error")?.metadata).toEqual(
+      expect.objectContaining({ errorMessage: "prompt is too long" }),
+    );
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-overflow-2",
+      "idle",
+    );
+  });
+
+  it("answers permission requests from subagent sessions and ignores their other events", async () => {
+    const events = createEventQueue();
+    const session = createMockOpenCodeSession({ stream: events.stream });
+    startOpenCodeSession.mockImplementation(async () => session);
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-subagent-1", "Explore the repo"),
+      null,
+    );
+    for (const event of [
+      // 1.18 task tool: child session with parentID, then a grandchild.
+      {
+        properties: {
+          info: { id: "ses_child", parentID: SESSION_ID, title: "explore" },
+          sessionID: "ses_child",
+        },
+        type: "session.created",
+      },
+      {
+        properties: {
+          info: { id: "ses_grandchild", parentID: "ses_child", title: "deep" },
+          sessionID: "ses_grandchild",
+        },
+        type: "session.created",
+      },
+      // An unrelated session in the same instance stays ignored.
+      {
+        properties: {
+          info: { id: "ses_other", parentID: "ses_elsewhere", title: "x" },
+          sessionID: "ses_other",
+        },
+        type: "session.created",
+      },
+      {
+        properties: {
+          info: { id: "msg-child", role: "assistant", sessionID: "ses_child" },
+          sessionID: "ses_child",
+        },
+        type: "message.updated",
+      },
+      {
+        properties: {
+          delta: "subagent chatter",
+          field: "text",
+          messageID: "msg-child",
+          partID: "part-child",
+          sessionID: "ses_child",
+        },
+        type: "message.part.delta",
+      },
+      { properties: { sessionID: "ses_child" }, type: "session.idle" },
+      {
+        properties: {
+          always: [],
+          id: "permission-other",
+          metadata: {},
+          patterns: ["/etc/hosts"],
+          permission: "external_directory",
+          sessionID: "ses_other",
+        },
+        type: "permission.asked",
+      },
+      {
+        properties: {
+          always: [],
+          id: "permission-child",
+          metadata: { filepath: "/etc/hosts" },
+          patterns: ["/etc/*"],
+          permission: "external_directory",
+          sessionID: "ses_grandchild",
+        },
+        type: "permission.asked",
+      },
+    ]) {
+      events.push(event);
+    }
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("completed")).toBeUndefined();
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-subagent-1",
+      "awaiting_approval",
+    );
+    const streaming = findLastAssistantUpsert("streaming");
+    expect(streaming?.parts).toEqual([
+      expect.objectContaining({
+        approval: { id: "permission-child", reason: "/etc/*" },
+        state: "approval-requested",
+        toolCallId: "permission-child",
+        toolName: "opencode_external_directory",
+      }),
+    ]);
+
+    // The reply goes through the shared /permission/{requestID}/reply route.
+    await runOpenCodeThreadChat(
+      {
+        threadId: "thread-subagent-1",
+        toolApprovalResponse: { approved: true, id: "permission-child" },
+        trigger: "submit-tool-approval",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      } as any,
+      {
+        activeStreamId: setActiveStream.mock.calls.at(-1)?.[1],
+        status: "awaiting_approval",
+      } as any,
+    );
+    expect(session.client.permission.reply).toHaveBeenCalledWith({
+      reply: "allow",
+      requestID: "permission-child",
+    });
+    expect(session.client.permission.reply).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails the run when the event stream ends before session.idle", async () => {
+    const events = createEventQueue();
+    const session = createMockOpenCodeSession({ stream: events.stream });
+    startOpenCodeSession.mockImplementation(async () => session);
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-stream-end-1", "Inspect the repo"),
+      null,
+    );
     events.close();
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("error")?.metadata).toEqual(
+      expect.objectContaining({
+        errorMessage: "OpenCode event stream ended unexpectedly.",
+      }),
+    );
+    expect(session.server.close).toHaveBeenCalled();
+    expect(setThreadStatus).toHaveBeenLastCalledWith(
+      "thread-stream-end-1",
+      "idle",
+    );
+  });
+
+  it("fails the run when the OpenCode server exits mid-run", async () => {
+    const serverExit = createDeferred<{
+      code: number | null;
+      signal: string | null;
+    }>();
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({ serverExited: serverExit.promise }),
+    );
+
+    await runOpenCodeThreadChat(
+      buildRunRequest("thread-server-exit-1", "Inspect the repo"),
+      null,
+    );
+    serverExit.resolve({ code: 1, signal: null });
+    await flushEvents();
+
+    expect(findLastAssistantUpsert("error")?.metadata).toEqual(
+      expect.objectContaining({
+        errorMessage: "OpenCode server exited unexpectedly (code 1).",
+      }),
+    );
+  });
+
+  it("rejects OpenCode questions through question.reject when tools are disabled", async () => {
+    const events = createEventQueue();
+    const questionReject = mock(async () => {});
+    const questionReply = mock(async () => {});
+    startOpenCodeSession.mockImplementation(async () =>
+      createMockOpenCodeSession({
+        questionReject,
+        questionReply,
+        stream: events.stream,
+      }),
+    );
+
+    await runOpenCodeThreadChat(
+      {
+        ...buildRunRequest("thread-question-1", "Ask me something"),
+        toolsEnabled: false,
+      } as any,
+      null,
+    );
+    events.push({
+      id: "evt-question",
+      properties: {
+        id: "question-1",
+        questions: [
+          {
+            header: "Target",
+            options: [{ description: "Main app", label: "app" }],
+            question: "Which package?",
+          },
+        ],
+        sessionID: SESSION_ID,
+      },
+      type: "question.asked",
+    });
+    await flushEvents();
+
+    expect(questionReject).toHaveBeenCalledWith({ requestID: "question-1" });
+    expect(questionReply).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveOpenCodeSessionError", () => {
+  it("reads data.message from the SDK error union and flags aborts", () => {
+    expect(
+      resolveOpenCodeSessionError({
+        error: {
+          data: { message: "Invalid API key", providerID: "openai" },
+          name: "ProviderAuthError",
+        },
+        sessionID: "ses_1",
+      }),
+    ).toEqual({
+      aborted: false,
+      contextOverflow: false,
+      message: "Invalid API key",
+    });
+    expect(
+      resolveOpenCodeSessionError({
+        error: { data: {}, name: "MessageOutputLengthError" },
+      }),
+    ).toEqual({
+      aborted: false,
+      contextOverflow: false,
+      message: "MessageOutputLengthError",
+    });
+    expect(
+      resolveOpenCodeSessionError({
+        error: { data: { message: "Aborted" }, name: "MessageAbortedError" },
+      }),
+    ).toEqual({ aborted: true, contextOverflow: false, message: "Aborted" });
+  });
+
+  it("flags ContextOverflowError as possibly recoverable", () => {
+    expect(
+      resolveOpenCodeSessionError({
+        error: {
+          data: { message: "prompt is too long", responseBody: "{}" },
+          name: "ContextOverflowError",
+        },
+        sessionID: "ses_1",
+      }),
+    ).toEqual({
+      aborted: false,
+      contextOverflow: true,
+      message: "prompt is too long",
+    });
+  });
+
+  it("falls back to a generic message when there is no error payload", () => {
+    expect(resolveOpenCodeSessionError({ sessionID: "ses_1" })).toEqual({
+      aborted: false,
+      contextOverflow: false,
+      message: "OpenCode run failed.",
+    });
+    expect(resolveOpenCodeSessionError(undefined)).toEqual({
+      aborted: false,
+      contextOverflow: false,
+      message: "OpenCode run failed.",
+    });
   });
 });

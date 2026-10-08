@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  buildClaudeAskUserQuestionAnswers,
+  buildClaudeAskUserQuestionResult,
   buildClaudePermissionResult,
   normalizeClaudePermissionInput,
   resolveClaudePermissionInput,
@@ -65,5 +67,124 @@ describe("Claude permission helpers", () => {
       behavior: "allow",
       updatedInput: {},
     });
+  });
+});
+
+describe("Claude AskUserQuestion answers", () => {
+  const formatQuestion = {
+    header: "Format",
+    multiSelect: false,
+    options: [
+      { description: "Brief overview", label: "Summary" },
+      { description: "Full explanation", label: "Detailed" },
+    ],
+    question: "How should I format the output?",
+  };
+  const sectionsQuestion = {
+    header: "Sections",
+    multiSelect: true,
+    options: [
+      { description: "Opening context", label: "Introduction" },
+      { description: "Final summary", label: "Conclusion" },
+    ],
+    question: "Which sections should I include?",
+  };
+
+  it("answers a single question with the chosen label", () => {
+    expect(
+      buildClaudeAskUserQuestionResult({
+        response: "Summary",
+        toolInput: { questions: [formatQuestion] },
+      }),
+    ).toEqual({
+      behavior: "allow",
+      updatedInput: {
+        answers: { "How should I format the output?": "Summary" },
+        questions: [formatQuestion],
+      },
+    });
+  });
+
+  it("maps the user-input card's serialized answers and additional context", () => {
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [formatQuestion, sectionsQuestion],
+        response: [
+          "How should I format the output?: Detailed",
+          "Which sections should I include?: Introduction, Conclusion",
+          "",
+          "Additional context: Keep it under a page.",
+        ].join("\n"),
+      }),
+    ).toEqual({
+      annotations: {
+        "Which sections should I include?": {
+          notes: "Keep it under a page.",
+        },
+      },
+      answers: {
+        "How should I format the output?": "Detailed",
+        "Which sections should I include?": "Introduction, Conclusion",
+      },
+    });
+  });
+
+  it("keeps answers for questions whose text contains colons", () => {
+    const timeQuestion = {
+      ...formatQuestion,
+      question: "Deploy at: 9:00 or 17:00?",
+    };
+
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [timeQuestion, sectionsQuestion],
+        response:
+          "Deploy at: 9:00 or 17:00?: 9:00\nWhich sections should I include?: Conclusion",
+      }).answers,
+    ).toEqual({
+      "Deploy at: 9:00 or 17:00?": "9:00",
+      "Which sections should I include?": "Conclusion",
+    });
+  });
+
+  it("uses free text as the answer to a lone question", () => {
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [formatQuestion],
+        response: "A table, please",
+      }),
+    ).toEqual({
+      answers: { "How should I format the output?": "A table, please" },
+    });
+  });
+
+  it("gives a bare label to the one question among several that offers it", () => {
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [formatQuestion, sectionsQuestion],
+        response: "Conclusion",
+      }),
+    ).toEqual({
+      answers: { "Which sections should I include?": "Conclusion" },
+    });
+    // Ambiguous when several questions offer the same label.
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [
+          formatQuestion,
+          { ...formatQuestion, question: "How should I format the PR body?" },
+        ],
+        response: "Summary",
+      }),
+    ).toEqual({ answers: {}, response: "Summary" });
+  });
+
+  it("returns unmatched free text across several questions as a general reply", () => {
+    expect(
+      buildClaudeAskUserQuestionAnswers({
+        questions: [formatQuestion, sectionsQuestion],
+        response: "Let's discuss this first.",
+      }),
+    ).toEqual({ answers: {}, response: "Let's discuss this first." });
   });
 });

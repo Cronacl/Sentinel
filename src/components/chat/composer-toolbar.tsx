@@ -13,17 +13,22 @@ import {
   Mic02Icon,
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Button, ListBox, Popover, Switch } from "@heroui/react";
+import { Button, Header, ListBox, Popover, Switch } from "@heroui/react";
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 
 import type { ChatEngine } from "@/server/db/enums";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
-  isUnstableChatEngine,
-  UNSTABLE_CHAT_ENGINE_LABEL,
+  getEngineStabilityNotice,
+  type ChatComposerEngineOption,
 } from "@/components/chat/chat-composer-helpers";
+import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 
 import { ContextWindowIndicator } from "./chat-composer/context-window-indicator";
+import {
+  getSelectedEngineSummary,
+  groupComposerEngineOptions,
+} from "./chat-composer/engine-menu.helpers";
 
 const NO_DISABLED_KEYS: string[] = [];
 const PLAN_MODE_DISABLED_KEYS = ["plan-mode"];
@@ -46,6 +51,7 @@ type ComposerToolbarProps = {
   canSend: boolean;
   contextWindowIndicator?: {
     compactionEnabled: boolean;
+    compactionNote?: string;
     compactionWindowPercent: number;
     contextWindow: number;
     contextWindowMode: "fixed" | "model" | "provider";
@@ -53,18 +59,15 @@ type ComposerToolbarProps = {
     modelContextWindow?: number | null;
     usedPercent: number;
   } | null;
-  engineOptions: Array<{
-    engine: ChatEngine;
-    error: string | null;
-    isAvailable: boolean;
-    label: string;
-  }>;
+  /** One entry per engine instance (several when a driver has several). */
+  engineOptions: ChatComposerEngineOption[];
   hasWorkspace: boolean;
   isBusy: boolean;
   isLocked: boolean;
   modelSelector: ReactNode;
   onPickFiles: () => void;
-  onSelectEngine: (engine: ChatEngine) => void;
+  /** Called with the picked instance id. */
+  onSelectEngine: (instanceId: string) => void;
   onSend: () => void;
   onStop?: () => void;
   onStartVoiceInput?: () => void;
@@ -73,12 +76,65 @@ type ComposerToolbarProps = {
   planModeAvailable: boolean;
   planMode: boolean;
   selectedEngine: ChatEngine;
+  selectedInstanceId: string;
   selectedModelKey: string | null;
   showVoiceInput?: boolean;
   toolTags: SentinelComposerToolTag[];
+  /** The selected instance's plan usage chip, if it reports usage. */
+  usageLimitsIndicator?: ReactNode;
   voiceInputDisabled?: boolean;
   showEngineSelector: boolean;
 };
+
+function EngineAccentDot({ color }: { color: string | null }) {
+  return (
+    <span
+      aria-hidden
+      className="size-2 shrink-0 rounded-full bg-muted"
+      style={color ? { backgroundColor: color } : undefined}
+    />
+  );
+}
+
+/** One engine instance in the composer's engine menu. */
+function renderEngineItem(
+  engine: ChatComposerEngineOption,
+  inDriverSection: boolean,
+) {
+  const stability = getEngineStabilityNotice(engine);
+  return (
+    <ListBox.Item
+      className={`min-h-8 rounded-xl py-1.5 text-[13px] ${
+        inDriverSection ? "pl-4 pr-2" : "px-2"
+      }`}
+      id={engine.instanceId}
+      key={engine.instanceId}
+      textValue={engine.label}
+    >
+      <span className="flex min-w-0 items-center gap-1.5">
+        {inDriverSection ? (
+          <EngineAccentDot color={engine.accentColor} />
+        ) : null}
+        <span className="truncate">{engine.label}</span>
+      </span>
+      <span className="ml-auto flex items-center gap-1.5">
+        {stability ? (
+          <span
+            className="text-[10px] text-warning"
+            title={stability.description}
+          >
+            {stability.label}
+          </span>
+        ) : null}
+        {!engine.isAvailable &&
+        getDriverMeta(engine.engine)?.runtime !== "builtin" ? (
+          <span className="text-[10px] text-warning">Unavailable</span>
+        ) : null}
+      </span>
+      <ListBox.ItemIndicator />
+    </ListBox.Item>
+  );
+}
 
 export const ComposerToolbar = memo(function ComposerToolbar({
   canSend,
@@ -98,9 +154,11 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   planModeAvailable,
   planMode,
   selectedEngine,
+  selectedInstanceId,
   selectedModelKey,
   showVoiceInput = false,
   toolTags,
+  usageLimitsIndicator,
   voiceInputDisabled = false,
   showEngineSelector,
 }: ComposerToolbarProps) {
@@ -116,11 +174,32 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   const disabledEngineKeys = useMemo(
     () =>
       engineOptions
-        .filter((engine) => !engine.isAvailable && engine.engine !== "sentinel")
-        .map((engine) => engine.engine),
+        .filter(
+          (engine) =>
+            !engine.isAvailable &&
+            getDriverMeta(engine.engine)?.runtime !== "builtin",
+        )
+        .map((engine) => engine.instanceId),
     [engineOptions],
   );
-  const selectedEngineKeys = useMemo(() => [selectedEngine], [selectedEngine]);
+  const selectedEngineKeys = useMemo(
+    () => [selectedInstanceId],
+    [selectedInstanceId],
+  );
+  // A driver with several instances is a section of its instances.
+  const engineMenuEntries = useMemo(
+    () => groupComposerEngineOptions(engineOptions),
+    [engineOptions],
+  );
+  const selectedEngineSummary = useMemo(
+    () =>
+      getSelectedEngineSummary(
+        engineOptions,
+        selectedInstanceId,
+        selectedEngine,
+      ),
+    [engineOptions, selectedEngine, selectedInstanceId],
+  );
   const showSentinelToolTags = selectedEngine === "sentinel" && !planMode;
   const isToolTagSelected = useCallback(
     (tag: SentinelComposerToolTag) => toolTags.includes(tag),
@@ -215,11 +294,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                       isSelected={planMode}
                       size="sm"
                     >
-                      <Switch.Control>
-                        <Switch.Thumb>
-                          <Switch.Icon />
-                        </Switch.Thumb>
-                      </Switch.Control>
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb>
+                            <Switch.Icon />
+                          </Switch.Thumb>
+                        </Switch.Control>
+                      </Switch.Content>
                     </Switch>
                   </div>
                 </ListBox.Item>
@@ -236,8 +317,15 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                       strokeWidth={1.5}
                     />
                     <span className="flex-1">Engine</span>
-                    <span className="flex items-center gap-1.5 text-[12px] capitalize text-foreground/60">
-                      <span>{selectedEngine}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 text-[12px] text-foreground/60">
+                      {selectedEngineSummary.showAccent ? (
+                        <EngineAccentDot
+                          color={selectedEngineSummary.accentColor}
+                        />
+                      ) : null}
+                      <span className="max-w-24 truncate">
+                        {selectedEngineSummary.label}
+                      </span>
                     </span>
                     <HugeiconsIcon
                       color="currentColor"
@@ -269,11 +357,13 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                           <span className="flex-1">{item.label}</span>
                           <div className="pointer-events-none">
                             <Switch isSelected={selected} size="sm">
-                              <Switch.Control>
-                                <Switch.Thumb>
-                                  <Switch.Icon />
-                                </Switch.Thumb>
-                              </Switch.Control>
+                              <Switch.Content>
+                                <Switch.Control>
+                                  <Switch.Thumb>
+                                    <Switch.Icon />
+                                  </Switch.Thumb>
+                                </Switch.Control>
+                              </Switch.Content>
                             </Switch>
                           </div>
                         </ListBox.Item>
@@ -292,36 +382,26 @@ export const ComposerToolbar = memo(function ComposerToolbar({
                     onSelectionChange={(keys) => {
                       const key = [...keys][0];
                       if (key != null) {
-                        onSelectEngine(String(key) as ChatEngine);
+                        onSelectEngine(String(key));
                         setEngineSubOpen(false);
                         setComposerMenuOpen(false);
                       }
                     }}
                   >
-                    {engineOptions.map((engine) => (
-                      <ListBox.Item
-                        className="min-h-8 rounded-xl px-2 py-1.5 text-[13px]"
-                        key={engine.engine}
-                        id={engine.engine}
-                        textValue={engine.label}
-                      >
-                        <span className="capitalize">{engine.label}</span>
-                        <span className="ml-auto flex items-center gap-1.5">
-                          {isUnstableChatEngine(engine.engine) ? (
-                            <span className="text-[10px] text-warning">
-                              {UNSTABLE_CHAT_ENGINE_LABEL}
-                            </span>
-                          ) : null}
-                          {!engine.isAvailable &&
-                          engine.engine !== "sentinel" ? (
-                            <span className="text-[10px] text-warning">
-                              Unavailable
-                            </span>
-                          ) : null}
-                        </span>
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    ))}
+                    {engineMenuEntries.map((entry) =>
+                      entry.kind === "option" ? (
+                        renderEngineItem(entry.option, false)
+                      ) : (
+                        <ListBox.Section key={`driver-${entry.driver}`}>
+                          <Header className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-muted">
+                            {entry.label}
+                          </Header>
+                          {entry.options.map((option) =>
+                            renderEngineItem(option, true),
+                          )}
+                        </ListBox.Section>
+                      ),
+                    )}
                   </ListBox>
                 </div>
               ) : null}
@@ -382,9 +462,11 @@ export const ComposerToolbar = memo(function ComposerToolbar({
       </div>
 
       <div className="flex items-center gap-2">
+        {usageLimitsIndicator}
         {contextWindowIndicator ? (
           <ContextWindowIndicator
             compactionEnabled={contextWindowIndicator.compactionEnabled}
+            compactionNote={contextWindowIndicator.compactionNote}
             compactionWindowPercent={
               contextWindowIndicator.compactionWindowPercent
             }

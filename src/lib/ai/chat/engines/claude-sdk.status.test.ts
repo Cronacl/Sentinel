@@ -11,7 +11,7 @@ let initializationResultFactory: () => Promise<{
   models?: Array<{
     description: string;
     displayName: string;
-    supportedEffortLevels?: Array<"low" | "medium" | "high" | "max">;
+    supportedEffortLevels?: Array<"low" | "medium" | "high" | "xhigh" | "max">;
     value: string;
   }>;
 } | null> = async () => ({
@@ -26,16 +26,19 @@ let initializationResultFactory: () => Promise<{
   ],
 });
 
-const queryMock = mock(() => ({
-  close: closeMock,
-  initializationResult: () => initializationResultFactory(),
-}));
+const queryMock = mock(
+  (_input: { options?: Record<string, unknown>; prompt: unknown }) => ({
+    close: closeMock,
+    initializationResult: () => initializationResultFactory(),
+  }),
+);
 
 mock.module("@anthropic-ai/claude-agent-sdk", () => ({
   query: queryMock,
 }));
 
 const {
+  forgetClaudeEngineStatus,
   getClaudeEngineStatus,
   resetClaudeCodeRuntimeCache,
   resetClaudeEngineStatusCache,
@@ -138,6 +141,41 @@ describe("getClaudeEngineStatus", () => {
       expect(snapshot.binaryVersion).toBe("2.1.39 (Claude Code)");
       expect(snapshot.availableModels[0]?.id).toBe("claude-sonnet-4-5");
       expect(snapshot.recordedAt).toBe(status.lastSuccessfulProbeAt);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps the slash commands Claude lists, also from the snapshot", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      await createClaudeExecutable(tempRoot);
+      const ready = await initializationResultFactory();
+      initializationResultFactory = async () =>
+        ({
+          ...ready,
+          commands: [
+            {
+              argumentHint: "<pr>",
+              description: "Review a PR",
+              name: "review",
+            },
+            { description: 3, name: "  " },
+          ],
+        }) as never;
+
+      const status = await getClaudeEngineStatus({ forceRefresh: true });
+      expect(status.commands).toEqual([
+        { argumentHint: "<pr>", description: "Review a PR", name: "review" },
+      ]);
+
+      initializationResultFactory = () => new Promise(() => undefined);
+      resetClaudeCodeRuntimeCache();
+      resetClaudeEngineStatusCache();
+      const cached = await getClaudeEngineStatus();
+      expect(cached.usedCachedStatus).toBe(true);
+      expect(cached.commands).toEqual(status.commands);
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }
@@ -260,6 +298,121 @@ describe("getClaudeEngineStatus", () => {
           usedCachedStatus: true,
         }),
       );
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reports a sign-out once the last-known-good status is forgotten", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      await createClaudeExecutable(tempRoot);
+      const readyStatus = await getClaudeEngineStatus({ forceRefresh: true });
+      expect(readyStatus.account).toEqual({ email: "claude@example.com" });
+
+      // `claude auth logout`: the SDK answers without models or account.
+      initializationResultFactory = async () => ({ account: null, models: [] });
+      await forgetClaudeEngineStatus();
+
+      const status = await getClaudeEngineStatus({ forceRefresh: true });
+      expect(status).toEqual(
+        expect.objectContaining({
+          account: null,
+          authReady: false,
+          error: "Claude Code is not authenticated.",
+          state: "auth_unavailable",
+          usedCachedStatus: false,
+        }),
+      );
+      await expect(
+        readFile(path.join(tempRoot, ".sentinel", "claude-status.json")),
+      ).rejects.toThrow();
+      // Nothing to forget is fine too.
+      await forgetClaudeEngineStatus();
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("probes with a prompt that never yields and isolated, explicit options", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      const executablePath = await createClaudeExecutable(tempRoot);
+
+      await getClaudeEngineStatus({ forceRefresh: true });
+
+      const input = queryMock.mock.calls[0]?.[0];
+      expect(typeof input?.prompt).not.toBe("string");
+      expect(input?.options).toEqual(
+        expect.objectContaining({
+          mcpServers: {},
+          pathToClaudeCodeExecutable: executablePath,
+          permissionMode: "default",
+          persistSession: false,
+          settings: { disableAllHooks: true },
+          strictMcpConfig: true,
+        }),
+      );
+      expect(input?.options?.env).toEqual(
+        expect.objectContaining({
+          CLAUDE_AGENT_SDK_CLIENT_APP: "sentinel",
+          CLAUDE_CODE_AUTO_CONNECT_IDE: "0",
+          ENABLE_CLAUDEAI_MCP_SERVERS: "false",
+          HOME: tempRoot,
+        }),
+      );
+      // A native binary is left to the SDK's own spawn.
+      expect(input?.options?.spawnClaudeCodeProcess).toBeUndefined();
+      expect(closeMock).toHaveBeenCalled();
+
+      // The idle prompt ends once the probe is done instead of hanging.
+      const iterator = (input?.prompt as AsyncIterable<unknown>)[
+        Symbol.asyncIterator
+      ]();
+      await expect(iterator.next()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      });
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("reports xhigh and max effort and context windows from Claude Code 2.1 model info", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      await createClaudeExecutable(tempRoot);
+      initializationResultFactory = async () => ({
+        account: { email: "claude@example.com" },
+        models: [
+          {
+            description: "Opus 5.5 · Most capable for complex work",
+            displayName: "Opus 5.5",
+            supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
+            value: "claude-opus-5-5",
+          },
+        ],
+      });
+
+      const status = await getClaudeEngineStatus({ forceRefresh: true });
+
+      expect(status.availableModels).toEqual([
+        expect.objectContaining({
+          contextWindow: 200_000,
+          defaultReasoningEffort: "medium",
+          id: "claude-opus-5-5",
+          supportedReasoningEfforts: [
+            expect.objectContaining({ effort: "low" }),
+            expect.objectContaining({ effort: "medium" }),
+            expect.objectContaining({ effort: "high" }),
+            expect.objectContaining({ effort: "xhigh" }),
+            expect.objectContaining({ effort: "max" }),
+          ],
+        }),
+      ]);
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

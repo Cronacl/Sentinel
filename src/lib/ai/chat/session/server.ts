@@ -60,6 +60,7 @@ export async function loadThreadSessionSnapshot(
     columns: {
       activeStreamId: true,
       chatEngine: true,
+      chatEngineInstanceId: true,
       id: true,
       mode: true,
       title: true,
@@ -120,6 +121,7 @@ export async function loadThreadSessionSnapshot(
   return {
     activeRunId: thread.activeStreamId,
     chatEngine: thread.chatEngine,
+    chatEngineInstanceId: thread.chatEngineInstanceId ?? thread.chatEngine,
     messages: uiMessages,
     mode: thread.mode,
     queuedFollowUps: visibleFollowUps.map(summarizeQueuedFollowUp),

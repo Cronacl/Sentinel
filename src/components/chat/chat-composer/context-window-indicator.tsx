@@ -37,6 +37,7 @@ function getUsageToneClass(
 
 export function ContextWindowIndicator({
   compactionEnabled,
+  compactionNote,
   contextWindowMode,
   compactionWindowPercent,
   contextWindow,
@@ -46,6 +47,8 @@ export function ContextWindowIndicator({
   usedPercent,
 }: {
   compactionEnabled: boolean;
+  /** Replaces the compaction-settings line when the engine compacts itself. */
+  compactionNote?: string;
   compactionWindowPercent: number;
   contextWindow: number;
   contextWindowMode: "fixed" | "model" | "provider";
@@ -137,7 +140,7 @@ export function ContextWindowIndicator({
               {contextWindowMode === "fixed"
                 ? "fixed size from settings"
                 : contextWindowMode === "provider"
-                  ? "latest completed Claude response"
+                  ? "reported by the engine's latest completed response"
                   : "active model metadata"}
             </p>
             {contextWindowMode === "fixed" &&
@@ -151,13 +154,15 @@ export function ContextWindowIndicator({
           </div>
 
           <p className="text-xs text-muted">
-            {compactionEnabled
-              ? `Automatic compaction is on and starts around ${compactionWindowPercent}% of the ${
-                  contextWindowMode === "fixed"
-                    ? "fixed window"
-                    : "active model window"
-                }.`
-              : "Automatic compaction is off in settings."}
+            {compactionNote
+              ? compactionNote
+              : compactionEnabled
+                ? `Automatic compaction is on and starts around ${compactionWindowPercent}% of the ${
+                    contextWindowMode === "fixed"
+                      ? "fixed window"
+                      : "active model window"
+                  }.`
+                : "Automatic compaction is off in settings."}
           </p>
         </div>
       </Tooltip.Content>

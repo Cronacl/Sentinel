@@ -34,6 +34,7 @@ const CURRENT_USER_COLUMNS = [
   { name: "ui_font_size" },
   { name: "code_font_size" },
   { name: "default_chat_engine" },
+  { name: "default_chat_engine_instance_id" },
   { name: "default_chat_model_id" },
   { name: "default_chat_mode" },
   { name: "default_chat_reasoning_effort" },
@@ -118,6 +119,21 @@ const LEGACY_AUTOMATION_COLUMNS = [
 const CURRENT_AUTOMATION_COLUMNS = [
   ...LEGACY_AUTOMATION_COLUMNS,
   { name: "chat_engine" },
+  { name: "chat_engine_instance_id" },
+  { name: "model_options" },
+];
+
+const CURRENT_FOLLOW_UP_COLUMNS = [
+  { name: "id" },
+  { name: "thread_id" },
+  { name: "parts" },
+  { name: "model_id" },
+  { name: "model_options" },
+  { name: "reasoning_effort" },
+  { name: "thread_mode" },
+  { name: "status" },
+  { name: "created_at" },
+  { name: "updated_at" },
 ];
 
 const CURRENT_THREAD_COLUMNS = [
@@ -133,8 +149,10 @@ const CURRENT_THREAD_COLUMNS = [
   { name: "source_virtual_thread_id" },
   { name: "mode" },
   { name: "chat_engine" },
+  { name: "chat_engine_instance_id" },
   { name: "chat_engine_state" },
   { name: "chat_model_id" },
+  { name: "chat_model_options" },
   { name: "chat_reasoning_effort" },
   { name: "created_at" },
   { name: "updated_at" },
@@ -148,7 +166,10 @@ const CURRENT_THREAD_COLUMNS = [
 ];
 
 const LEGACY_THREAD_COLUMNS = CURRENT_THREAD_COLUMNS.filter(
-  ({ name }) => name !== "delegation_id",
+  ({ name }) =>
+    name !== "delegation_id" &&
+    name !== "chat_engine_instance_id" &&
+    name !== "chat_model_options",
 );
 
 const CURRENT_WORKSPACE_COLUMNS = [
@@ -195,11 +216,13 @@ function serializeRunSql(statement: unknown): string {
 function createMocks({
   userColumns = CURRENT_USER_COLUMNS,
   automationColumns = CURRENT_AUTOMATION_COLUMNS,
+  followUpColumns = CURRENT_FOLLOW_UP_COLUMNS,
   threadColumns = CURRENT_THREAD_COLUMNS,
   workspaceColumns = CURRENT_WORKSPACE_COLUMNS,
 }: {
   userColumns?: Array<{ name: string }>;
   automationColumns?: Array<{ name: string }>;
+  followUpColumns?: Array<{ name: string }>;
   threadColumns?: Array<{ name: string }>;
   workspaceColumns?: Array<{ name: string }>;
 } = {}) {
@@ -221,6 +244,10 @@ function createMocks({
 
         if (sql.includes('PRAGMA table_info("thread")')) {
           return threadColumns;
+        }
+
+        if (sql.includes('PRAGMA table_info("thread_follow_up")')) {
+          return followUpColumns;
         }
 
         if (sql.includes('PRAGMA table_info("workspace")')) {
@@ -468,6 +495,239 @@ describe("ensureTables", () => {
         notnull: 1,
       }),
     );
+
+    sqlite.close();
+  });
+});
+
+describe("engine instance migration", () => {
+  const columnsOf = (sqlite: SQLiteDatabase, table: string) =>
+    (
+      sqlite.prepare(`PRAGMA table_info("${table}")`).all() as Array<{
+        name: string;
+      }>
+    ).map(({ name }) => name);
+
+  it("creates engine_instance and the instance/model-option columns idempotently", () => {
+    const sqlite = new SQLiteDatabase(":memory:");
+    const db = drizzle(sqlite, { schema });
+
+    ensureTables(db as never, sqlite as never);
+    expect(() => ensureTables(db as never, sqlite as never)).not.toThrow();
+
+    expect(columnsOf(sqlite, "engine_instance")).toEqual([
+      "id",
+      "user_id",
+      "driver",
+      "label",
+      "accent_color",
+      "enabled",
+      "environment",
+      "binary_path",
+      "home_path",
+      "config",
+      "custom_models",
+      "sort_order",
+      "created_at",
+      "updated_at",
+    ]);
+    // Default instances share their id (the driver kind) across users.
+    expect(
+      (
+        sqlite.prepare(`PRAGMA table_info("engine_instance")`).all() as Array<{
+          name: string;
+          pk: number;
+        }>
+      )
+        .filter(({ pk }) => pk > 0)
+        .sort((left, right) => left.pk - right.pk)
+        .map(({ name }) => name),
+    ).toEqual(["user_id", "id"]);
+    expect(columnsOf(sqlite, "thread")).toEqual(
+      expect.arrayContaining(["chat_engine_instance_id", "chat_model_options"]),
+    );
+    expect(columnsOf(sqlite, "user")).toContain(
+      "default_chat_engine_instance_id",
+    );
+    expect(columnsOf(sqlite, "automation")).toEqual(
+      expect.arrayContaining(["chat_engine_instance_id", "model_options"]),
+    );
+    expect(columnsOf(sqlite, "thread_follow_up")).toContain("model_options");
+
+    const indexes = (
+      sqlite
+        .prepare(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+        .all() as Array<{ name: string }>
+    ).map(({ name }) => name);
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        "engine_instance_user_driver_idx",
+        "thread_engine_instance_idx",
+        "automation_engine_instance_idx",
+      ]),
+    );
+
+    sqlite.close();
+  });
+
+  it("upgrades legacy rows in place; NULL instance ids mean the default instance", async () => {
+    const sqlite = new SQLiteDatabase(":memory:");
+    sqlite.exec(`
+      CREATE TABLE "user" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "email" text NOT NULL,
+        "email_verified" integer DEFAULT false NOT NULL,
+        "image" text,
+        "default_chat_engine" text,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL
+      );
+      CREATE TABLE "workspace" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL,
+        "name" text NOT NULL,
+        "root_path" text,
+        "description" text,
+        "is_archived" integer DEFAULT false NOT NULL,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL
+      );
+      CREATE TABLE "thread" (
+        "id" text PRIMARY KEY NOT NULL,
+        "workspace_id" text NOT NULL,
+        "user_id" text NOT NULL,
+        "title" text NOT NULL,
+        "summary" text,
+        "mode" text DEFAULT 'chat' NOT NULL,
+        "chat_engine" text DEFAULT 'sentinel' NOT NULL,
+        "chat_engine_state" text,
+        "chat_model_id" text,
+        "chat_reasoning_effort" text,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL,
+        "archived_at" integer,
+        "pinned_at" integer,
+        "active_stream_id" text,
+        "status" text DEFAULT 'idle' NOT NULL
+      );
+      CREATE TABLE "thread_follow_up" (
+        "id" text PRIMARY KEY NOT NULL,
+        "thread_id" text NOT NULL,
+        "parts" text NOT NULL,
+        "model_id" text NOT NULL,
+        "reasoning_effort" text,
+        "thread_mode" text NOT NULL,
+        "status" text DEFAULT 'queued' NOT NULL,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL
+      );
+      CREATE TABLE "automation" (
+        "id" text PRIMARY KEY NOT NULL,
+        "user_id" text NOT NULL,
+        "workspace_id" text,
+        "title" text NOT NULL,
+        "prompt" text NOT NULL,
+        "status" text DEFAULT 'paused' NOT NULL,
+        "schedule_type" text DEFAULT 'daily' NOT NULL,
+        "schedule_day_of_week" integer,
+        "schedule_time" text,
+        "schedule_cron" text,
+        "model_id" text,
+        "reasoning_effort" text,
+        "last_ran_at" integer,
+        "next_run_at" integer,
+        "created_at" integer NOT NULL,
+        "updated_at" integer NOT NULL
+      );
+      INSERT INTO "user" VALUES ('user-1', 'Me', 'me@local', 0, NULL, 'codex', 1, 1);
+      INSERT INTO "workspace" VALUES ('ws-1', 'user-1', 'Repo', NULL, NULL, 0, 1, 1);
+      INSERT INTO "thread" ("id", "workspace_id", "user_id", "title", "chat_engine", "chat_engine_state", "created_at", "updated_at")
+        VALUES ('thread-1', 'ws-1', 'user-1', 'Old', 'codex', '{"codex":{"codexThreadId":"c-1"}}', 1, 1);
+      INSERT INTO "thread_follow_up" VALUES ('f-1', 'thread-1', '[]', 'gpt-5.5', 'high', 'chat', 'queued', 1, 1);
+      INSERT INTO "automation" ("id", "user_id", "title", "prompt", "model_id", "created_at", "updated_at")
+        VALUES ('a-1', 'user-1', 'Daily', 'Review', 'gpt-5.5', 1, 1);
+    `);
+    const db = drizzle(sqlite, { schema });
+
+    ensureTables(db as never, sqlite as never);
+
+    const thread = await db.query.threads.findFirst({
+      where: (table, { eq }) => eq(table.id, "thread-1"),
+    });
+    expect(thread).toMatchObject({
+      chatEngine: "codex",
+      chatEngineInstanceId: null,
+      chatEngineState: { codex: { codexThreadId: "c-1" } },
+      chatModelOptions: null,
+    });
+
+    const user = await db.query.users.findFirst();
+    expect(user).toMatchObject({
+      defaultChatEngine: "codex",
+      defaultChatEngineInstanceId: null,
+    });
+
+    const automation = await db.query.automations.findFirst();
+    expect(automation).toMatchObject({
+      chatEngine: "sentinel",
+      chatEngineInstanceId: null,
+      modelOptions: null,
+    });
+
+    const followUp = await db.query.threadFollowUps.findFirst();
+    expect(followUp).toMatchObject({ modelId: "gpt-5.5", modelOptions: null });
+
+    sqlite.close();
+  });
+
+  it("relates threads and automations to the user's persisted instance", async () => {
+    const sqlite = new SQLiteDatabase(":memory:");
+    const db = drizzle(sqlite, { schema });
+    ensureTables(db as never, sqlite as never);
+    sqlite.exec(`
+      INSERT INTO "user" ("id", "name", "email", "created_at", "updated_at")
+        VALUES ('user-1', 'Me', 'me@local', 1, 1), ('user-2', 'Other', 'o@local', 1, 1);
+      INSERT INTO "workspace" ("id", "user_id", "name", "created_at", "updated_at")
+        VALUES ('ws-1', 'user-1', 'Repo', 1, 1);
+      INSERT INTO "engine_instance" ("id", "user_id", "driver", "label", "created_at", "updated_at")
+        VALUES ('codex-work', 'user-2', 'codex', 'Not mine', 1, 1),
+               ('codex-work', 'user-1', 'codex', 'Work', 1, 1);
+      INSERT INTO "thread" ("id", "workspace_id", "user_id", "title", "chat_engine", "chat_engine_instance_id", "created_at", "updated_at")
+        VALUES ('t-work', 'ws-1', 'user-1', 'T', 'codex', 'codex-work', 1, 1),
+               ('t-default', 'ws-1', 'user-1', 'T', 'codex', NULL, 1, 1);
+      INSERT INTO "automation" ("id", "user_id", "title", "prompt", "chat_engine", "chat_engine_instance_id", "created_at", "updated_at")
+        VALUES ('a-1', 'user-1', 'A', 'p', 'codex', 'codex-work', 1, 1);
+    `);
+
+    const work = await db.query.threads.findFirst({
+      where: (table, { eq }) => eq(table.id, "t-work"),
+      with: { engineInstance: true },
+    });
+    expect(work?.engineInstance).toMatchObject({
+      id: "codex-work",
+      label: "Work",
+      userId: "user-1",
+    });
+    const fallback = await db.query.threads.findFirst({
+      where: (table, { eq }) => eq(table.id, "t-default"),
+      with: { engineInstance: true },
+    });
+    expect(fallback?.engineInstance).toBeNull();
+
+    const automation = await db.query.automations.findFirst({
+      with: { engineInstance: true },
+    });
+    expect(automation?.engineInstance?.label).toBe("Work");
+
+    const user = await db.query.users.findFirst({
+      where: (table, { eq }) => eq(table.id, "user-1"),
+      with: { engineInstances: { with: { threads: true } } },
+    });
+    expect(user?.engineInstances).toHaveLength(1);
+    expect(user?.engineInstances[0]?.threads.map(({ id }) => id)).toEqual([
+      "t-work",
+    ]);
 
     sqlite.close();
   });

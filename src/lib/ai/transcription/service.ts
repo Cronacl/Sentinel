@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Buffer } from "node:buffer";
-import { experimental_transcribe as transcribe } from "ai";
+import { transcribe } from "ai";
 import { createAzure } from "@ai-sdk/azure";
 import { createGroq } from "@ai-sdk/groq";
 import { createOpenAI } from "@ai-sdk/openai";

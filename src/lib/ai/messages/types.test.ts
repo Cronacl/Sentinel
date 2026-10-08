@@ -373,6 +373,71 @@ describe("thread message normalization", () => {
     );
   });
 
+  describe("dynamic tool display fields", () => {
+    const baseToolPart = {
+      callProviderMetadata: {
+        sentinel: { agentLabel: "Cursor", kind: "read", rawName: "Read" },
+      },
+      input: { path: "src/index.ts" },
+      output: { content: "export {};" },
+      state: "output-available" as const,
+      title: "Read src/index.ts",
+      toolCallId: "tool-1",
+      toolName: "cursor_read",
+      type: "dynamic-tool" as const,
+    };
+
+    function tokenFor(part: Record<string, unknown>) {
+      return getThreadMessageSyncToken(
+        normalizeThreadUIMessage({
+          id: "assistant-1",
+          metadata: { status: "streaming" },
+          parts: [part],
+          role: "assistant",
+        }),
+      );
+    }
+
+    it("updates the sync token when only callProviderMetadata changes", () => {
+      // Same length, head and tail: only a full digest notices the edit.
+      expect(tokenFor(baseToolPart)).not.toBe(
+        tokenFor({
+          ...baseToolPart,
+          callProviderMetadata: {
+            sentinel: { agentLabel: "Cursor", kind: "edit", rawName: "Read" },
+          },
+        }),
+      );
+    });
+
+    it("updates the sync token when only the title changes", () => {
+      expect(tokenFor(baseToolPart)).not.toBe(
+        tokenFor({ ...baseToolPart, title: "Read src/main.ts" }),
+      );
+      expect(tokenFor(baseToolPart)).not.toBe(
+        tokenFor({ ...baseToolPart, title: undefined }),
+      );
+    });
+
+    it("updates the sync token for result metadata and preliminary output", () => {
+      expect(tokenFor(baseToolPart)).not.toBe(
+        tokenFor({
+          ...baseToolPart,
+          resultProviderMetadata: { sentinel: { durationMs: 12 } },
+        }),
+      );
+      expect(tokenFor(baseToolPart)).not.toBe(
+        tokenFor({ ...baseToolPart, preliminary: true }),
+      );
+    });
+
+    it("keeps the sync token stable for identical parts", () => {
+      expect(tokenFor(baseToolPart)).toBe(
+        tokenFor(JSON.parse(JSON.stringify(baseToolPart))),
+      );
+    });
+  });
+
   it("sanitizes stale Claude dynamic-tool fields across state transitions", () => {
     const message = normalizeThreadUIMessage({
       id: "assistant-1",

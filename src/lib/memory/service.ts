@@ -1,5 +1,5 @@
-import { generateObject } from "ai";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import { generateText, Output } from "ai";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 import { z } from "zod";
 
 import {
@@ -254,7 +254,7 @@ export async function autosaveConversationMemories({
   messages: ThreadUIMessage[];
   memoryRuntime: MemoryRuntimeState;
   model: unknown;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
   sourceMessageId: string;
   threadId: string;
   userId: string;
@@ -270,9 +270,9 @@ export async function autosaveConversationMemories({
   }
 
   try {
-    const result = await generateObject({
-      model: model as Parameters<typeof generateObject>[0]["model"],
-      output: "object",
+    const result = await generateText({
+      model: model as Parameters<typeof generateText>[0]["model"],
+      output: Output.object({ schema: AUTO_SAVE_EXTRACTION_SCHEMA }),
       prompt: [
         "Extract durable long-term memories from this conversation.",
         "Return only facts that will improve future conversations.",
@@ -283,11 +283,10 @@ export async function autosaveConversationMemories({
         "",
         transcript,
       ].join("\n"),
-      schema: AUTO_SAVE_EXTRACTION_SCHEMA,
       ...(providerOptions ? { providerOptions } : {}),
     });
 
-    const candidates = result.object.memories
+    const candidates = result.output.memories
       .slice(0, memoryRuntime.settings.autoSavePerTurnLimit)
       .filter(
         (memory) =>

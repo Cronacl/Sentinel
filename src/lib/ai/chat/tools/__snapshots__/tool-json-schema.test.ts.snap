@@ -1,0 +1,6208 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`tool input JSON schemas converts every built-in chat tool to a valid object schema 1`] = `
+{
+  "apply_patch": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "patchText": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "patchText",
+      "rationale",
+    ],
+    "type": "object",
+  },
+  "batch_read": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "maximum": 400,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "offset": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "paths": {
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "maxItems": 25,
+        "minItems": 1,
+        "type": "array",
+      },
+    },
+    "required": [
+      "paths",
+    ],
+    "type": "object",
+  },
+  "browser_back": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_click": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "selector": {
+        "description": "CSS selector from browser_snapshot. Prefer this over x/y.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "x": {
+        "description": "Viewport x coordinate.",
+        "type": "number",
+      },
+      "y": {
+        "description": "Viewport y coordinate.",
+        "type": "number",
+      },
+    },
+    "type": "object",
+  },
+  "browser_console_logs": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "levels": {
+        "description": "Optional console levels to include.",
+        "items": {
+          "enum": [
+            "debug",
+            "info",
+            "log",
+            "warn",
+            "error",
+          ],
+          "type": "string",
+        },
+        "maxItems": 5,
+        "type": "array",
+      },
+      "limit": {
+        "default": 50,
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_fill": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "selector": {
+        "description": "CSS selector from browser_snapshot.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "value": {
+        "description": "Text to place in the field.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "selector",
+      "value",
+    ],
+    "type": "object",
+  },
+  "browser_forward": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_navigate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "url": {
+        "description": "URL or search text to navigate to.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "url",
+    ],
+    "type": "object",
+  },
+  "browser_open": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "description": "URL or search text to open in a new Sentinel browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_press": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "key": {
+        "description": "Key to press, such as Enter or Escape.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "selector": {
+        "description": "Optional CSS selector to focus before pressing the key.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "key",
+    ],
+    "type": "object",
+  },
+  "browser_reload": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_screenshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fullPage": {
+        "description": "Reserved for future support. V1 captures the visible viewport.",
+        "type": "boolean",
+      },
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_snapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "tabId": {
+        "description": "Optional browser tab id. Defaults to the active browser tab.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "browser_tabs": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "computer_action": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "actions": {
+        "description": "Ordered desktop actions to perform in one conservative batch.",
+        "items": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "displayId": {
+                  "maximum": 9007199254740991,
+                  "minimum": -9007199254740991,
+                  "type": "integer",
+                },
+                "type": {
+                  "const": "screenshot",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "durationMs": {
+                  "maximum": 10000,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "type": {
+                  "const": "wait",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "type",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "durationMs": {
+                  "maximum": 2000,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "modifiers": {
+                  "items": {
+                    "enum": [
+                      "command",
+                      "control",
+                      "option",
+                      "shift",
+                    ],
+                    "type": "string",
+                  },
+                  "maxItems": 4,
+                  "type": "array",
+                },
+                "type": {
+                  "const": "move",
+                  "type": "string",
+                },
+                "x": {
+                  "type": "number",
+                },
+                "y": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "type",
+                "x",
+                "y",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "button": {
+                  "default": "left",
+                  "enum": [
+                    "left",
+                    "right",
+                    "middle",
+                  ],
+                  "type": "string",
+                },
+                "clickCount": {
+                  "default": 1,
+                  "maximum": 3,
+                  "minimum": 1,
+                  "type": "integer",
+                },
+                "modifiers": {
+                  "items": {
+                    "enum": [
+                      "command",
+                      "control",
+                      "option",
+                      "shift",
+                    ],
+                    "type": "string",
+                  },
+                  "maxItems": 4,
+                  "type": "array",
+                },
+                "type": {
+                  "const": "click",
+                  "type": "string",
+                },
+                "x": {
+                  "type": "number",
+                },
+                "y": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "type",
+                "x",
+                "y",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "button": {
+                  "default": "left",
+                  "enum": [
+                    "left",
+                    "right",
+                    "middle",
+                  ],
+                  "type": "string",
+                },
+                "durationMs": {
+                  "maximum": 5000,
+                  "minimum": 0,
+                  "type": "integer",
+                },
+                "modifiers": {
+                  "items": {
+                    "enum": [
+                      "command",
+                      "control",
+                      "option",
+                      "shift",
+                    ],
+                    "type": "string",
+                  },
+                  "maxItems": 4,
+                  "type": "array",
+                },
+                "path": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                      },
+                      "y": {
+                        "type": "number",
+                      },
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                    ],
+                    "type": "object",
+                  },
+                  "maxItems": 50,
+                  "minItems": 2,
+                  "type": "array",
+                },
+                "type": {
+                  "const": "drag",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "path",
+                "type",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "deltaX": {
+                  "default": 0,
+                  "type": "number",
+                },
+                "deltaY": {
+                  "type": "number",
+                },
+                "modifiers": {
+                  "items": {
+                    "enum": [
+                      "command",
+                      "control",
+                      "option",
+                      "shift",
+                    ],
+                    "type": "string",
+                  },
+                  "maxItems": 4,
+                  "type": "array",
+                },
+                "type": {
+                  "const": "scroll",
+                  "type": "string",
+                },
+                "x": {
+                  "type": "number",
+                },
+                "y": {
+                  "type": "number",
+                },
+              },
+              "required": [
+                "deltaY",
+                "type",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "maxLength": 10000,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "type": {
+                  "const": "type",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "text",
+                "type",
+              ],
+              "type": "object",
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "key": {
+                  "maxLength": 40,
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "modifiers": {
+                  "items": {
+                    "enum": [
+                      "command",
+                      "control",
+                      "option",
+                      "shift",
+                    ],
+                    "type": "string",
+                  },
+                  "maxItems": 4,
+                  "type": "array",
+                },
+                "type": {
+                  "const": "keypress",
+                  "type": "string",
+                },
+              },
+              "required": [
+                "key",
+                "type",
+              ],
+              "type": "object",
+            },
+          ],
+        },
+        "maxItems": 25,
+        "minItems": 1,
+        "type": "array",
+      },
+      "appName": {
+        "description": "Optional macOS app name to refocus immediately before executing the action batch.",
+        "maxLength": 160,
+        "minLength": 1,
+        "type": "string",
+      },
+      "bundleId": {
+        "description": "Optional macOS bundle id to refocus immediately before executing the action batch.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "actions",
+    ],
+    "type": "object",
+  },
+  "computer_app": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "appName": {
+        "description": "macOS application name, such as Safari or Finder.",
+        "maxLength": 160,
+        "minLength": 1,
+        "type": "string",
+      },
+      "bundleId": {
+        "description": "macOS bundle identifier, such as com.apple.Safari.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+      "mode": {
+        "description": "Open the app if needed, or focus an already available app.",
+        "enum": [
+          "open",
+          "focus",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "mode",
+    ],
+    "type": "object",
+  },
+  "computer_apps": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "computer_ax_action": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "Accessibility action to perform on the matched element.",
+        "enum": [
+          "press",
+          "focus",
+          "setValue",
+          "increment",
+          "decrement",
+          "showMenu",
+        ],
+        "type": "string",
+      },
+      "appName": {
+        "description": "Optional macOS app name to target. Defaults to frontmost app.",
+        "maxLength": 160,
+        "minLength": 1,
+        "type": "string",
+      },
+      "axPath": {
+        "description": "AX path returned by computer_ax_tree or computer_ax_find.",
+        "maxLength": 400,
+        "minLength": 1,
+        "type": "string",
+      },
+      "bundleId": {
+        "description": "Optional macOS bundle id to target. Defaults to frontmost app.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+      "query": {
+        "additionalProperties": false,
+        "description": "Fallback element query when axPath is not available.",
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string",
+          },
+          "role": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string",
+          },
+          "subrole": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string",
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string",
+          },
+          "value": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "value": {
+        "description": "Value to set when action is setValue.",
+        "maxLength": 100000,
+        "type": "string",
+      },
+    },
+    "required": [
+      "action",
+    ],
+    "type": "object",
+  },
+  "computer_ax_find": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "appName": {
+        "description": "Optional macOS app name to inspect. Defaults to frontmost app.",
+        "maxLength": 160,
+        "minLength": 1,
+        "type": "string",
+      },
+      "bundleId": {
+        "description": "Optional macOS bundle id to inspect. Defaults to frontmost app.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+      "maxDepth": {
+        "description": "Maximum AX tree depth to search. Defaults to 8.",
+        "maximum": 10,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "maxMatches": {
+        "description": "Maximum matching elements to return. Defaults to 25.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "maxNodes": {
+        "description": "Maximum AX nodes to inspect. Defaults to 750.",
+        "maximum": 2000,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "query": {
+        "additionalProperties": false,
+        "description": "Element query. Fields are case-insensitive substring matches.",
+        "properties": {
+          "description": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string",
+          },
+          "role": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string",
+          },
+          "subrole": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string",
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string",
+          },
+          "value": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "computer_ax_tree": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "appName": {
+        "description": "Optional macOS app name to inspect. Defaults to frontmost app.",
+        "maxLength": 160,
+        "minLength": 1,
+        "type": "string",
+      },
+      "bundleId": {
+        "description": "Optional macOS bundle id to inspect. Defaults to frontmost app.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+      "maxDepth": {
+        "description": "Maximum AX tree depth to return. Defaults to 4.",
+        "maximum": 8,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "maxNodes": {
+        "description": "Maximum AX nodes to return. Defaults to 250.",
+        "maximum": 1000,
+        "minimum": 1,
+        "type": "integer",
+      },
+    },
+    "type": "object",
+  },
+  "computer_clipboard": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "text": {
+        "description": "Text to write to the macOS clipboard for a later paste action.",
+        "maxLength": 100000,
+        "type": "string",
+      },
+    },
+    "required": [
+      "text",
+    ],
+    "type": "object",
+  },
+  "computer_screenshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "appName": {
+        "description": "Optional macOS app name to refocus immediately before capture, useful after approval brings Sentinel to the front.",
+        "maxLength": 160,
+        "minLength": 1,
+        "type": "string",
+      },
+      "bundleId": {
+        "description": "Optional macOS bundle id to refocus immediately before capture.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+      "displayId": {
+        "description": "Optional display id from computer_status. Defaults to primary.",
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer",
+      },
+    },
+    "type": "object",
+  },
+  "computer_status": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "create_file": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "description": "Full file contents to create.",
+        "maxLength": 200000,
+        "type": "string",
+      },
+      "path": {
+        "description": "File path to create. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "description": "Why this file should be created.",
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "content",
+      "path",
+      "rationale",
+    ],
+    "type": "object",
+  },
+  "delete_file": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "description": "File path to delete. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "description": "Why this file should be deleted.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "path",
+      "rationale",
+    ],
+    "type": "object",
+  },
+  "diagnostics": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "maximum": 200,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "mode": {
+        "enum": [
+          "auto",
+          "lint",
+          "lsp",
+        ],
+        "type": "string",
+      },
+      "path": {
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "diff": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "comparePath": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "contextLines": {
+        "maximum": 20,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "path": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "proposedContent": {
+        "type": "string",
+      },
+    },
+    "required": [
+      "path",
+    ],
+    "type": "object",
+  },
+  "edit": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "newString": {
+        "description": "Replacement text.",
+        "type": "string",
+      },
+      "oldString": {
+        "description": "Exact text to replace.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "File path to modify. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "description": "Why this edit is needed.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "replaceAll": {
+        "description": "Replace every occurrence instead of exactly one.",
+        "type": "boolean",
+      },
+    },
+    "required": [
+      "newString",
+      "oldString",
+      "path",
+      "rationale",
+    ],
+    "type": "object",
+  },
+  "forget_memory": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "memoryId": {
+        "description": "The memory ID to remove.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "memoryId",
+    ],
+    "type": "object",
+  },
+  "generate_image": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "aspectRatio": {
+        "description": "Optional aspect ratio like 1:1 or 16:9.",
+        "pattern": "^\\d+:\\d+$",
+        "type": "string",
+      },
+      "count": {
+        "default": 1,
+        "description": "Number of images to generate per provider.",
+        "maximum": 4,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "mode": {
+        "default": "single",
+        "description": "Use single for one provider or multi_model to fan out.",
+        "enum": [
+          "single",
+          "multi_model",
+        ],
+        "type": "string",
+      },
+      "modelId": {
+        "description": "Optional model override for single-provider generation.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "prompt": {
+        "description": "Describe the image you want to generate.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "provider": {
+        "description": "Optional provider override for single-provider generation.",
+        "enum": [
+          "openai",
+          "anthropic",
+          "google",
+          "google_vertex",
+          "vercel",
+          "xai",
+          "black_forest_labs",
+          "klingai",
+          "bytedance",
+          "fal",
+          "replicate",
+          "azure",
+          "amazon_bedrock",
+          "groq",
+          "cohere",
+          "moonshotai",
+          "mistral",
+          "ollama",
+          "openrouter",
+          "deepseek",
+        ],
+        "type": "string",
+      },
+      "providers": {
+        "description": "Optional provider subset when mode is multi_model.",
+        "items": {
+          "enum": [
+            "openai",
+            "anthropic",
+            "google",
+            "google_vertex",
+            "vercel",
+            "xai",
+            "black_forest_labs",
+            "klingai",
+            "bytedance",
+            "fal",
+            "replicate",
+            "azure",
+            "amazon_bedrock",
+            "groq",
+            "cohere",
+            "moonshotai",
+            "mistral",
+            "ollama",
+            "openrouter",
+            "deepseek",
+          ],
+          "type": "string",
+        },
+        "maxItems": 6,
+        "minItems": 1,
+        "type": "array",
+      },
+      "referenceImageAttachmentIndex": {
+        "description": "Optional attachment index when multiple images share a filename.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "referenceImageFilename": {
+        "description": "Optional image attachment filename for reference-image generation.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "referenceImageMessageId": {
+        "description": "Optional message id containing the reference image attachment.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "seed": {
+        "description": "Optional deterministic seed.",
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer",
+      },
+      "size": {
+        "description": "Optional size like 1024x1024.",
+        "pattern": "^\\d+x\\d+$",
+        "type": "string",
+      },
+    },
+    "required": [
+      "prompt",
+    ],
+    "type": "object",
+  },
+  "generate_video": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "aspectRatio": {
+        "description": "Optional aspect ratio like 16:9 or 9:16.",
+        "pattern": "^\\d+:\\d+$",
+        "type": "string",
+      },
+      "count": {
+        "default": 1,
+        "description": "Number of videos to generate per provider.",
+        "maximum": 2,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "duration": {
+        "description": "Optional target duration in seconds.",
+        "maximum": 30,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "fps": {
+        "description": "Optional target frames per second.",
+        "maximum": 60,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "mode": {
+        "default": "single",
+        "description": "Use single for one provider or multi_model to fan out.",
+        "enum": [
+          "single",
+          "multi_model",
+        ],
+        "type": "string",
+      },
+      "modelId": {
+        "description": "Optional model override for single-provider generation.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "prompt": {
+        "description": "Describe the video you want to generate.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "provider": {
+        "description": "Optional provider override for single-provider generation.",
+        "enum": [
+          "openai",
+          "anthropic",
+          "google",
+          "google_vertex",
+          "vercel",
+          "xai",
+          "black_forest_labs",
+          "klingai",
+          "bytedance",
+          "fal",
+          "replicate",
+          "azure",
+          "amazon_bedrock",
+          "groq",
+          "cohere",
+          "moonshotai",
+          "mistral",
+          "ollama",
+          "openrouter",
+          "deepseek",
+        ],
+        "type": "string",
+      },
+      "providers": {
+        "description": "Optional provider subset when mode is multi_model.",
+        "items": {
+          "enum": [
+            "openai",
+            "anthropic",
+            "google",
+            "google_vertex",
+            "vercel",
+            "xai",
+            "black_forest_labs",
+            "klingai",
+            "bytedance",
+            "fal",
+            "replicate",
+            "azure",
+            "amazon_bedrock",
+            "groq",
+            "cohere",
+            "moonshotai",
+            "mistral",
+            "ollama",
+            "openrouter",
+            "deepseek",
+          ],
+          "type": "string",
+        },
+        "maxItems": 4,
+        "minItems": 1,
+        "type": "array",
+      },
+      "referenceImageAttachmentIndex": {
+        "description": "Optional attachment index when multiple images share a filename.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "referenceImageFilename": {
+        "description": "Optional image attachment filename for image-to-video generation.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "referenceImageMessageId": {
+        "description": "Optional message id containing the reference image attachment.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "resolution": {
+        "description": "Optional resolution like 1280x720.",
+        "pattern": "^\\d+x\\d+$",
+        "type": "string",
+      },
+      "seed": {
+        "description": "Optional deterministic seed.",
+        "maximum": 9007199254740991,
+        "minimum": -9007199254740991,
+        "type": "integer",
+      },
+    },
+    "required": [
+      "prompt",
+    ],
+    "type": "object",
+  },
+  "git": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "enum": [
+          "status",
+          "diff",
+          "log",
+          "branch_list",
+          "branch_create",
+          "checkout",
+          "add",
+          "commit",
+        ],
+        "type": "string",
+      },
+      "branch": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "limit": {
+        "maximum": 50,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "message": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "paths": {
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "type": "array",
+      },
+      "ref": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "staged": {
+        "type": "boolean",
+      },
+    },
+    "required": [
+      "action",
+    ],
+    "type": "object",
+  },
+  "glob": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxDepth": {
+        "description": "Maximum directory depth to recurse into. Defaults to 12 levels.",
+        "maximum": 64,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "path": {
+        "description": "Directory path to search in. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "pattern": {
+        "description": "Glob pattern to match, for example "*.ts" or "**/*.test.ts".",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "pattern",
+    ],
+    "type": "object",
+  },
+  "grep": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "include": {
+        "description": "Optional file glob to include in the search, for example "*.ts" or "*.{ts,tsx}".",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Directory path to search. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "pattern": {
+        "description": "Regular expression pattern to search for in file contents.",
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "pattern",
+    ],
+    "type": "object",
+  },
+  "list": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "ignore": {
+        "description": "Optional path prefixes, names, or simple glob patterns to exclude from the listing.",
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "maxItems": 32,
+        "type": "array",
+      },
+      "maxDepth": {
+        "description": "Maximum directory depth to recurse into. Defaults to 12 levels.",
+        "maximum": 64,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "path": {
+        "description": "Directory path to inspect. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "load_document": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "attachmentIndex": {
+        "description": "1-based index used to disambiguate duplicate filenames on the same message.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "filename": {
+        "description": "Filename of the attachment to load when source is message_attachment.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "maxChars": {
+        "description": "Optional maximum character count for normalized output.",
+        "maximum": 120000,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "messageId": {
+        "description": "Optional source message id. Defaults to the current source message when loading attachments.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Workspace file path to load when source is workspace_path. In default permissions mode this must stay inside the selected workspace root or discovered skill directories.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "source": {
+        "enum": [
+          "workspace_path",
+          "message_attachment",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "source",
+    ],
+    "type": "object",
+  },
+  "load_skill": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "description": "The discovered skill name to load.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "manage_task": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "Required. The action to perform: 'create' a new task, 'update' an existing task's status/title/description, or 'delete' a task.",
+        "enum": [
+          "create",
+          "update",
+          "delete",
+        ],
+        "type": "string",
+      },
+      "description": {
+        "anyOf": [
+          {
+            "maxLength": 600,
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+        "description": "Optional task description.",
+      },
+      "planId": {
+        "description": "Optional plan ID. Omit to use the current thread plan.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "status": {
+        "description": "Task status: 'pending', 'in_progress', 'completed', or 'blocked'. Required for update actions.",
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "blocked",
+        ],
+        "type": "string",
+      },
+      "taskId": {
+        "description": "Required for update and delete actions. The ID of the task to modify.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "title": {
+        "description": "Task title. Required for create actions.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "action",
+    ],
+    "type": "object",
+  },
+  "move_file": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fromPath": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+      "toPath": {
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "fromPath",
+      "rationale",
+      "toPath",
+    ],
+    "type": "object",
+  },
+  "multiedit": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "edits": {
+        "description": "Ordered exact-text edits to apply to the same file.",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "newString": {
+              "description": "Replacement text.",
+              "type": "string",
+            },
+            "oldString": {
+              "description": "Exact text to replace.",
+              "minLength": 1,
+              "type": "string",
+            },
+            "replaceAll": {
+              "description": "Replace every occurrence for this edit instead of exactly one.",
+              "type": "boolean",
+            },
+          },
+          "required": [
+            "newString",
+            "oldString",
+          ],
+          "type": "object",
+        },
+        "maxItems": 20,
+        "minItems": 1,
+        "type": "array",
+      },
+      "path": {
+        "description": "File path to modify. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "description": "Why these coordinated edits are needed.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "edits",
+      "path",
+      "rationale",
+    ],
+    "type": "object",
+  },
+  "read": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "maximum": 400,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "offset": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "path": {
+        "description": "File or directory path to read. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "path",
+    ],
+    "type": "object",
+  },
+  "run_subagent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "allowMutations": {
+        "default": true,
+        "type": "boolean",
+      },
+      "prompt": {
+        "maxLength": 20000,
+        "minLength": 1,
+        "type": "string",
+      },
+      "toolHints": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 8,
+            "type": "array",
+          },
+          "integrationNamespaces": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 8,
+            "type": "array",
+          },
+          "mcpNamespaces": {
+            "items": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "maxItems": 8,
+            "type": "array",
+          },
+          "note": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "virtualKey": {
+        "maxLength": 120,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "prompt",
+    ],
+    "type": "object",
+  },
+  "run_task": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "description": "Directory path to run the task from. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "rationale": {
+        "description": "Why this project task should run.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "task": {
+        "description": "Project task to run using the nearest package.json script.",
+        "enum": [
+          "build",
+          "format",
+          "lint",
+          "test",
+          "typecheck",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "rationale",
+      "task",
+    ],
+    "type": "object",
+  },
+  "save_memory": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "description": "Durable information worth keeping for future conversations.",
+        "maxLength": 8000,
+        "minLength": 8,
+        "type": "string",
+      },
+      "kind": {
+        "description": "The kind of memory being stored.",
+        "enum": [
+          "preference",
+          "profile",
+          "workflow",
+          "project",
+          "fact",
+        ],
+        "type": "string",
+      },
+      "salience": {
+        "description": "How important this memory is for future recall.",
+        "maximum": 1,
+        "minimum": 0,
+        "type": "number",
+      },
+      "scope": {
+        "description": "Store as global memory or attach it to the active workspace.",
+        "enum": [
+          "global",
+          "workspace",
+          "auto",
+        ],
+        "type": "string",
+      },
+      "summary": {
+        "description": "Compact memory summary for prompt injection.",
+        "maxLength": 160,
+        "type": "string",
+      },
+    },
+    "required": [
+      "content",
+      "kind",
+    ],
+    "type": "object",
+  },
+  "search_memory": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "description": "Maximum number of memories to return.",
+        "maximum": 12,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "query": {
+        "description": "What to look up in long-term memory.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "scope": {
+        "description": "Search global memory, workspace memory, or both.",
+        "enum": [
+          "auto",
+          "both",
+          "global",
+          "workspace",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "shell_command": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "backgroundTaskId": {
+        "description": "Background task id returned by start_background. Required for check_background and stop_background.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+      "command": {
+        "description": "One shell command to run in the linked workspace root or discovered skill directory. Required for run and start_background modes.",
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string",
+      },
+      "mode": {
+        "description": "How to use the shell. Use run for normal foreground commands, start_background for long-running commands, check_background to poll a background task, and stop_background to stop one.",
+        "enum": [
+          "run",
+          "start_background",
+          "check_background",
+          "stop_background",
+        ],
+        "type": "string",
+      },
+      "rationale": {
+        "description": "Why this command is needed and what you expect to learn.",
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+      "runInBackground": {
+        "description": "Convenience flag equivalent to mode=start_background when true.",
+        "type": "boolean",
+      },
+      "waitForCompletion": {
+        "description": "For check_background, wait until the background command completes instead of returning the current snapshot.",
+        "type": "boolean",
+      },
+    },
+    "required": [
+      "rationale",
+    ],
+    "type": "object",
+  },
+  "webfetch": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "format": {
+        "default": "markdown",
+        "description": "The response format to return. Prefer markdown for documentation pages unless plain text or raw HTML is specifically needed.",
+        "enum": [
+          "text",
+          "markdown",
+          "html",
+        ],
+        "type": "string",
+      },
+      "timeout": {
+        "description": "Optional timeout in seconds, up to 120.",
+        "maximum": 120,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "url": {
+        "description": "A single URL to fetch.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "urls": {
+        "description": "Optional batch of URLs to fetch when batch mode is enabled in General settings.",
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "type": "array",
+      },
+    },
+    "type": "object",
+  },
+  "websearch": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "livecrawl": {
+        "enum": [
+          "never",
+          "preferred",
+          "always",
+        ],
+        "type": "string",
+      },
+      "provider": {
+        "enum": [
+          "exa",
+          "searxng",
+        ],
+        "type": "string",
+      },
+      "query": {
+        "description": "Search query to run on the web.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "resultCount": {
+        "description": "Maximum number of search results to return.",
+        "maximum": 25,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "searchType": {
+        "description": "Search depth and speed mode.",
+        "enum": [
+          "auto",
+          "fast",
+          "deep",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+}
+`;
+
+exports[`tool input JSON schemas converts every plan-mode tool to a valid object schema 1`] = `
+{
+  "ask_question": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "questions": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "allowMultiple": {
+              "description": "When true the user can select multiple options instead of one. Use for questions where several answers apply simultaneously.",
+              "type": "boolean",
+            },
+            "header": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string",
+            },
+            "id": {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string",
+            },
+            "options": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "description": {
+                    "maxLength": 400,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                  "label": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "type": "string",
+                  },
+                },
+                "required": [
+                  "description",
+                  "label",
+                ],
+                "type": "object",
+              },
+              "maxItems": 8,
+              "minItems": 2,
+              "type": "array",
+            },
+            "question": {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "header",
+            "options",
+            "question",
+          ],
+          "type": "object",
+        },
+        "maxItems": 6,
+        "minItems": 1,
+        "type": "array",
+      },
+    },
+    "required": [
+      "questions",
+    ],
+    "type": "object",
+  },
+  "create_plan": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "audience": {
+        "enum": [
+          "technical",
+          "general",
+        ],
+        "type": "string",
+      },
+      "document": {
+        "maxLength": 40000,
+        "minLength": 1,
+        "type": "string",
+      },
+      "goal": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string",
+      },
+      "summary": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string",
+      },
+      "tasks": {
+        "default": [],
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "anyOf": [
+                {
+                  "maxLength": 600,
+                  "type": "string",
+                },
+                {
+                  "type": "null",
+                },
+              ],
+            },
+            "title": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "title",
+          ],
+          "type": "object",
+        },
+        "maxItems": 20,
+        "type": "array",
+      },
+      "title": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "audience",
+      "document",
+      "goal",
+      "summary",
+      "title",
+    ],
+    "type": "object",
+  },
+  "glob": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxDepth": {
+        "description": "Maximum directory depth to recurse into. Defaults to 12 levels.",
+        "maximum": 64,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "path": {
+        "description": "Directory path to search in. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "pattern": {
+        "description": "Glob pattern to match, for example "*.ts" or "**/*.test.ts".",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "pattern",
+    ],
+    "type": "object",
+  },
+  "grep": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "include": {
+        "description": "Optional file glob to include in the search, for example "*.ts" or "*.{ts,tsx}".",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Directory path to search. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "pattern": {
+        "description": "Regular expression pattern to search for in file contents.",
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "pattern",
+    ],
+    "type": "object",
+  },
+  "list": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "ignore": {
+        "description": "Optional path prefixes, names, or simple glob patterns to exclude from the listing.",
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "maxItems": 32,
+        "type": "array",
+      },
+      "maxDepth": {
+        "description": "Maximum directory depth to recurse into. Defaults to 12 levels.",
+        "maximum": 64,
+        "minimum": 0,
+        "type": "integer",
+      },
+      "path": {
+        "description": "Directory path to inspect. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "load_document": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "attachmentIndex": {
+        "description": "1-based index used to disambiguate duplicate filenames on the same message.",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "filename": {
+        "description": "Filename of the attachment to load when source is message_attachment.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "maxChars": {
+        "description": "Optional maximum character count for normalized output.",
+        "maximum": 120000,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "messageId": {
+        "description": "Optional source message id. Defaults to the current source message when loading attachments.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Workspace file path to load when source is workspace_path. In default permissions mode this must stay inside the selected workspace root or discovered skill directories.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "source": {
+        "enum": [
+          "workspace_path",
+          "message_attachment",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "source",
+    ],
+    "type": "object",
+  },
+  "load_skill": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "description": "The discovered skill name to load.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "manage_task": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "Required. The action to perform: 'create' a new task, 'update' an existing task's status/title/description, or 'delete' a task.",
+        "enum": [
+          "create",
+          "update",
+          "delete",
+        ],
+        "type": "string",
+      },
+      "description": {
+        "anyOf": [
+          {
+            "maxLength": 600,
+            "type": "string",
+          },
+          {
+            "type": "null",
+          },
+        ],
+        "description": "Optional task description.",
+      },
+      "planId": {
+        "description": "Optional plan ID. Omit to use the current thread plan.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "status": {
+        "description": "Task status: 'pending', 'in_progress', 'completed', or 'blocked'. Required for update actions.",
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "blocked",
+        ],
+        "type": "string",
+      },
+      "taskId": {
+        "description": "Required for update and delete actions. The ID of the task to modify.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "title": {
+        "description": "Task title. Required for create actions.",
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "action",
+    ],
+    "type": "object",
+  },
+  "read": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "maximum": 400,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "offset": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer",
+      },
+      "path": {
+        "description": "File or directory path to read. In default permissions mode this must be relative to the selected workspace root.",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "path",
+    ],
+    "type": "object",
+  },
+  "update_plan": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "audience": {
+        "enum": [
+          "technical",
+          "general",
+        ],
+        "type": "string",
+      },
+      "document": {
+        "maxLength": 40000,
+        "minLength": 1,
+        "type": "string",
+      },
+      "goal": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string",
+      },
+      "planId": {
+        "minLength": 1,
+        "type": "string",
+      },
+      "summary": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "type": "string",
+      },
+      "title": {
+        "maxLength": 200,
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+}
+`;
+
+exports[`tool input JSON schemas converts every integration tool to a valid object schema 1`] = `
+{
+  "airtable_create_comment": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "recordId": {
+        "description": "The record ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+      "text": {
+        "description": "The comment text",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "recordId",
+      "text",
+    ],
+    "type": "object",
+  },
+  "airtable_create_field": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "description": {
+        "description": "Optional description",
+        "type": "string",
+      },
+      "name": {
+        "description": "Name for the new field",
+        "minLength": 1,
+        "type": "string",
+      },
+      "options": {
+        "additionalProperties": {},
+        "description": "REQUIRED for singleSelect/multipleSelects: { choices: [{ name: "Value" }] }. For number: { precision: 0 }. For currency: { precision: 2, symbol: "$" }",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name (name will be resolved to ID)",
+        "minLength": 1,
+        "type": "string",
+      },
+      "type": {
+        "description": "Field type: singleLineText, multilineText, number, singleSelect, multipleSelects, date, dateTime, checkbox, email, url, phoneNumber, currency, percent, rating",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "name",
+      "type",
+    ],
+    "type": "object",
+  },
+  "airtable_create_records": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "records": {
+        "description": "Records to create (max 10)",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "additionalProperties": {},
+              "description": "Field values for the record",
+              "propertyNames": {
+                "type": "string",
+              },
+              "type": "object",
+            },
+          },
+          "required": [
+            "fields",
+          ],
+          "type": "object",
+        },
+        "maxItems": 10,
+        "minItems": 1,
+        "type": "array",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "records",
+    ],
+    "type": "object",
+  },
+  "airtable_create_table": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "description": {
+        "description": "Optional description",
+        "type": "string",
+      },
+      "fields": {
+        "description": "Initial fields for the table",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string",
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string",
+            },
+            "options": {
+              "additionalProperties": {},
+              "propertyNames": {
+                "type": "string",
+              },
+              "type": "object",
+            },
+            "type": {
+              "description": "Field type (e.g. singleLineText, number, singleSelect)",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "name",
+            "type",
+          ],
+          "type": "object",
+        },
+        "minItems": 1,
+        "type": "array",
+      },
+      "name": {
+        "description": "Name for the new table",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "name",
+      "fields",
+    ],
+    "type": "object",
+  },
+  "airtable_delete_records": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "recordIds": {
+        "description": "Record IDs to delete (max 10)",
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "maxItems": 10,
+        "minItems": 1,
+        "type": "array",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "recordIds",
+    ],
+    "type": "object",
+  },
+  "airtable_get_record": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "recordId": {
+        "description": "The record ID (e.g. recXXXXXXXXXXXXXX)",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "recordId",
+    ],
+    "type": "object",
+  },
+  "airtable_get_table": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+    ],
+    "type": "object",
+  },
+  "airtable_get_user": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "airtable_list_bases": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "airtable_list_comments": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "recordId": {
+        "description": "The record ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "recordId",
+    ],
+    "type": "object",
+  },
+  "airtable_list_records": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "fields": {
+        "description": "Specific field names to return",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "filterByFormula": {
+        "description": "Airtable formula to filter records (e.g. {Status}='Done')",
+        "type": "string",
+      },
+      "maxRecords": {
+        "description": "Maximum number of records to return",
+        "type": "number",
+      },
+      "pageSize": {
+        "description": "Number of records per page (max 100)",
+        "type": "number",
+      },
+      "sort": {
+        "description": "Sort configuration",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "direction": {
+              "enum": [
+                "asc",
+                "desc",
+              ],
+              "type": "string",
+            },
+            "field": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "field",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+      "view": {
+        "description": "View name or ID to filter by",
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+    ],
+    "type": "object",
+  },
+  "airtable_list_tables": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID (e.g. appXXXXXXXXXXXXXX)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+    ],
+    "type": "object",
+  },
+  "airtable_update_field": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "description": {
+        "description": "New description",
+        "type": "string",
+      },
+      "fieldIdOrName": {
+        "description": "The field ID (e.g. fldXXXXXXXXXXXXXX)",
+        "minLength": 1,
+        "type": "string",
+      },
+      "name": {
+        "description": "New name for the field",
+        "type": "string",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name (name will be resolved to ID)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "fieldIdOrName",
+    ],
+    "type": "object",
+  },
+  "airtable_update_records": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "baseId": {
+        "description": "The Airtable base ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "records": {
+        "description": "Records to update (max 10)",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "fields": {
+              "additionalProperties": {},
+              "description": "Field values to update",
+              "propertyNames": {
+                "type": "string",
+              },
+              "type": "object",
+            },
+            "id": {
+              "description": "The record ID to update",
+              "minLength": 1,
+              "type": "string",
+            },
+          },
+          "required": [
+            "id",
+            "fields",
+          ],
+          "type": "object",
+        },
+        "maxItems": 10,
+        "minItems": 1,
+        "type": "array",
+      },
+      "tableIdOrName": {
+        "description": "The table ID or name",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "baseId",
+      "tableIdOrName",
+      "records",
+    ],
+    "type": "object",
+  },
+  "arxiv_get_paper": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "arxivId": {
+        "description": "ArXiv paper ID (e.g. '2301.07041', 'arxiv:2301.07041', or full URL).",
+        "type": "string",
+      },
+    },
+    "required": [
+      "arxivId",
+    ],
+    "type": "object",
+  },
+  "arxiv_search": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "default": 10,
+        "description": "Maximum number of papers to return.",
+        "maximum": 30,
+        "minimum": 1,
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query. Use arXiv syntax: 'all:' for any field, 'ti:' for title, 'au:' for author, 'abs:' for abstract, 'cat:' for category.",
+        "type": "string",
+      },
+      "sortBy": {
+        "default": "relevance",
+        "description": "Sort order for results.",
+        "enum": [
+          "relevance",
+          "lastUpdatedDate",
+          "submittedDate",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "gcal_create_event": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "attendees": {
+        "description": "List of attendee email addresses.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "calendarId": {
+        "description": "Calendar ID (defaults to 'primary').",
+        "type": "string",
+      },
+      "description": {
+        "description": "Event description.",
+        "type": "string",
+      },
+      "endDateTime": {
+        "description": "End date/time in ISO 8601 format.",
+        "type": "string",
+      },
+      "location": {
+        "description": "Event location.",
+        "type": "string",
+      },
+      "startDateTime": {
+        "description": "Start date/time in ISO 8601 format.",
+        "type": "string",
+      },
+      "summary": {
+        "description": "Event title.",
+        "type": "string",
+      },
+      "timeZone": {
+        "description": "IANA time zone (e.g. 'America/New_York').",
+        "type": "string",
+      },
+    },
+    "required": [
+      "summary",
+      "startDateTime",
+      "endDateTime",
+    ],
+    "type": "object",
+  },
+  "gcal_delete_event": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Calendar ID containing the event.",
+        "type": "string",
+      },
+      "eventId": {
+        "description": "The event ID to delete.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "calendarId",
+      "eventId",
+    ],
+    "type": "object",
+  },
+  "gcal_get_event": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Calendar ID containing the event.",
+        "type": "string",
+      },
+      "eventId": {
+        "description": "The event ID to retrieve.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "calendarId",
+      "eventId",
+    ],
+    "type": "object",
+  },
+  "gcal_get_events": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Calendar ID (defaults to 'primary').",
+        "type": "string",
+      },
+      "maxResults": {
+        "default": 25,
+        "description": "Maximum number of events.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "number",
+      },
+      "query": {
+        "description": "Free text search term for events.",
+        "type": "string",
+      },
+      "timeMax": {
+        "description": "End of the date range in ISO 8601 format.",
+        "type": "string",
+      },
+      "timeMin": {
+        "description": "Start of the date range in ISO 8601 format (e.g. '2025-01-01T00:00:00Z').",
+        "type": "string",
+      },
+    },
+    "required": [
+      "timeMin",
+      "timeMax",
+    ],
+    "type": "object",
+  },
+  "gcal_get_free_busy": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarIds": {
+        "description": "Calendar IDs to check (defaults to primary).",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "timeMax": {
+        "description": "End of the range in ISO 8601 format.",
+        "type": "string",
+      },
+      "timeMin": {
+        "description": "Start of the range in ISO 8601 format.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "timeMin",
+      "timeMax",
+    ],
+    "type": "object",
+  },
+  "gcal_get_today": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Calendar ID (defaults to 'primary').",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "gcal_list_calendars": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "gcal_move_event": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Source calendar ID.",
+        "type": "string",
+      },
+      "destinationCalendarId": {
+        "description": "Destination calendar ID.",
+        "type": "string",
+      },
+      "eventId": {
+        "description": "The event ID to move.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "calendarId",
+      "eventId",
+      "destinationCalendarId",
+    ],
+    "type": "object",
+  },
+  "gcal_quick_add": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Calendar ID (defaults to 'primary').",
+        "type": "string",
+      },
+      "text": {
+        "description": "Natural language description of the event.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "text",
+    ],
+    "type": "object",
+  },
+  "gcal_rsvp": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "calendarId": {
+        "description": "Calendar ID containing the event.",
+        "type": "string",
+      },
+      "eventId": {
+        "description": "The event ID to respond to.",
+        "type": "string",
+      },
+      "status": {
+        "description": "Your response to the invitation.",
+        "enum": [
+          "accepted",
+          "declined",
+          "tentative",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "calendarId",
+      "eventId",
+      "status",
+    ],
+    "type": "object",
+  },
+  "gcal_update_event": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "attendees": {
+        "description": "Updated attendee email list.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "calendarId": {
+        "description": "Calendar ID (defaults to 'primary').",
+        "type": "string",
+      },
+      "description": {
+        "description": "New event description.",
+        "type": "string",
+      },
+      "endDateTime": {
+        "description": "New end date/time in ISO 8601.",
+        "type": "string",
+      },
+      "eventId": {
+        "description": "The event ID to update.",
+        "type": "string",
+      },
+      "location": {
+        "description": "New event location.",
+        "type": "string",
+      },
+      "startDateTime": {
+        "description": "New start date/time in ISO 8601.",
+        "type": "string",
+      },
+      "summary": {
+        "description": "New event title.",
+        "type": "string",
+      },
+      "timeZone": {
+        "description": "IANA time zone.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "eventId",
+    ],
+    "type": "object",
+  },
+  "gdrive_create_folder": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "description": "Name for the new folder.",
+        "type": "string",
+      },
+      "parentFolderId": {
+        "description": "Parent folder ID. Defaults to root.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "gdrive_download": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fileId": {
+        "description": "Google Drive file ID to download.",
+        "type": "string",
+      },
+      "localPath": {
+        "description": "Local path to save the file to. Defaults to ./downloads/{filename}.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "fileId",
+    ],
+    "type": "object",
+  },
+  "gdrive_get_file": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fileId": {
+        "description": "The Google Drive file ID.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "fileId",
+    ],
+    "type": "object",
+  },
+  "gdrive_list_files": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "folderId": {
+        "description": "Folder ID to list. Defaults to root.",
+        "type": "string",
+      },
+      "maxResults": {
+        "default": 50,
+        "description": "Maximum number of files to return.",
+        "maximum": 100,
+        "minimum": 1,
+        "type": "number",
+      },
+    },
+    "type": "object",
+  },
+  "gdrive_move": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fileId": {
+        "description": "The file ID to move.",
+        "type": "string",
+      },
+      "newParentFolderId": {
+        "description": "The destination folder ID.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "fileId",
+      "newParentFolderId",
+    ],
+    "type": "object",
+  },
+  "gdrive_rename": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fileId": {
+        "description": "The file ID to rename.",
+        "type": "string",
+      },
+      "newName": {
+        "description": "The new name for the file.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "fileId",
+      "newName",
+    ],
+    "type": "object",
+  },
+  "gdrive_search": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "default": 20,
+        "description": "Maximum number of results to return.",
+        "maximum": 50,
+        "minimum": 1,
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query string.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "gdrive_share": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "email": {
+        "description": "Email address of the user to share with.",
+        "format": "email",
+        "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+        "type": "string",
+      },
+      "fileId": {
+        "description": "The file ID to share.",
+        "type": "string",
+      },
+      "role": {
+        "description": "Permission role to grant.",
+        "enum": [
+          "reader",
+          "commenter",
+          "writer",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "fileId",
+      "email",
+      "role",
+    ],
+    "type": "object",
+  },
+  "gdrive_trash": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fileId": {
+        "description": "The file ID to trash.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "fileId",
+    ],
+    "type": "object",
+  },
+  "gdrive_upload": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "localPath": {
+        "description": "Path to the local file to upload (relative to workspace root or absolute).",
+        "type": "string",
+      },
+      "name": {
+        "description": "Name for the file in Drive. Defaults to the local filename.",
+        "type": "string",
+      },
+      "parentFolderId": {
+        "description": "Drive folder ID to upload into. Defaults to root.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "localPath",
+    ],
+    "type": "object",
+  },
+  "gh_add_issue_comment": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "description": "Comment body (Markdown).",
+        "type": "string",
+      },
+      "issueNumber": {
+        "description": "Issue number.",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "issueNumber",
+      "body",
+    ],
+    "type": "object",
+  },
+  "gh_add_pr_comment": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "description": "Comment body (Markdown).",
+        "type": "string",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "prNumber": {
+        "description": "Pull request number.",
+        "type": "number",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "prNumber",
+      "body",
+    ],
+    "type": "object",
+  },
+  "gh_close_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "issueNumber": {
+        "description": "Issue number to close.",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "issueNumber",
+    ],
+    "type": "object",
+  },
+  "gh_create_branch": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "branchName": {
+        "description": "Name for the new branch.",
+        "type": "string",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "sha": {
+        "description": "Commit SHA to branch from.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "branchName",
+      "sha",
+    ],
+    "type": "object",
+  },
+  "gh_create_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "assignees": {
+        "description": "Usernames to assign.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "body": {
+        "description": "Issue body (Markdown).",
+        "type": "string",
+      },
+      "labels": {
+        "description": "Label names.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "title": {
+        "description": "Issue title.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "title",
+    ],
+    "type": "object",
+  },
+  "gh_create_pr": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "base": {
+        "description": "Branch to merge into.",
+        "type": "string",
+      },
+      "body": {
+        "description": "PR description (Markdown).",
+        "type": "string",
+      },
+      "draft": {
+        "description": "Create as draft PR.",
+        "type": "boolean",
+      },
+      "head": {
+        "description": "Branch containing changes.",
+        "type": "string",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "title": {
+        "description": "PR title.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "title",
+      "head",
+      "base",
+    ],
+    "type": "object",
+  },
+  "gh_create_release": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "description": "Release notes (Markdown).",
+        "type": "string",
+      },
+      "draft": {
+        "description": "Create as draft.",
+        "type": "boolean",
+      },
+      "name": {
+        "description": "Release title.",
+        "type": "string",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "prerelease": {
+        "description": "Mark as pre-release.",
+        "type": "boolean",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "tagName": {
+        "description": "Tag name for the release.",
+        "type": "string",
+      },
+      "targetCommitish": {
+        "description": "Branch or commit SHA to tag (defaults to default branch).",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "tagName",
+    ],
+    "type": "object",
+  },
+  "gh_get_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "issueNumber": {
+        "description": "Issue number.",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "issueNumber",
+    ],
+    "type": "object",
+  },
+  "gh_get_pr": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "prNumber": {
+        "description": "Pull request number.",
+        "type": "number",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "prNumber",
+    ],
+    "type": "object",
+  },
+  "gh_get_repo": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+    ],
+    "type": "object",
+  },
+  "gh_get_run_logs": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "runId": {
+        "description": "Workflow run ID.",
+        "type": "number",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "runId",
+    ],
+    "type": "object",
+  },
+  "gh_list_branches": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 30).",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+    ],
+    "type": "object",
+  },
+  "gh_list_issues": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "labels": {
+        "description": "Comma-separated label names to filter by.",
+        "type": "string",
+      },
+      "maxResults": {
+        "description": "Max results (default 30).",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "state": {
+        "description": "Filter by state (default open).",
+        "enum": [
+          "open",
+          "closed",
+          "all",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+    ],
+    "type": "object",
+  },
+  "gh_list_prs": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 30).",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "state": {
+        "description": "Filter by state (default open).",
+        "enum": [
+          "open",
+          "closed",
+          "all",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+    ],
+    "type": "object",
+  },
+  "gh_list_releases": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 20).",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+    ],
+    "type": "object",
+  },
+  "gh_list_repos": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 30).",
+        "type": "number",
+      },
+      "sort": {
+        "description": "Sort order.",
+        "enum": [
+          "updated",
+          "created",
+          "pushed",
+          "full_name",
+        ],
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "gh_list_runs": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "branch": {
+        "description": "Filter by branch.",
+        "type": "string",
+      },
+      "maxResults": {
+        "description": "Max results (default 20).",
+        "type": "number",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "status": {
+        "description": "Filter by status (e.g. completed, in_progress, queued).",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+    ],
+    "type": "object",
+  },
+  "gh_merge_pr": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "commitTitle": {
+        "description": "Custom merge commit title.",
+        "type": "string",
+      },
+      "mergeMethod": {
+        "description": "Merge strategy (default merge).",
+        "enum": [
+          "merge",
+          "squash",
+          "rebase",
+        ],
+        "type": "string",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "prNumber": {
+        "description": "Pull request number.",
+        "type": "number",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "prNumber",
+    ],
+    "type": "object",
+  },
+  "gh_rerun_workflow": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "runId": {
+        "description": "Workflow run ID to re-run.",
+        "type": "number",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "runId",
+    ],
+    "type": "object",
+  },
+  "gh_review_pr": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "description": "Review comment body.",
+        "type": "string",
+      },
+      "event": {
+        "description": "Review action.",
+        "enum": [
+          "APPROVE",
+          "REQUEST_CHANGES",
+          "COMMENT",
+        ],
+        "type": "string",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "prNumber": {
+        "description": "Pull request number.",
+        "type": "number",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "prNumber",
+      "event",
+    ],
+    "type": "object",
+  },
+  "gh_search_code": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 20).",
+        "type": "number",
+      },
+      "query": {
+        "description": "Code search query (GitHub search syntax, e.g. 'useState repo:facebook/react').",
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "gh_search_repos": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 20).",
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query (GitHub search syntax).",
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "gh_update_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "assignees": {
+        "description": "Replace assignees.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "body": {
+        "description": "New body.",
+        "type": "string",
+      },
+      "issueNumber": {
+        "description": "Issue number.",
+        "type": "number",
+      },
+      "labels": {
+        "description": "Replace labels.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "owner": {
+        "description": "Repository owner (user or organization).",
+        "type": "string",
+      },
+      "repo": {
+        "description": "Repository name.",
+        "type": "string",
+      },
+      "state": {
+        "description": "New state.",
+        "enum": [
+          "open",
+          "closed",
+        ],
+        "type": "string",
+      },
+      "title": {
+        "description": "New title.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "owner",
+      "repo",
+      "issueNumber",
+    ],
+    "type": "object",
+  },
+  "gmail_archive": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The message ID to archive.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "gmail_bulk_action": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "action": {
+        "description": "The action to perform on all messages.",
+        "enum": [
+          "archive",
+          "trash",
+          "star",
+          "unstar",
+          "mark_read",
+          "mark_unread",
+        ],
+        "type": "string",
+      },
+      "messageIds": {
+        "description": "Message IDs to act on.",
+        "items": {
+          "type": "string",
+        },
+        "maxItems": 50,
+        "minItems": 1,
+        "type": "array",
+      },
+    },
+    "required": [
+      "messageIds",
+      "action",
+    ],
+    "type": "object",
+  },
+  "gmail_create_draft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bcc": {
+        "description": "BCC recipients, comma-separated.",
+        "type": "string",
+      },
+      "body": {
+        "description": "Email body in HTML format.",
+        "type": "string",
+      },
+      "cc": {
+        "description": "CC recipients, comma-separated.",
+        "type": "string",
+      },
+      "subject": {
+        "description": "Email subject line.",
+        "type": "string",
+      },
+      "to": {
+        "description": "Recipient email address(es), comma-separated.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "to",
+      "subject",
+      "body",
+    ],
+    "type": "object",
+  },
+  "gmail_forward": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "additionalBody": {
+        "description": "Optional message to include above the forwarded email.",
+        "type": "string",
+      },
+      "messageId": {
+        "description": "The message ID to forward.",
+        "type": "string",
+      },
+      "to": {
+        "description": "Recipient email address(es), comma-separated.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+      "to",
+    ],
+    "type": "object",
+  },
+  "gmail_get_email": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The Gmail message ID to retrieve.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "gmail_get_thread": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "description": "The thread ID to retrieve.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "threadId",
+    ],
+    "type": "object",
+  },
+  "gmail_list_labels": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "gmail_manage_labels": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "addLabelIds": {
+        "description": "Label IDs to add.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "messageIds": {
+        "description": "Message IDs to modify.",
+        "items": {
+          "type": "string",
+        },
+        "minItems": 1,
+        "type": "array",
+      },
+      "removeLabelIds": {
+        "description": "Label IDs to remove.",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+    },
+    "required": [
+      "messageIds",
+    ],
+    "type": "object",
+  },
+  "gmail_mark_read": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The message ID to mark as read.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "gmail_mark_unread": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The message ID to mark as unread.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "gmail_reply": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bcc": {
+        "description": "BCC recipients, comma-separated.",
+        "type": "string",
+      },
+      "body": {
+        "description": "Reply body in HTML format.",
+        "type": "string",
+      },
+      "cc": {
+        "description": "CC recipients, comma-separated.",
+        "type": "string",
+      },
+      "messageId": {
+        "description": "The message ID to reply to.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+      "body",
+    ],
+    "type": "object",
+  },
+  "gmail_search": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "default": 10,
+        "description": "Maximum number of results to return.",
+        "maximum": 50,
+        "minimum": 1,
+        "type": "number",
+      },
+      "query": {
+        "description": "Gmail search query string.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "gmail_send": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bcc": {
+        "description": "BCC recipients, comma-separated.",
+        "type": "string",
+      },
+      "body": {
+        "description": "Email body in HTML format.",
+        "type": "string",
+      },
+      "cc": {
+        "description": "CC recipients, comma-separated.",
+        "type": "string",
+      },
+      "subject": {
+        "description": "Email subject line.",
+        "type": "string",
+      },
+      "to": {
+        "description": "Recipient email address(es), comma-separated.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "to",
+      "subject",
+      "body",
+    ],
+    "type": "object",
+  },
+  "gmail_star": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The message ID to star.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "gmail_trash": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The message ID to trash.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "gmail_unstar": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "messageId": {
+        "description": "The message ID to unstar.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "messageId",
+    ],
+    "type": "object",
+  },
+  "linear_create_comment": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "body": {
+        "description": "Comment body (markdown)",
+        "type": "string",
+      },
+      "issueId": {
+        "description": "The issue ID to comment on",
+        "type": "string",
+      },
+    },
+    "required": [
+      "issueId",
+      "body",
+    ],
+    "type": "object",
+  },
+  "linear_create_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "assigneeId": {
+        "description": "Assignee user ID",
+        "type": "string",
+      },
+      "description": {
+        "description": "Issue description (markdown)",
+        "type": "string",
+      },
+      "estimate": {
+        "description": "Estimate points",
+        "type": "number",
+      },
+      "labelIds": {
+        "description": "Label IDs to apply",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "priority": {
+        "description": "Priority: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low",
+        "maximum": 4,
+        "minimum": 0,
+        "type": "number",
+      },
+      "projectId": {
+        "description": "Project ID to associate",
+        "type": "string",
+      },
+      "stateId": {
+        "description": "Workflow state ID",
+        "type": "string",
+      },
+      "teamId": {
+        "description": "Team ID to create the issue in",
+        "type": "string",
+      },
+      "title": {
+        "description": "Issue title",
+        "type": "string",
+      },
+    },
+    "required": [
+      "teamId",
+      "title",
+    ],
+    "type": "object",
+  },
+  "linear_create_label": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "color": {
+        "description": "Color hex (e.g. #ff0000)",
+        "type": "string",
+      },
+      "description": {
+        "description": "Label description",
+        "type": "string",
+      },
+      "name": {
+        "description": "Label name",
+        "type": "string",
+      },
+      "teamId": {
+        "description": "Team ID to scope to",
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "linear_create_project": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "description": "Project description",
+        "type": "string",
+      },
+      "leadId": {
+        "description": "Lead user ID",
+        "type": "string",
+      },
+      "name": {
+        "description": "Project name",
+        "type": "string",
+      },
+      "startDate": {
+        "description": "Start date (ISO string)",
+        "type": "string",
+      },
+      "targetDate": {
+        "description": "Target date (ISO string)",
+        "type": "string",
+      },
+      "teamIds": {
+        "description": "Team IDs for this project",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+    },
+    "required": [
+      "name",
+      "teamIds",
+    ],
+    "type": "object",
+  },
+  "linear_delete_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "issueId": {
+        "description": "The issue ID to delete",
+        "type": "string",
+      },
+    },
+    "required": [
+      "issueId",
+    ],
+    "type": "object",
+  },
+  "linear_get_current_cycle": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "teamId": {
+        "description": "The team ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "teamId",
+    ],
+    "type": "object",
+  },
+  "linear_get_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "issueId": {
+        "description": "The issue ID (UUID)",
+        "type": "string",
+      },
+    },
+    "required": [
+      "issueId",
+    ],
+    "type": "object",
+  },
+  "linear_get_project": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "description": "The project ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "projectId",
+    ],
+    "type": "object",
+  },
+  "linear_get_team": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "teamId": {
+        "description": "The team ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "teamId",
+    ],
+    "type": "object",
+  },
+  "linear_list_comments": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "issueId": {
+        "description": "The issue ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "issueId",
+    ],
+    "type": "object",
+  },
+  "linear_list_cycles": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "teamId": {
+        "description": "The team ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "teamId",
+    ],
+    "type": "object",
+  },
+  "linear_list_issues": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "assigneeId": {
+        "description": "Filter by assignee user ID",
+        "type": "string",
+      },
+      "maxResults": {
+        "description": "Max results (default 25)",
+        "type": "number",
+      },
+      "projectId": {
+        "description": "Filter by project ID",
+        "type": "string",
+      },
+      "stateType": {
+        "description": "Filter by workflow state type",
+        "enum": [
+          "triage",
+          "backlog",
+          "unstarted",
+          "started",
+          "completed",
+          "cancelled",
+        ],
+        "type": "string",
+      },
+      "teamId": {
+        "description": "Filter by team ID",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "linear_list_labels": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "teamId": {
+        "description": "Filter by team ID",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "linear_list_projects": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 25)",
+        "type": "number",
+      },
+    },
+    "type": "object",
+  },
+  "linear_list_teams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "linear_list_users": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "linear_list_workflow_states": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "teamId": {
+        "description": "The team ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "teamId",
+    ],
+    "type": "object",
+  },
+  "linear_search_issues": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 20)",
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query text (at least 1 character)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "linear_update_issue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "assigneeId": {
+        "description": "New assignee user ID",
+        "type": "string",
+      },
+      "description": {
+        "description": "New description",
+        "type": "string",
+      },
+      "estimate": {
+        "description": "New estimate points",
+        "type": "number",
+      },
+      "issueId": {
+        "description": "The issue ID to update",
+        "type": "string",
+      },
+      "labelIds": {
+        "description": "New label IDs",
+        "items": {
+          "type": "string",
+        },
+        "type": "array",
+      },
+      "priority": {
+        "description": "New priority",
+        "maximum": 4,
+        "minimum": 0,
+        "type": "number",
+      },
+      "projectId": {
+        "description": "New project ID",
+        "type": "string",
+      },
+      "stateId": {
+        "description": "New workflow state ID",
+        "type": "string",
+      },
+      "title": {
+        "description": "New title",
+        "type": "string",
+      },
+    },
+    "required": [
+      "issueId",
+    ],
+    "type": "object",
+  },
+  "linear_update_project": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "description": "New description",
+        "type": "string",
+      },
+      "leadId": {
+        "description": "New lead user ID",
+        "type": "string",
+      },
+      "name": {
+        "description": "New name",
+        "type": "string",
+      },
+      "projectId": {
+        "description": "The project ID to update",
+        "type": "string",
+      },
+      "startDate": {
+        "description": "New start date",
+        "type": "string",
+      },
+      "state": {
+        "description": "New state (planned, started, paused, completed, cancelled)",
+        "type": "string",
+      },
+      "targetDate": {
+        "description": "New target date",
+        "type": "string",
+      },
+    },
+    "required": [
+      "projectId",
+    ],
+    "type": "object",
+  },
+  "mongo_aggregate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "pipeline": {
+        "description": "Aggregation pipeline stages.",
+        "items": {
+          "additionalProperties": {},
+          "description": "A JSON object.",
+          "propertyNames": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "type": "array",
+      },
+    },
+    "required": [
+      "collection",
+      "pipeline",
+    ],
+    "type": "object",
+  },
+  "mongo_count": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "query": {
+        "additionalProperties": {},
+        "description": "MongoDB query filter.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+    ],
+    "type": "object",
+  },
+  "mongo_distinct": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "field": {
+        "description": "Field name to get distinct values for.",
+        "type": "string",
+      },
+      "query": {
+        "additionalProperties": {},
+        "description": "MongoDB query filter.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+      "field",
+    ],
+    "type": "object",
+  },
+  "mongo_find": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "limit": {
+        "description": "Maximum documents to return (max 500).",
+        "type": "number",
+      },
+      "projection": {
+        "additionalProperties": {},
+        "description": "Projection to include/exclude fields.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "query": {
+        "additionalProperties": {},
+        "description": "MongoDB query filter.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "skip": {
+        "description": "Number of documents to skip.",
+        "type": "number",
+      },
+      "sort": {
+        "additionalProperties": {},
+        "description": "Sort specification.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+    ],
+    "type": "object",
+  },
+  "mongo_find_one": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "query": {
+        "additionalProperties": {},
+        "description": "MongoDB query filter.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+    ],
+    "type": "object",
+  },
+  "mongo_insert_many": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "documents": {
+        "description": "Array of documents to insert.",
+        "items": {
+          "additionalProperties": {},
+          "description": "A JSON object.",
+          "propertyNames": {
+            "type": "string",
+          },
+          "type": "object",
+        },
+        "type": "array",
+      },
+    },
+    "required": [
+      "collection",
+      "documents",
+    ],
+    "type": "object",
+  },
+  "mongo_insert_one": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "document": {
+        "additionalProperties": {},
+        "description": "Document to insert.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+      "document",
+    ],
+    "type": "object",
+  },
+  "mongo_list_collections": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "mongo_list_databases": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "mongo_update_many": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "filter": {
+        "additionalProperties": {},
+        "description": "Query filter to match documents.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "options": {
+        "additionalProperties": {},
+        "description": "Update options.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "update": {
+        "additionalProperties": {},
+        "description": "Update operations (e.g. { $set: { ... } }).",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+      "filter",
+      "update",
+    ],
+    "type": "object",
+  },
+  "mongo_update_one": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "collection": {
+        "description": "Collection name.",
+        "type": "string",
+      },
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "filter": {
+        "additionalProperties": {},
+        "description": "Query filter to match the document.",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "options": {
+        "additionalProperties": {},
+        "description": "Update options (e.g. upsert).",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "update": {
+        "additionalProperties": {},
+        "description": "Update operations (e.g. { $set: { ... } }).",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "collection",
+      "filter",
+      "update",
+    ],
+    "type": "object",
+  },
+  "mysql_describe_table": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "table": {
+        "description": "Table name to describe.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "table",
+    ],
+    "type": "object",
+  },
+  "mysql_execute": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "params": {
+        "description": "Parameterized query values (?, ?, ...).",
+        "items": {},
+        "type": "array",
+      },
+      "sql": {
+        "description": "SQL statement to execute.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "sql",
+    ],
+    "type": "object",
+  },
+  "mysql_list_databases": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "mysql_list_tables": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "mysql_query": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "params": {
+        "description": "Parameterized query values (?, ?, ...).",
+        "items": {},
+        "type": "array",
+      },
+      "sql": {
+        "description": "SQL SELECT query to execute.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "sql",
+    ],
+    "type": "object",
+  },
+  "notion_append_blocks": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "blockId": {
+        "description": "Page ID or block ID to append to",
+        "type": "string",
+      },
+      "children": {
+        "description": "Blocks to append",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "description": "Text content of the block",
+              "type": "string",
+            },
+            "type": {
+              "description": "Block type: paragraph, heading_1, heading_2, heading_3, bulleted_list_item, numbered_list_item, to_do, toggle, callout, quote, divider, code",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "content",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+    },
+    "required": [
+      "blockId",
+      "children",
+    ],
+    "type": "object",
+  },
+  "notion_archive_page": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pageId": {
+        "description": "The page ID to archive",
+        "type": "string",
+      },
+    },
+    "required": [
+      "pageId",
+    ],
+    "type": "object",
+  },
+  "notion_create_comment": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "discussionId": {
+        "description": "Discussion thread ID (for replies)",
+        "type": "string",
+      },
+      "pageId": {
+        "description": "The page ID to comment on",
+        "type": "string",
+      },
+      "richText": {
+        "description": "Comment text",
+        "type": "string",
+      },
+    },
+    "required": [
+      "pageId",
+      "richText",
+    ],
+    "type": "object",
+  },
+  "notion_create_database_entry": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "children": {
+        "description": "Page content blocks",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "description": "Text content",
+              "type": "string",
+            },
+            "type": {
+              "description": "Block type",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "content",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+      "databaseId": {
+        "description": "The database ID",
+        "type": "string",
+      },
+      "properties": {
+        "additionalProperties": {},
+        "description": "Properties for the new entry (Notion property format)",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "databaseId",
+      "properties",
+    ],
+    "type": "object",
+  },
+  "notion_create_page": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "children": {
+        "description": "Initial content blocks",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "description": "Text content of the block",
+              "type": "string",
+            },
+            "type": {
+              "description": "Block type: paragraph, heading_1, heading_2, heading_3, bulleted_list_item, numbered_list_item, to_do, toggle, callout, quote, divider, code",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "content",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+      "parentDatabaseId": {
+        "description": "Parent database ID (for database entry)",
+        "type": "string",
+      },
+      "parentPageId": {
+        "description": "Parent page ID (for sub-page)",
+        "type": "string",
+      },
+      "title": {
+        "description": "Page title",
+        "type": "string",
+      },
+    },
+    "required": [
+      "title",
+    ],
+    "type": "object",
+  },
+  "notion_get_blocks": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "blockId": {
+        "description": "Page ID or block ID",
+        "type": "string",
+      },
+      "maxResults": {
+        "description": "Max blocks to return (default 50)",
+        "type": "number",
+      },
+    },
+    "required": [
+      "blockId",
+    ],
+    "type": "object",
+  },
+  "notion_get_page": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pageId": {
+        "description": "The Notion page ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "pageId",
+    ],
+    "type": "object",
+  },
+  "notion_get_user": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "userId": {
+        "description": "The user ID",
+        "type": "string",
+      },
+    },
+    "required": [
+      "userId",
+    ],
+    "type": "object",
+  },
+  "notion_list_comments": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "blockId": {
+        "description": "Page ID or block ID",
+        "type": "string",
+      },
+      "maxResults": {
+        "description": "Max comments (default 50)",
+        "type": "number",
+      },
+    },
+    "required": [
+      "blockId",
+    ],
+    "type": "object",
+  },
+  "notion_list_databases": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max results (default 25)",
+        "type": "number",
+      },
+    },
+    "type": "object",
+  },
+  "notion_list_users": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "description": "Max users (default 50)",
+        "type": "number",
+      },
+    },
+    "type": "object",
+  },
+  "notion_query_database": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "databaseId": {
+        "description": "The database ID to query",
+        "type": "string",
+      },
+      "filter": {
+        "additionalProperties": {},
+        "description": "Notion filter object",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+      "maxResults": {
+        "description": "Max results (default 25)",
+        "type": "number",
+      },
+      "sorts": {
+        "description": "Sort criteria",
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "direction": {
+              "enum": [
+                "ascending",
+                "descending",
+              ],
+              "type": "string",
+            },
+            "property": {
+              "type": "string",
+            },
+          },
+          "required": [
+            "property",
+            "direction",
+          ],
+          "type": "object",
+        },
+        "type": "array",
+      },
+    },
+    "required": [
+      "databaseId",
+    ],
+    "type": "object",
+  },
+  "notion_search": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "filter": {
+        "description": "Restrict to pages or databases (data_source)",
+        "enum": [
+          "page",
+          "data_source",
+        ],
+        "type": "string",
+      },
+      "maxResults": {
+        "description": "Max results (default 20)",
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query text",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "notion_update_database_entry": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pageId": {
+        "description": "The entry (page) ID to update",
+        "type": "string",
+      },
+      "properties": {
+        "additionalProperties": {},
+        "description": "Properties to update",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "pageId",
+      "properties",
+    ],
+    "type": "object",
+  },
+  "notion_update_page": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "archived": {
+        "description": "Set to true to archive",
+        "type": "boolean",
+      },
+      "cover": {
+        "description": "Cover image URL",
+        "type": "string",
+      },
+      "icon": {
+        "description": "Emoji icon for the page",
+        "type": "string",
+      },
+      "pageId": {
+        "description": "The page ID to update",
+        "type": "string",
+      },
+      "properties": {
+        "additionalProperties": {},
+        "description": "Properties to update (Notion property format)",
+        "propertyNames": {
+          "type": "string",
+        },
+        "type": "object",
+      },
+    },
+    "required": [
+      "pageId",
+    ],
+    "type": "object",
+  },
+  "pg_describe_table": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "schema": {
+        "description": "Schema name. Defaults to "public".",
+        "type": "string",
+      },
+      "table": {
+        "description": "Table name to describe.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "table",
+    ],
+    "type": "object",
+  },
+  "pg_execute": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "params": {
+        "description": "Parameterized query values ($1, $2, ...).",
+        "items": {},
+        "type": "array",
+      },
+      "sql": {
+        "description": "SQL statement to execute.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "sql",
+    ],
+    "type": "object",
+  },
+  "pg_list_databases": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+  },
+  "pg_list_schemas": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "pg_list_tables": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "schema": {
+        "description": "Schema name. Defaults to "public".",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "pg_query": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "database": {
+        "description": "Target database. Uses the configured default if omitted.",
+        "type": "string",
+      },
+      "params": {
+        "description": "Parameterized query values ($1, $2, ...).",
+        "items": {},
+        "type": "array",
+      },
+      "sql": {
+        "description": "SQL SELECT query to execute.",
+        "type": "string",
+      },
+    },
+    "required": [
+      "sql",
+    ],
+    "type": "object",
+  },
+  "pubmed_get_article": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pmid": {
+        "description": "PubMed article ID (e.g. '38243602').",
+        "type": "string",
+      },
+    },
+    "required": [
+      "pmid",
+    ],
+    "type": "object",
+  },
+  "pubmed_search": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "default": 10,
+        "description": "Maximum number of articles to return.",
+        "maximum": 30,
+        "minimum": 1,
+        "type": "number",
+      },
+      "query": {
+        "description": "PubMed search query. Use field tags like [ti] for title, [au] for author, [dp] for date, or MeSH terms.",
+        "type": "string",
+      },
+      "sort": {
+        "default": "relevance",
+        "description": "Sort order: relevance or publication date.",
+        "enum": [
+          "relevance",
+          "pub_date",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "slack_add_reaction": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "emoji": {
+        "description": "Emoji name without colons (e.g. 'thumbsup')",
+        "minLength": 1,
+        "type": "string",
+      },
+      "ts": {
+        "description": "The timestamp (ts) of the message",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "ts",
+      "emoji",
+    ],
+    "type": "object",
+  },
+  "slack_archive_channel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID to archive",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+    ],
+    "type": "object",
+  },
+  "slack_create_channel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "isPrivate": {
+        "description": "Create as private channel (default false)",
+        "type": "boolean",
+      },
+      "name": {
+        "description": "Channel name (lowercase, no spaces, max 80 chars)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "name",
+    ],
+    "type": "object",
+  },
+  "slack_delete_message": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "ts": {
+        "description": "The timestamp (ts) of the message to delete",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "ts",
+    ],
+    "type": "object",
+  },
+  "slack_get_channel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The Slack channel ID (e.g. C01ABCDEF)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+    ],
+    "type": "object",
+  },
+  "slack_get_history": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "latest": {
+        "description": "Only messages before this Unix timestamp",
+        "type": "string",
+      },
+      "limit": {
+        "description": "Max messages to return (default 30)",
+        "type": "number",
+      },
+      "oldest": {
+        "description": "Only messages after this Unix timestamp",
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+    ],
+    "type": "object",
+  },
+  "slack_get_thread": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "limit": {
+        "description": "Max replies to return (default 50)",
+        "type": "number",
+      },
+      "threadTs": {
+        "description": "The timestamp (ts) of the parent message",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "threadTs",
+    ],
+    "type": "object",
+  },
+  "slack_get_user": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "userId": {
+        "description": "The Slack user ID (e.g. U01ABCDEF)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "userId",
+    ],
+    "type": "object",
+  },
+  "slack_invite_to_channel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "userIds": {
+        "description": "User IDs to invite",
+        "items": {
+          "minLength": 1,
+          "type": "string",
+        },
+        "minItems": 1,
+        "type": "array",
+      },
+    },
+    "required": [
+      "channelId",
+      "userIds",
+    ],
+    "type": "object",
+  },
+  "slack_kick_from_channel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "userId": {
+        "description": "The user ID to remove",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "userId",
+    ],
+    "type": "object",
+  },
+  "slack_list_channels": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "excludeArchived": {
+        "description": "Exclude archived channels (default true)",
+        "type": "boolean",
+      },
+      "limit": {
+        "description": "Max channels to return (default 100)",
+        "type": "number",
+      },
+      "types": {
+        "description": "Channel types to list, e.g. 'public_channel,private_channel'. Defaults to both.",
+        "type": "string",
+      },
+    },
+    "type": "object",
+  },
+  "slack_list_users": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "description": "Max users to return (default 200)",
+        "type": "number",
+      },
+    },
+    "type": "object",
+  },
+  "slack_pin_message": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "ts": {
+        "description": "The timestamp (ts) of the message to pin",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "ts",
+    ],
+    "type": "object",
+  },
+  "slack_post_message": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID to post to",
+        "minLength": 1,
+        "type": "string",
+      },
+      "text": {
+        "description": "Message text (supports Slack mrkdwn)",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "text",
+    ],
+    "type": "object",
+  },
+  "slack_reply_to_thread": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "text": {
+        "description": "Reply text",
+        "minLength": 1,
+        "type": "string",
+      },
+      "threadTs": {
+        "description": "The timestamp (ts) of the parent message",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "threadTs",
+      "text",
+    ],
+    "type": "object",
+  },
+  "slack_schedule_message": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "postAt": {
+        "description": "Unix timestamp for when to send the message",
+        "type": "number",
+      },
+      "text": {
+        "description": "Message text",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "text",
+      "postAt",
+    ],
+    "type": "object",
+  },
+  "slack_search_messages": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "count": {
+        "description": "Max results to return (default 20)",
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query text (at least 1 character)",
+        "minLength": 1,
+        "type": "string",
+      },
+      "sortBy": {
+        "description": "Sort by timestamp or relevance score",
+        "enum": [
+          "timestamp",
+          "score",
+        ],
+        "type": "string",
+      },
+      "sortDir": {
+        "description": "Sort direction",
+        "enum": [
+          "asc",
+          "desc",
+        ],
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+  "slack_set_purpose": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "purpose": {
+        "description": "The new channel purpose text",
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "purpose",
+    ],
+    "type": "object",
+  },
+  "slack_set_topic": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "topic": {
+        "description": "The new channel topic text",
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "topic",
+    ],
+    "type": "object",
+  },
+  "slack_unpin_message": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "ts": {
+        "description": "The timestamp (ts) of the message to unpin",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "ts",
+    ],
+    "type": "object",
+  },
+  "slack_update_message": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "channelId": {
+        "description": "The channel ID",
+        "minLength": 1,
+        "type": "string",
+      },
+      "text": {
+        "description": "New message text",
+        "minLength": 1,
+        "type": "string",
+      },
+      "ts": {
+        "description": "The timestamp (ts) of the message to update",
+        "minLength": 1,
+        "type": "string",
+      },
+    },
+    "required": [
+      "channelId",
+      "ts",
+      "text",
+    ],
+    "type": "object",
+  },
+  "yfinance_get_chart": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "interval": {
+        "default": "1d",
+        "description": "Data interval granularity.",
+        "enum": [
+          "1m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "1d",
+          "1wk",
+          "1mo",
+        ],
+        "type": "string",
+      },
+      "range": {
+        "default": "1mo",
+        "description": "Time range for the chart data.",
+        "enum": [
+          "1d",
+          "5d",
+          "1mo",
+          "3mo",
+          "6mo",
+          "1y",
+          "2y",
+          "5y",
+          "max",
+        ],
+        "type": "string",
+      },
+      "symbol": {
+        "description": "Ticker symbol (e.g. 'AAPL').",
+        "type": "string",
+      },
+    },
+    "required": [
+      "symbol",
+    ],
+    "type": "object",
+  },
+  "yfinance_get_quote": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "symbols": {
+        "description": "Ticker symbols (e.g. ['AAPL', 'MSFT', 'GOOGL']).",
+        "items": {
+          "type": "string",
+        },
+        "maxItems": 10,
+        "minItems": 1,
+        "type": "array",
+      },
+    },
+    "required": [
+      "symbols",
+    ],
+    "type": "object",
+  },
+  "yfinance_search": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "maxResults": {
+        "default": 8,
+        "description": "Maximum number of results.",
+        "maximum": 20,
+        "minimum": 1,
+        "type": "number",
+      },
+      "query": {
+        "description": "Search query (company name or ticker).",
+        "type": "string",
+      },
+    },
+    "required": [
+      "query",
+    ],
+    "type": "object",
+  },
+}
+`;

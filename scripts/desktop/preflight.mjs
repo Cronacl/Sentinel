@@ -2,6 +2,11 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
+import {
+  ensureElectronBinary,
+  getElectronVersion,
+} from "./electron-binary.mjs";
+
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
   if (index === -1) return null;
@@ -59,6 +64,11 @@ const summaryLines = [
   "",
   `- Platform: \`${platform}\``,
 ];
+
+// build.electronDist packages node_modules/electron/dist, which Electron 42+
+// no longer populates during install.
+ensureElectronBinary();
+summaryLines.push(`- Electron: ${getElectronVersion()} binary installed`);
 
 if (platform !== "mac") {
   summaryLines.push(

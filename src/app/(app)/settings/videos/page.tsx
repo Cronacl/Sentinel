@@ -189,7 +189,6 @@ function ProviderRow({ provider }: { provider: VideoProviderRow }) {
       <div className="mt-4 flex flex-col gap-3">
         <div className="border-separator/20 bg-background/60 rounded-xl border px-3 py-2.5">
           <Switch
-            className="justify-between gap-3"
             isSelected={isEnabled}
             onChange={() =>
               form.setValue("isEnabled", !isEnabled, {
@@ -198,10 +197,10 @@ function ProviderRow({ provider }: { provider: VideoProviderRow }) {
               })
             }
           >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-            <Switch.Content>
+            <Switch.Content className="justify-between gap-3 font-normal">
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">Enabled</p>
                 <p className="text-muted text-xs">
@@ -214,7 +213,6 @@ function ProviderRow({ provider }: { provider: VideoProviderRow }) {
 
         <div className="border-separator/20 bg-background/60 rounded-xl border px-3 py-2.5">
           <Switch
-            className="justify-between gap-3"
             isDisabled={!provider.supportsCustomModel}
             isSelected={isCustom}
             onChange={() => {
@@ -239,10 +237,10 @@ function ProviderRow({ provider }: { provider: VideoProviderRow }) {
               }
             }}
           >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-            <Switch.Content>
+            <Switch.Content className="justify-between gap-3 font-normal">
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">Custom target</p>
                 <p className="text-muted text-xs">

@@ -96,11 +96,16 @@ export async function handleFollowUpAction(
     fallbackTitle,
     threadMode,
     existingThread?.chatEngine ?? request.engine ?? "sentinel",
+    undefined,
+    // Only applied when this creates the thread: an existing thread keeps
+    // its instance.
+    existingThread ? undefined : request.engineInstanceId,
   );
 
   const payload = {
     id: request.message.id,
     modelId: request.modelId,
+    modelOptions: request.modelOptions ?? null,
     parts: request.message.parts,
     reasoningEffort: request.reasoningEffort ?? null,
     threadId: request.threadId,
@@ -128,12 +133,12 @@ export async function handleFollowUpAction(
       ...(latestAssistantId ? { messageId: latestAssistantId } : {}),
       trigger: "stop-stream",
     } satisfies ThreadChatRequest;
-    const engine = resolveThreadEngine(
+    const engineTarget = resolveThreadEngine(
       stopRequest,
       latestThread ?? existingThread,
     );
     const engineStopResponse = await stopThreadEngine(
-      engine,
+      engineTarget,
       stopRequest,
       latestThread,
     );
@@ -181,6 +186,9 @@ export async function drainFollowUpQueue(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
+        ...(nextFollowUp.modelOptions?.length
+          ? { modelOptions: nextFollowUp.modelOptions }
+          : {}),
         ...(nextFollowUp.reasoningEffort
           ? { reasoningEffort: nextFollowUp.reasoningEffort }
           : {}),

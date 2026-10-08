@@ -1,5 +1,5 @@
 import type {
-  ChatComposerOpenCodeSelection,
+  ChatComposerOptionSelection,
   ChatComposerThreadSelection,
 } from "./chat-composer/types";
 import type { DraftProjectMode } from "./draft-thread-project-mode";
@@ -10,7 +10,7 @@ export type ThreadRouteHandoffState = {
     path: string;
   } | null;
   draftProjectMode: DraftProjectMode;
-  openCodeSelection: ChatComposerOpenCodeSelection;
+  optionSelection: ChatComposerOptionSelection;
   threadId: string;
   threadSelection: ChatComposerThreadSelection;
   updatedAt: number;

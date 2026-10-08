@@ -2,6 +2,8 @@ import { TRPCError } from "@trpc/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { toStoredEngineInstanceId } from "@/lib/ai/chat/engines/contract/ids";
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 import { createLogger } from "@/lib/logger";
 import {
   createAutomationSchema,
@@ -16,6 +18,7 @@ import {
 } from "@/lib/automations/scheduler";
 import { executeAutomationRun } from "@/lib/automations/runner";
 import { computeNextRunAt } from "@/lib/automations/schedule-utils";
+import { assertEngineInstanceSelection } from "./engines/selection";
 import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
 
 type AutomationWorkspaceContext = Parameters<
@@ -139,11 +142,21 @@ export const automationsRouter = createTRPCRouter({
         scheduleCron: input.scheduleCron ?? null,
       });
       assertValidNextRunAt(input, nextRunAt);
+      const chatEngine = input.chatEngine ?? "sentinel";
+      await assertEngineInstanceSelection(
+        ctx.user.id,
+        chatEngine,
+        input.chatEngineInstanceId,
+      );
 
       const [row] = await ctx.db
         .insert(automations)
         .values({
-          chatEngine: input.chatEngine ?? "sentinel",
+          chatEngine,
+          chatEngineInstanceId: toStoredEngineInstanceId(
+            chatEngine,
+            input.chatEngineInstanceId,
+          ),
           userId: ctx.user.id,
           title: input.title,
           prompt: input.prompt,
@@ -153,6 +166,7 @@ export const automationsRouter = createTRPCRouter({
           scheduleTime: input.scheduleTime ?? null,
           scheduleCron: input.scheduleCron ?? null,
           modelId: input.modelId ?? null,
+          modelOptions: input.modelOptions ?? null,
           reasoningEffort: input.reasoningEffort ?? null,
           status: "paused",
           nextRunAt,
@@ -242,8 +256,20 @@ export const automationsRouter = createTRPCRouter({
         updateData.title = updateFields.title;
       if (updateFields.prompt !== undefined)
         updateData.prompt = updateFields.prompt;
-      if (updateFields.chatEngine !== undefined)
+      if (updateFields.chatEngine !== undefined) {
+        await assertEngineInstanceSelection(
+          ctx.user.id,
+          updateFields.chatEngine,
+          updateFields.chatEngineInstanceId,
+        );
         updateData.chatEngine = updateFields.chatEngine;
+        updateData.chatEngineInstanceId = engineInstanceIdForEngineWrite({
+          engine: updateFields.chatEngine,
+          engineColumn: automations.chatEngine,
+          instanceColumn: automations.chatEngineInstanceId,
+          instanceId: updateFields.chatEngineInstanceId,
+        });
+      }
       if (updateFields.workspaceId !== undefined)
         updateData.workspaceId = merged.workspaceId;
       if (updateFields.scheduleType !== undefined)
@@ -256,6 +282,8 @@ export const automationsRouter = createTRPCRouter({
         updateData.scheduleCron = updateFields.scheduleCron;
       if (updateFields.modelId !== undefined)
         updateData.modelId = updateFields.modelId;
+      if (updateFields.modelOptions !== undefined)
+        updateData.modelOptions = updateFields.modelOptions;
       if (updateFields.reasoningEffort !== undefined)
         updateData.reasoningEffort = updateFields.reasoningEffort;
       if (nextRunAt !== undefined) updateData.nextRunAt = nextRunAt;

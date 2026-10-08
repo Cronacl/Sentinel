@@ -13,7 +13,11 @@ import { sileo } from "sileo";
 
 import type { RepoProjectMode } from "@/lib/ai/chat/engines/types";
 import { useModelSelection } from "@/components/chat/chat-composer/use-model-selection";
-import { getReasoningEffortLabel } from "@/components/chat/chat-composer-helpers";
+import {
+  getReasoningEffortLabel,
+  type ChatComposerEngineOption,
+} from "@/components/chat/chat-composer-helpers";
+import { getDriverMeta } from "@/lib/ai/chat/engines/catalog";
 import { usePersistSelection } from "@/components/chat/chat-composer/use-persist-selection";
 import { ProviderIcon } from "@/components/icons/provider-icon";
 import { SubagentThreadPanel } from "@/components/chat/subagent-thread-panel";
@@ -293,33 +297,32 @@ function ScratchpadToolbar({
   modelSelection,
   permissionMode,
   projectMode,
-  selectedEngine,
+  selectedInstanceId,
   supportsWorktreeMode,
   workspaces,
 }: {
   currentWorkspace: { id: string; name: string } | null;
-  engineOptions: Array<{
-    engine: ChatEngine;
-    error: string | null;
-    isAvailable: boolean;
-    label: string;
-  }>;
+  engineOptions: ChatComposerEngineOption[];
   onSelectPermissionMode: (mode: PermissionMode) => void;
   onSelectProjectMode: (mode: RepoProjectMode) => void;
-  onSelectEngine: (engine: ChatEngine) => void;
+  /** Called with the picked engine instance id. */
+  onSelectEngine: (instanceId: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   modelSelection: ReturnType<typeof useModelSelection>;
   permissionMode: PermissionMode;
   projectMode: RepoProjectMode;
-  selectedEngine: ChatEngine;
+  selectedInstanceId: string;
   supportsWorktreeMode: boolean;
   workspaces: Array<{ id: string; name: string; isSelected: boolean }>;
 }) {
   const disabledEngineKeys = useMemo(
     () =>
       engineOptions
-        .filter((e) => !e.isAvailable && e.engine !== "sentinel")
-        .map((e) => e.engine),
+        .filter(
+          (e) =>
+            !e.isAvailable && getDriverMeta(e.engine)?.runtime !== "builtin",
+        )
+        .map((e) => e.instanceId),
     [engineOptions],
   );
 
@@ -428,27 +431,31 @@ function ScratchpadToolbar({
       <ToolbarPicker
         ariaLabel="Engine"
         label={
-          <ToolbarLabel className="capitalize">{selectedEngine}</ToolbarLabel>
+          <ToolbarLabel className="capitalize">
+            {engineOptions.find(
+              (option) => option.instanceId === selectedInstanceId,
+            )?.label ?? selectedInstanceId}
+          </ToolbarLabel>
         }
       >
         {(close) => (
           <ListBox
             aria-label="Engine"
             disabledKeys={disabledEngineKeys}
-            selectedKeys={[selectedEngine]}
+            selectedKeys={[selectedInstanceId]}
             selectionMode="single"
             onSelectionChange={(keys) => {
               const key = [...keys][0];
               if (key != null) {
-                onSelectEngine(String(key) as ChatEngine);
+                onSelectEngine(String(key));
                 close();
               }
             }}
           >
             {engineOptions.map((engine) => (
               <ListBox.Item
-                key={engine.engine}
-                id={engine.engine}
+                key={engine.instanceId}
+                id={engine.instanceId}
                 textValue={engine.label}
               >
                 <span className="capitalize text-[12px]">{engine.label}</span>
@@ -999,7 +1006,10 @@ export default function ScratchpadPage() {
       {
         title,
         ...(modelSelection.selectedEngine !== "sentinel"
-          ? { engine: modelSelection.selectedEngine }
+          ? {
+              engine: modelSelection.selectedEngine,
+              engineInstanceId: modelSelection.selectedInstanceId,
+            }
           : {}),
         ...(modelSelection.selectedModelKey
           ? { modelId: modelSelection.selectedModelKey }
@@ -1026,6 +1036,7 @@ export default function ScratchpadPage() {
     createTask,
     draft,
     modelSelection.selectedEngine,
+    modelSelection.selectedInstanceId,
     modelSelection.selectedModelKey,
     modelSelection.selectedReasoningEffort,
     permissionMode,
@@ -1224,7 +1235,7 @@ export default function ScratchpadPage() {
           onSelectWorkspace={handleSelectWorkspace}
           permissionMode={permissionMode}
           projectMode={projectMode}
-          selectedEngine={modelSelection.selectedEngine}
+          selectedInstanceId={modelSelection.selectedInstanceId}
           supportsWorktreeMode={Boolean(
             repoContext.data?.isGitRepo && repoContext.data?.branch,
           )}
