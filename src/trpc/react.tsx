@@ -15,6 +15,7 @@ import SuperJSON from "superjson";
 import type { AppRouter } from "@/server/api/root";
 
 import { createQueryClient } from "./query-client";
+import { isSensitiveTrpcOperation } from "./sensitive-operations";
 
 let clientQueryClientSingleton: QueryClient | undefined;
 
@@ -41,8 +42,11 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
       links: [
         loggerLink({
           enabled: (op) =>
-            process.env.NODE_ENV === "development" ||
-            (op.direction === "down" && op.result instanceof Error),
+            // loggerLink passes the whole operation in both directions; its
+            // type only declares `path` on the way up.
+            !isSensitiveTrpcOperation((op as { path?: string }).path ?? "") &&
+            (process.env.NODE_ENV === "development" ||
+              (op.direction === "down" && op.result instanceof Error)),
         }),
         // Subscriptions (engines.onEvents) use SSE on the same route.
         splitLink({

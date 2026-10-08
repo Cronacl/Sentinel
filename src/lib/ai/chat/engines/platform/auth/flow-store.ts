@@ -8,6 +8,7 @@ import { createLogger } from "@/lib/logger";
 import {
   ENGINE_AUTH_TICKET_PATTERN,
   idleEngineAuthFlowState,
+  MAX_ENGINE_AUTH_CREDENTIAL_FIELDS,
   MAX_ENGINE_AUTH_CREDENTIAL_LENGTH,
   type EngineAuthCredentialField,
   type EngineAuthFlowPurpose,
@@ -59,7 +60,6 @@ const DEFAULT_FLOW_TTL_MS = 15 * 60 * 1_000;
 const DEFAULT_TICKET_TTL_MS = 5 * 60 * 1_000;
 const DEFAULT_RETAIN_FINISHED_MS = 5 * 60 * 1_000;
 const DEFAULT_PROGRESS_WAIT_MS = 8_000;
-const MAX_CREDENTIAL_FIELDS = 16;
 const MAX_MESSAGE_LENGTH = 500;
 const REDACTED = "••••";
 // Control characters other than tab never belong in a token or key.
@@ -213,7 +213,7 @@ function validateCredentialFields(
   const names = new Set(fields.map((field) => field.name));
   if (
     fields.length === 0 ||
-    fields.length > MAX_CREDENTIAL_FIELDS ||
+    fields.length > MAX_ENGINE_AUTH_CREDENTIAL_FIELDS ||
     names.size !== fields.length
   ) {
     throw new EngineAuthError("This sign-in method asks for invalid fields.");

@@ -108,14 +108,21 @@ export const engineAuthFlowStateSchema = z.object({
 });
 
 export const MAX_ENGINE_AUTH_CREDENTIAL_LENGTH = 16_384;
+export const MAX_ENGINE_AUTH_CREDENTIAL_FIELDS = 16;
 
 export const engineAuthResponseSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("credentials"),
-    values: z.record(
-      z.string().max(128),
-      z.string().max(MAX_ENGINE_AUTH_CREDENTIAL_LENGTH),
-    ),
+    values: z
+      .record(
+        z.string().max(128),
+        z.string().max(MAX_ENGINE_AUTH_CREDENTIAL_LENGTH),
+      )
+      .refine(
+        (values) =>
+          Object.keys(values).length <= MAX_ENGINE_AUTH_CREDENTIAL_FIELDS,
+        { message: "Too many credential fields." },
+      ),
   }),
   z.object({
     action: z.enum(["accept", "decline"]),

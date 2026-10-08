@@ -209,6 +209,19 @@ describe("api.engines.auth", () => {
         flowId: "flow-1",
         instanceId: "claude",
         interactionId: "flow-1:1",
+        response: {
+          type: "credentials",
+          values: Object.fromEntries(
+            Array.from({ length: 17 }, (_, index) => [`K${index}`, "v"]),
+          ),
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      schema.safeParse({
+        flowId: "flow-1",
+        instanceId: "claude",
+        interactionId: "flow-1:1",
         response: { exitCode: null, type: "terminal" },
       }).success,
     ).toBe(true);
