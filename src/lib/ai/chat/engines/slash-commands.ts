@@ -122,6 +122,22 @@ export function resolveComposerSlashCommands(input: {
 }
 
 /**
+ * The composer menu's commands: inserted ones always, Sentinel-run ones
+ * only when the composer has an action for them and can run it here (a
+ * thread that has the native session, canRunSentinelSlashCommands).
+ */
+export function getRunnableComposerSlashCommands(
+  commands: readonly ComposerSlashCommand[],
+  input: { actions: ReadonlySet<string>; canExecute: boolean },
+): ComposerSlashCommand[] {
+  return commands.filter(
+    (command) =>
+      command.mode === "insert" ||
+      (input.canExecute && input.actions.has(command.command)),
+  );
+}
+
+/**
  * Whether Sentinel can run a driver's "sentinel" commands on a thread: the
  * thread has the native session they act on (a Codex thread today).
  */

@@ -12,7 +12,10 @@ import {
 } from "react";
 import { Button } from "@heroui/react";
 import { getDriverPermissionModes } from "@/lib/ai/chat/engines/catalog";
-import { resolveComposerSlashCommands } from "@/lib/ai/chat/engines/slash-commands";
+import {
+  getRunnableComposerSlashCommands,
+  resolveComposerSlashCommands,
+} from "@/lib/ai/chat/engines/slash-commands";
 import { DEFAULT_FOLLOW_UP_BEHAVIOR } from "@/schemas/general-settings.schema";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
 import {
@@ -268,17 +271,29 @@ export function ChatComposer({
     }),
     [codexCompact, codexReview, codexRollback],
   );
+  const canExecuteProviderSlashCommands = Boolean(
+    threadId && providerSlashCommandsEnabled,
+  );
   const slashCommands = useMemo(
     () =>
-      resolveComposerSlashCommands({
-        driver: selectedEngine,
-        slashCommands: selectedEngineStatus?.slashCommands,
-      }).filter(
-        (command) =>
-          command.mode === "insert" ||
-          Boolean(sentinelSlashActions[selectedEngine]?.[command.command]),
+      getRunnableComposerSlashCommands(
+        resolveComposerSlashCommands({
+          driver: selectedEngine,
+          slashCommands: selectedEngineStatus?.slashCommands,
+        }),
+        {
+          actions: new Set(
+            Object.keys(sentinelSlashActions[selectedEngine] ?? {}),
+          ),
+          canExecute: canExecuteProviderSlashCommands,
+        },
       ),
-    [selectedEngine, selectedEngineStatus?.slashCommands, sentinelSlashActions],
+    [
+      canExecuteProviderSlashCommands,
+      selectedEngine,
+      selectedEngineStatus?.slashCommands,
+      sentinelSlashActions,
+    ],
   );
 
   const handleSlashCommand = useCallback(
@@ -295,9 +310,6 @@ export function ChatComposer({
       sentinelSlashActions,
       threadId,
     ],
-  );
-  const canExecuteProviderSlashCommands = Boolean(
-    threadId && providerSlashCommandsEnabled,
   );
 
   const { editor, placeholderText } = useComposerEditor({

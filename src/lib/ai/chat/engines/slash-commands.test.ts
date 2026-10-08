@@ -5,6 +5,7 @@ import { makeFakeSnapshot } from "./contract/testing";
 import {
   CODEX_SLASH_COMMANDS,
   canRunSentinelSlashCommands,
+  getRunnableComposerSlashCommands,
   normalizeEngineSlashCommands,
   resolveComposerSlashCommands,
 } from "./slash-commands";
@@ -88,6 +89,52 @@ describe("slash commands", () => {
     expect(
       "slashCommands" in toComposerEngineOption(makeFakeSnapshot()),
     ).toBeFalse();
+  });
+
+  it("builds the composer menu from what the instance reports", () => {
+    // Claude: the CLI's own commands, inserted as `/name ` prompt text,
+    // on new threads too.
+    const claude = resolveComposerSlashCommands({
+      driver: "claude",
+      slashCommands: normalizeEngineSlashCommands(
+        [
+          { description: "Review a PR", inputHint: "<pr>", name: "review-pr" },
+          { name: "compact" },
+        ],
+        "native",
+      ),
+    });
+    expect(
+      getRunnableComposerSlashCommands(claude, {
+        actions: new Set(),
+        canExecute: false,
+      }),
+    ).toEqual([
+      {
+        command: "review-pr",
+        description: "Review a PR",
+        inputHint: "<pr>",
+        mode: "insert",
+      },
+      { command: "compact", description: "Run /compact", mode: "insert" },
+    ]);
+
+    // Codex: Sentinel runs them, so only on a thread that has a Codex
+    // thread, and only those the composer has an action for.
+    const codex = resolveComposerSlashCommands({
+      driver: "codex",
+      slashCommands: [...CODEX_SLASH_COMMANDS],
+    });
+    const actions = new Set(["compact", "review"]);
+    expect(
+      getRunnableComposerSlashCommands(codex, { actions, canExecute: false }),
+    ).toEqual([]);
+    expect(
+      getRunnableComposerSlashCommands(codex, {
+        actions,
+        canExecute: true,
+      }).map((command) => command.command),
+    ).toEqual(["compact", "review"]);
   });
 
   it("runs Sentinel commands only on a thread with a native session", () => {
