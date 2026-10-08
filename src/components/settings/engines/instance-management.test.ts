@@ -20,6 +20,7 @@ import {
   emptyInstanceFormDraft,
   getCustomModelIdHint,
   getHomeChangeNotice,
+  getHomeEnvVarOverrideNotice,
   getInstanceIsolationNote,
   getOptionTemplateModels,
   groupEngineSnapshotsByDriver,
@@ -239,6 +240,58 @@ describe("environment drafts", () => {
     });
   });
 
+  it("keeps a stored secret with its name, never moving it to a new one", () => {
+    const [secret] = toEnvVarDrafts(stored);
+    const renamed = updateEnvVarDraft(secret!, { name: "OPENAI_TOKEN" });
+
+    expect(renamed.valueRedacted).toBe(false);
+    expect(toEnvVarInputs([renamed])).toEqual({
+      error:
+        "Enter a value for OPENAI_TOKEN: the stored secret of OPENAI_API_KEY does not move to a new name.",
+    });
+    expect(
+      toEnvVarInputs([updateEnvVarDraft(renamed, { value: "sk-moved" })]),
+    ).toEqual({
+      environment: [
+        { name: "OPENAI_TOKEN", sensitive: true, value: "sk-moved" },
+      ],
+    });
+
+    // Renaming the row back takes the stored secret up again.
+    const back = updateEnvVarDraft(renamed, { name: "OPENAI_API_KEY" });
+    expect(back.valueRedacted).toBe(true);
+    expect(toEnvVarInputs([back])).toEqual({
+      environment: [
+        {
+          name: "OPENAI_API_KEY",
+          sensitive: true,
+          value: "",
+          valueRedacted: true,
+        },
+      ],
+    });
+  });
+
+  it("keeps the stored secret when a typed replacement is cleared again", () => {
+    const [secret] = toEnvVarDrafts(stored);
+    const cleared = updateEnvVarDraft(
+      updateEnvVarDraft(secret!, { value: "sk-typo" }),
+      { value: "" },
+    );
+
+    expect(cleared.valueRedacted).toBe(true);
+    expect(toEnvVarInputs([cleared])).toEqual({
+      environment: [
+        {
+          name: "OPENAI_API_KEY",
+          sensitive: true,
+          value: "",
+          valueRedacted: true,
+        },
+      ],
+    });
+  });
+
   it("drops blank rows and rejects bad or repeated names", () => {
     expect(toEnvVarInputs([emptyEnvVarDraft()])).toEqual({ environment: [] });
     expect(
@@ -380,13 +433,64 @@ describe("instance form", () => {
 
   it("warns that a new home starts new native sessions", () => {
     const current = summary({ config: { homePath: "~/.codex-a" } });
+    const unchanged = draftFromSummary(current);
 
-    expect(getHomeChangeNotice(current, { homePath: "~/.codex-a" })).toBeNull();
-    expect(getHomeChangeNotice(current, { homePath: "~/.codex-b" })).toContain(
-      "start new Codex sessions",
-    );
+    expect(getHomeChangeNotice(current, unchanged)).toBeNull();
     expect(
-      getHomeChangeNotice(summary({ driver: "cursor" }), { homePath: "/x" }),
+      getHomeChangeNotice(current, { ...unchanged, homePath: "~/.codex-b" }),
+    ).toContain("start new Codex sessions");
+    expect(
+      getHomeChangeNotice(summary({ driver: "cursor" }), {
+        environment: [],
+        homePath: "/x",
+      }),
+    ).toBeNull();
+  });
+
+  it("treats the home variable among the environment as the home", () => {
+    const current = summary({
+      config: { homePath: "~/.codex-a" },
+      environment: [
+        {
+          name: "CODEX_HOME",
+          needsReentry: false,
+          sensitive: false,
+          value: "/srv/codex",
+          valueRedacted: false,
+        },
+      ],
+    });
+    const unchanged = draftFromSummary(current);
+    const [homeRow] = unchanged.environment;
+
+    expect(getHomeChangeNotice(current, unchanged)).toBeNull();
+    expect(
+      getHomeChangeNotice(current, {
+        ...unchanged,
+        environment: [updateEnvVarDraft(homeRow!, { value: "/srv/other" })],
+      }),
+    ).toContain("start new Codex sessions");
+    expect(
+      getHomeChangeNotice(current, { ...unchanged, environment: [] }),
+    ).toContain("start new Codex sessions");
+    expect(
+      getHomeChangeNotice(summary(), {
+        environment: [
+          updateEnvVarDraft(emptyEnvVarDraft(), {
+            name: "CODEX_HOME",
+            value: "/srv/codex",
+          }),
+        ],
+        homePath: "",
+      }),
+    ).toContain("start new Codex sessions");
+
+    expect(getHomeEnvVarOverrideNotice("codex", unchanged.environment)).toBe(
+      "CODEX_HOME is also set under Environment variables, and that value is the one used: remove it there to use this field.",
+    );
+    expect(getHomeEnvVarOverrideNotice("codex", [])).toBeNull();
+    expect(
+      getHomeEnvVarOverrideNotice("cursor", unchanged.environment),
     ).toBeNull();
   });
 });

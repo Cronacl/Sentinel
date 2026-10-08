@@ -416,6 +416,91 @@ describe("environment secrets", () => {
       },
     ]);
   });
+
+  it("refuses to keep a stored value under a name that has none", async () => {
+    const registry = createRegistry();
+    const created = await registry.create(USER_ID, {
+      driver: "codex",
+      environment: [
+        { name: "OPENAI_KEY", sensitive: true, value: "sk-stored" },
+      ],
+      label: "Work",
+    });
+    await expect(
+      registry.create(USER_ID, {
+        driver: "codex",
+        environment: [
+          { name: "TOKEN", sensitive: true, value: "", valueRedacted: true },
+        ],
+        label: "Other",
+      }),
+    ).rejects.toMatchObject({ code: "invalid" });
+
+    // A renamed row echoed back redacted: the secret does not follow the
+    // name, and an empty value is not stored in its place.
+    await expect(
+      registry.update(USER_ID, created.id, {
+        environment: [
+          {
+            name: "OPENAI_API_KEY",
+            sensitive: true,
+            value: "",
+            valueRedacted: true,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      code: "invalid",
+      message:
+        "There is no stored value of OPENAI_API_KEY to keep. Enter its value.",
+    });
+    const resolved = await registry.resolve(USER_ID, {
+      driver: "codex",
+      instanceId: created.id,
+    });
+    expect(resolved.env.OPENAI_KEY).toBe("sk-stored");
+    expect(Object.hasOwn(resolved.envOverrides, "OPENAI_API_KEY")).toBe(false);
+  });
+
+  it("round-trips the settings dialog's environment rows", async () => {
+    const { toEnvVarDrafts, toEnvVarInputs, updateEnvVarDraft } =
+      await import("@/components/settings/engines/instance-management");
+    const registry = createRegistry();
+    const created = await registry.create(USER_ID, {
+      driver: "codex",
+      environment: [
+        { name: "OPENAI_KEY", sensitive: true, value: "sk-stored" },
+        { name: "KEEP", sensitive: true, value: "kept" },
+      ],
+      label: "Work",
+    });
+    const [secret, kept] = toEnvVarDrafts(created.environment);
+    const renamed = updateEnvVarDraft(secret!, { name: "OPENAI_API_KEY" });
+
+    // Renaming alone is refused before anything is sent.
+    expect(toEnvVarInputs([renamed, kept!])).toEqual({
+      error:
+        "Enter a value for OPENAI_API_KEY: the stored secret of OPENAI_KEY does not move to a new name.",
+    });
+
+    const inputs = toEnvVarInputs([
+      updateEnvVarDraft(renamed, { value: "sk-renamed" }),
+      kept!,
+    ]);
+    if ("error" in inputs) {
+      throw new Error(inputs.error);
+    }
+    await registry.update(USER_ID, created.id, {
+      environment: inputs.environment,
+    });
+    const resolved = await registry.resolve(USER_ID, {
+      driver: "codex",
+      instanceId: created.id,
+    });
+    expect(resolved.env.OPENAI_API_KEY).toBe("sk-renamed");
+    expect(resolved.env.KEEP).toBe("kept");
+    expect(Object.hasOwn(resolved.envOverrides, "OPENAI_KEY")).toBe(false);
+  });
 });
 
 describe("resolve", () => {

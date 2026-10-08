@@ -28,6 +28,7 @@ import {
   emptyInstanceFormDraft,
   getDriverHomeEnvVar,
   getHomeChangeNotice,
+  getHomeEnvVarOverrideNotice,
   getInstanceIsolationNote,
   isEngineAccentColor,
   validateInstanceFormDraft,
@@ -167,6 +168,10 @@ function InstanceForm({
   const isolationNote = getInstanceIsolationNote(driver);
   const homeNotice =
     target.mode === "edit" ? getHomeChangeNotice(target.summary, draft) : null;
+  const homeOverrideNotice = getHomeEnvVarOverrideNotice(
+    driver,
+    draft.environment,
+  );
 
   const set = (patch: Partial<InstanceFormDraft>) =>
     setDraft((current) => ({ ...current, ...patch }));
@@ -267,6 +272,11 @@ function InstanceForm({
                 placeholder={`~/.${driver}-work`}
                 value={draft.homePath}
               />
+              {homeOverrideNotice ? (
+                <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground rounded-lg border px-2 py-1 text-[11px]">
+                  {homeOverrideNotice}
+                </p>
+              ) : null}
               {homeNotice ? (
                 <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground rounded-lg border px-2 py-1 text-[11px]">
                   {homeNotice}

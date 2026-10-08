@@ -712,6 +712,15 @@ export function createEngineInstanceRegistry(
 
       let plaintext = variable.value;
       const stored = previousByName.get(variable.name);
+      // A stored value is only kept under its own name: a redacted echo for
+      // a name with nothing stored (a renamed row) would store an empty
+      // value that overrides the app's own.
+      if (variable.valueRedacted && !variable.value && !stored) {
+        throw new EngineInstanceError(
+          "invalid",
+          `There is no stored value of ${variable.name} to keep. Enter its value.`,
+        );
+      }
       if (variable.valueRedacted && !variable.value && stored) {
         if (stored.encrypted && variable.sensitive) {
           return { ...stored, sensitive: true };

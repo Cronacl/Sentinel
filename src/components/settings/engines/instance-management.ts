@@ -174,8 +174,11 @@ export type EnvVarDraft = {
   /** The stored value no longer decrypts; it stays unset until re-entered. */
   needsReentry: boolean;
   sensitive: boolean;
-  /** The stored value was sent back as a secret. */
-  storedSecret: boolean;
+  /**
+   * The name a stored (redacted) value is kept under, null for rows without
+   * one. The value stays with that name: a renamed row needs a new value.
+   */
+  storedSecretName: string | null;
   value: string;
   /** True while the row keeps the stored (redacted) value. */
   valueRedacted: boolean;
@@ -196,7 +199,7 @@ export function toEnvVarDrafts(
     name: variable.name,
     needsReentry: variable.needsReentry,
     sensitive: variable.sensitive,
-    storedSecret: variable.valueRedacted,
+    storedSecretName: variable.valueRedacted ? variable.name : null,
     value: variable.valueRedacted ? "" : variable.value,
     valueRedacted: variable.valueRedacted,
   }));
@@ -208,21 +211,29 @@ export function emptyEnvVarDraft(): EnvVarDraft {
     name: "",
     needsReentry: false,
     sensitive: true,
-    storedSecret: false,
+    storedSecretName: null,
     value: "",
     valueRedacted: false,
   };
 }
 
-/** A row edit: typing a value replaces a stored secret. */
+/**
+ * A row edit. A row keeps its stored secret while it has the stored name and
+ * no value of its own: typing a value replaces the secret, renaming the row
+ * leaves the secret behind, and clearing the typed value (or renaming the row
+ * back) keeps the stored secret again.
+ */
 export function updateEnvVarDraft(
   draft: EnvVarDraft,
   patch: Partial<Pick<EnvVarDraft, "name" | "sensitive" | "value">>,
 ): EnvVarDraft {
+  const next = { ...draft, ...patch };
   return {
-    ...draft,
-    ...patch,
-    ...(patch.value !== undefined ? { valueRedacted: false } : {}),
+    ...next,
+    valueRedacted:
+      next.storedSecretName !== null &&
+      next.value === "" &&
+      next.name.trim() === next.storedSecretName,
   };
 }
 
@@ -259,9 +270,21 @@ export function toEnvVarInputs(
       return { error: `${name} is listed twice.` };
     }
     seen.add(name);
-    if (draft.valueRedacted && draft.storedSecret && !draft.sensitive) {
+    if (draft.valueRedacted && !draft.sensitive) {
       return {
         error: `Enter a new value for ${name} to store it as a plain variable.`,
+      };
+    }
+    if (
+      draft.storedSecretName !== null &&
+      !draft.valueRedacted &&
+      !draft.value
+    ) {
+      // Renamed: the stored secret cannot follow (the server only keeps a
+      // stored value under its own name), and an empty one would override
+      // the app's value of the variable.
+      return {
+        error: `Enter a value for ${name}: the stored secret of ${draft.storedSecretName} does not move to a new name.`,
       };
     }
     environment.push(
@@ -455,22 +478,55 @@ export function buildUpdateInstancePatch(
   return patch;
 }
 
+type HomeEnvRow = { name: string; value: string; valueRedacted: boolean };
+
+/** The home variable's row among the environment, as compared for changes. */
+function homeEnvVarValue(rows: readonly HomeEnvRow[], homeEnvVar: string) {
+  const row = rows.find((candidate) => candidate.name.trim() === homeEnvVar);
+  if (!row || (!row.value && !row.valueRedacted)) {
+    return null;
+  }
+  return row.valueRedacted ? { kept: true } : { value: row.value };
+}
+
 /**
  * Shown before saving a new home for an instance that threads may already
- * use: their native sessions belong to the old home.
+ * use: their native sessions belong to the old home. The home variable set
+ * among the environment variables wins over the Home directory field, so
+ * changing it moves the home too.
  */
 export function getHomeChangeNotice(
-  summary: Pick<EngineInstanceSummary, "config" | "driver">,
-  draft: Pick<InstanceFormDraft, "homePath">,
+  summary: Pick<EngineInstanceSummary, "config" | "driver" | "environment">,
+  draft: Pick<InstanceFormDraft, "environment" | "homePath">,
 ) {
   const meta = getDriverMeta(summary.driver);
   if (!meta?.homeEnvVar) {
     return null;
   }
-  if (draft.homePath.trim() === configString(summary.config, "homePath")) {
+  const homePathChanged =
+    draft.homePath.trim() !== configString(summary.config, "homePath");
+  const homeEnvVarChanged =
+    JSON.stringify(homeEnvVarValue(draft.environment, meta.homeEnvVar)) !==
+    JSON.stringify(homeEnvVarValue(summary.environment, meta.homeEnvVar));
+  if (!homePathChanged && !homeEnvVarChanged) {
     return null;
   }
   return `Threads on this instance start new ${meta.label} sessions after this change; their conversation so far is sent along to the new session.`;
+}
+
+/**
+ * Shown under the Home directory field while the home variable is also set
+ * among the environment variables: that value is the one used.
+ */
+export function getHomeEnvVarOverrideNotice(
+  driver: string,
+  environment: readonly HomeEnvRow[],
+) {
+  const homeEnvVar = getDriverHomeEnvVar(driver);
+  if (!homeEnvVar || !homeEnvVarValue(environment, homeEnvVar)) {
+    return null;
+  }
+  return `${homeEnvVar} is also set under Environment variables, and that value is the one used: remove it there to use this field.`;
 }
 
 // --- Custom models -----------------------------------------------------------
