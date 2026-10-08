@@ -295,10 +295,11 @@ export function createEngineAuthFlowStore(
       return;
     }
     record.state = { ...record.state, ...patch };
-    // The phase only: interactions carry device codes and launch tickets,
-    // and engine events reach every subscriber.
+    // The phase only: engine events reach every subscriber, interactions
+    // carry device codes and launch tickets, and messages driver text.
+    // Clients read the flow back per user (auth.status).
     deps.emit?.({
-      state: { ...record.state, interaction: null },
+      state: { ...record.state, interaction: null, message: null },
       type: "auth",
     });
     notify(record);

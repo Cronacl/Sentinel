@@ -1,5 +1,7 @@
 import "server-only";
 
+import path from "node:path";
+
 import {
   buildSpawnInvocation,
   SENTINEL_PRIVATE_ENV_KEYS,
@@ -22,18 +24,41 @@ export type EngineAuthTerminalLaunchSpec = {
 };
 
 /**
+ * cmd.exe by absolute path: Electron main only runs absolute commands, and
+ * ComSpec can be missing or relative in a GUI-launched app's environment.
+ */
+export function resolveWindowsComSpec(
+  env: Record<string, string | undefined> = process.env,
+) {
+  const comSpec = env.ComSpec?.trim();
+  if (comSpec && path.win32.isAbsolute(comSpec)) {
+    return comSpec;
+  }
+  const systemRoot =
+    env.SystemRoot?.trim() || env.windir?.trim() || "C:\\Windows";
+  return path.win32.join(systemRoot, "System32", "cmd.exe");
+}
+
+/**
  * The command as the platform spawns it: Windows `.cmd`/`.bat` shims run
  * through cmd.exe with quoted arguments (see spawn.ts), anything else as is.
  */
 export function toAuthTerminalInvocation(
   command: string,
   args: readonly string[],
-  options?: { comSpec?: string; platform?: NodeJS.Platform },
+  options?: {
+    comSpec?: string;
+    env?: Record<string, string | undefined>;
+    platform?: NodeJS.Platform;
+  },
 ): Pick<
   EngineAuthTerminalCommand,
   "args" | "command" | "windowsVerbatimArguments"
 > {
-  const invocation = buildSpawnInvocation(command, args, options);
+  const invocation = buildSpawnInvocation(command, args, {
+    comSpec: options?.comSpec ?? resolveWindowsComSpec(options?.env),
+    platform: options?.platform,
+  });
   return {
     args: invocation.args,
     command: invocation.command,

@@ -144,9 +144,18 @@ describe("credentials flows", () => {
     // The secret never leaves through state or events.
     expect(JSON.stringify(store.get("user-1", "claude"))).not.toContain(SECRET);
     expect(JSON.stringify(events)).not.toContain(SECRET);
-    expect(events.every((event) => event.state.interaction === null)).toBe(
-      true,
-    );
+    // Events carry the phase only; the message is read back per user.
+    expect(
+      events.every(
+        (event) =>
+          event.state.interaction === null && event.state.message === null,
+      ),
+    ).toBe(true);
+    expect(events.at(-1).state).toMatchObject({
+      flowId: "flow-1",
+      instanceId: "claude",
+      phase: "succeeded",
+    });
   });
 
   it("rejects answers that do not match the pending step", async () => {

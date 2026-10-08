@@ -11,6 +11,7 @@ const {
   formatAuthDisplayCommand,
   isSafeAuthUrl,
   quotePosixArgument,
+  resolveWindowsComSpec,
   toAuthTerminalInvocation,
 } = await import("./terminal-command");
 const { resolveEngineAuthFlowOutcome } = await import("./outcome");
@@ -71,6 +72,23 @@ describe("terminal commands", () => {
         platform: "darwin",
       }),
     ).toEqual({ args: ["login"], command: "/usr/bin/agent" });
+  });
+
+  it("names cmd.exe by absolute path, as Electron main requires", () => {
+    expect(
+      resolveWindowsComSpec({ ComSpec: "D:\\Windows\\system32\\cmd.exe" }),
+    ).toBe("D:\\Windows\\system32\\cmd.exe");
+    // Missing or relative: from the system root.
+    expect(
+      resolveWindowsComSpec({ ComSpec: "cmd.exe", SystemRoot: "E:\\Win" }),
+    ).toBe("E:\\Win\\System32\\cmd.exe");
+    expect(resolveWindowsComSpec({})).toBe("C:\\Windows\\System32\\cmd.exe");
+    expect(
+      toAuthTerminalInvocation("C:\\npm\\agent.cmd", ["login"], {
+        env: {},
+        platform: "win32",
+      }).command,
+    ).toBe("C:\\Windows\\System32\\cmd.exe");
   });
 
   it("only shows https pages, or http on loopback", () => {

@@ -10,7 +10,12 @@ import type {
 // one-time terminal tickets, storing credentials and the snapshot refresh
 // that verifies the result.
 
-/** What the client asking for a flow can do. */
+/**
+ * What the client asking for a flow can do. Terminal methods are offered to
+ * every client: the desktop app embeds the command in a terminal, a browser
+ * shows it to copy (the flow mints no launch ticket then). A driver leaves
+ * a method out only when it cannot work as a copied command.
+ */
 export type EngineAuthClientCapabilities = {
   /** An embedded terminal (the desktop app); false in a browser. */
   terminal: boolean;
