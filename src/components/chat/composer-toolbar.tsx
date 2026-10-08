@@ -76,6 +76,8 @@ type ComposerToolbarProps = {
   selectedModelKey: string | null;
   showVoiceInput?: boolean;
   toolTags: SentinelComposerToolTag[];
+  /** The selected instance's plan usage chip, if it reports usage. */
+  usageLimitsIndicator?: ReactNode;
   voiceInputDisabled?: boolean;
   showEngineSelector: boolean;
 };
@@ -102,6 +104,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
   selectedModelKey,
   showVoiceInput = false,
   toolTags,
+  usageLimitsIndicator,
   voiceInputDisabled = false,
   showEngineSelector,
 }: ComposerToolbarProps) {
@@ -424,6 +427,7 @@ export const ComposerToolbar = memo(function ComposerToolbar({
       </div>
 
       <div className="flex items-center gap-2">
+        {usageLimitsIndicator}
         {contextWindowIndicator ? (
           <ContextWindowIndicator
             compactionEnabled={contextWindowIndicator.compactionEnabled}

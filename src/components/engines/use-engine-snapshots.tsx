@@ -12,6 +12,7 @@ import {
   setEngineEventsConnection,
   subscribeToEngineEventsConnection,
 } from "./engine-events";
+import { syncUsageLimitsFromEvent } from "./usage-limits";
 
 /** Coalesces the composer refetches a burst of events asks for. */
 const COMPOSER_INVALIDATE_DELAY_MS = 150;
@@ -63,6 +64,7 @@ export function EngineEventsBridge() {
         undefined,
         (current) => applyEngineEvent(current, event).snapshots,
       );
+      syncUsageLimitsFromEvent(utils.engines.usage.get, event);
       // A (re)connect replays every instance: one refetch for the burst.
       if (composerView.observe(event) && !invalidateTimerRef.current) {
         invalidateTimerRef.current = setTimeout(() => {

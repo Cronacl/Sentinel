@@ -33,6 +33,7 @@ import {
   toOptionChoices,
   type ComposerOptionValues,
 } from "@/components/engines/option-descriptors";
+import { EngineUsageLimitsChip } from "@/components/engines/usage-limits-chip";
 import { VoiceRecorderPanel } from "./voice-recorder-panel";
 
 import type { ChatComposerProps, ComposerSendInput } from "./types";
@@ -613,6 +614,16 @@ export function ChatComposer({
       supportedReasoningEfforts,
     ],
   );
+  const usageLimitsIndicator = useMemo(
+    () => (
+      <EngineUsageLimitsChip
+        driver={selectedEngine}
+        instanceId={selectedInstanceId}
+        isDisabled={isLocked}
+      />
+    ),
+    [isLocked, selectedEngine, selectedInstanceId],
+  );
   const showEngineSelector = !canPersistThreadSelection;
   const selectedVoiceProviderLabel =
     voiceSettingsQuery.data?.providers.find(
@@ -859,6 +870,7 @@ export function ChatComposer({
               showEngineSelector={showEngineSelector}
               showVoiceInput={showVoiceInput}
               toolTags={toolTags}
+              usageLimitsIndicator={usageLimitsIndicator}
               voiceInputDisabled={!editor}
             />
           )}
