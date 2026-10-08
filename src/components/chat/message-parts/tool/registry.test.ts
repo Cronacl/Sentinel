@@ -10,6 +10,8 @@ import {
   resolveRenderer,
 } from "./registry";
 import { CodexRuntimeTool } from "./renderers/codex-runtime";
+import { ExternalAgentTool } from "./renderers/ext-agent";
+import { ExternalUserInputTool } from "./renderers/external-runtime/user-input";
 import { CodexFileChangeTool } from "./renderers/codex-file-change";
 import { CodexImageViewTool } from "./renderers/codex-image-view";
 import { CodexMcpTool } from "./renderers/codex-mcp";
@@ -1298,6 +1300,43 @@ describe("resolveRenderer", () => {
 
       expect(renderer).toBe(expected);
     }
+  });
+
+  it("picks the shared external family from the part's kind metadata, not its name", () => {
+    const part = (toolName: string, kind: string) =>
+      ({
+        callProviderMetadata: {
+          sentinel: { agentLabel: "Work Cursor", kind },
+        },
+        input: {},
+        output: {},
+        state: "output-available",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      }) as any;
+
+    // A name the keyword heuristic would read as a shell still renders by kind.
+    expect(resolveRenderer(part("cursor_bash", "read"))).toBe(
+      ExternalAgentTool,
+    );
+    expect(resolveRenderer(part("cursor_edit", "edit"))).toBe(
+      ExternalAgentTool,
+    );
+    expect(resolveRenderer(part("grok_execute", "execute"))).toBe(
+      ExternalAgentTool,
+    );
+    expect(resolveRenderer(part("cursor_ask_question", "user_input"))).toBe(
+      ExternalUserInputTool,
+    );
+    // Without metadata (persisted before it existed) the Cursor names keep
+    // their renderers.
+    expect(
+      resolveRenderer({
+        ...part("cursor_bash", "read"),
+        callProviderMetadata: undefined,
+      }),
+    ).toBe(CursorShellTool);
   });
 
   it("uses Cursor and OpenCode runtime fallbacks for unknown engine tools", () => {

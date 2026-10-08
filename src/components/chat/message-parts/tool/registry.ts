@@ -193,8 +193,11 @@ import {
 } from "./renderers/external-runtime";
 import {
   CursorUserInputTool,
+  ExternalUserInputTool,
   OpenCodeUserInputTool,
 } from "./renderers/external-runtime/user-input";
+import { ExternalAgentTool } from "./renderers/ext-agent";
+import { getExternalToolMeta } from "./external-tool-meta";
 
 const renderers: Record<string, Renderer> = {
   apply_patch: WorkspaceTool,
@@ -985,10 +988,25 @@ function resolveToolNameRenderer(name: string): Renderer | undefined {
   return resolveIntegrationFallback(name);
 }
 
+/**
+ * External agents (the shared ACP engine) tag their tool parts with a kind
+ * in callProviderMetadata.sentinel; that kind picks the shared renderer
+ * family, whatever the tool's name. Parts without it (persisted before)
+ * fall back to name-based resolution.
+ */
+function resolveExternalAgentRenderer(part: ToolPart): Renderer | undefined {
+  const meta = getExternalToolMeta(part);
+  if (!meta) return undefined;
+  return meta.kind === "user_input" ? ExternalUserInputTool : ExternalAgentTool;
+}
+
 export function resolveRenderer(part: ToolPart): Renderer | undefined {
   if (shouldUseIntegrationGeneric(part)) {
     return IntegrationGenericTool;
   }
 
-  return resolveToolNameRenderer(getToolName(part));
+  return (
+    resolveExternalAgentRenderer(part) ??
+    resolveToolNameRenderer(getToolName(part))
+  );
 }
