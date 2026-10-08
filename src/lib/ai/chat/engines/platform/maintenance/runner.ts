@@ -14,8 +14,10 @@ import { emitEngineEvent, type EngineEventInput } from "../events";
 
 // Runs the install and update commands the user confirmed in Settings →
 // Engines (after t3code's providerMaintenanceRunner.ts, MIT):
-// - one operation per instance at a time; operations whose commands share a
-//   lock key (one npm prefix, Homebrew, one CLI's own updater) queue;
+// - one operation per instance at a time, keyed by user and instance
+//   (instance ids are only unique per user); operations whose commands
+//   share a lock key (one npm prefix, Homebrew, one CLI's own updater)
+//   queue;
 // - the command is spawned without a shell (spawnManagedProcess: its own
 //   process group, registered for shutdown), with output streamed to the
 //   instance's updateState (the last 10 000 characters) as maintenance
@@ -38,6 +40,9 @@ export type MaintenanceRecord = {
   updateState: EngineUpdateState | null;
 };
 
+/** Whose instance an operation belongs to. */
+export type MaintenanceTarget = { instanceId: string; userId: string };
+
 export type MaintenanceVerification = {
   message: string;
   status: "succeeded" | "unchanged";
@@ -55,11 +60,9 @@ export type MaintenanceCommandRun = {
   /** "Claude", for messages. */
   label: string;
   lockKey: string;
-  /**
-   * After the final state is recorded (any outcome): lets the snapshot
-   * pick it up (the re-probe in `verify` ran while it was still running).
-   */
+  /** After the final state is recorded (any outcome). */
   onSettled?: () => void;
+  userId: string;
   verify(): Promise<MaintenanceVerification>;
 };
 
@@ -72,6 +75,7 @@ export type MaintenanceManagedRun = {
     onProgress(progress: ManagedInstallProgress): void;
     signal: AbortSignal;
   }): Promise<void>;
+  userId: string;
   verify(): Promise<MaintenanceVerification>;
 };
 
@@ -92,13 +96,13 @@ export type MaintenanceRunnerDeps = {
 };
 
 export interface MaintenanceRunner {
-  cancel(instanceId: string): boolean;
-  get(instanceId: string): MaintenanceRecord | null;
-  isRunning(instanceId: string): boolean;
+  cancel(target: MaintenanceTarget): boolean;
+  get(target: MaintenanceTarget): MaintenanceRecord | null;
+  isRunning(target: MaintenanceTarget): boolean;
   runCommand(run: MaintenanceCommandRun): EngineUpdateState;
   runManaged(run: MaintenanceManagedRun): EngineInstallState;
   /** Resolves once the instance's current operation settled (tests). */
-  whenSettled(instanceId: string): Promise<void>;
+  whenSettled(target: MaintenanceTarget): Promise<void>;
 }
 
 type Operation = {
@@ -106,6 +110,14 @@ type Operation = {
   done: Promise<void>;
   record: MaintenanceRecord;
 };
+
+function runningMessageOf(run: MaintenanceCommandRun) {
+  return `${run.action === "install" ? "Installing" : "Updating"} ${run.label}: ${run.display}`;
+}
+
+function operationKey(target: MaintenanceTarget) {
+  return `${target.userId}\u0000${target.instanceId}`;
+}
 
 function toError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -178,11 +190,12 @@ export function createMaintenanceRunner(
   }
 
   function begin(
-    instanceId: string,
+    target: MaintenanceTarget,
     label: string,
     action: MaintenanceAction,
   ): Operation {
-    if (operations.get(instanceId)?.record.running) {
+    const key = operationKey(target);
+    if (operations.get(key)?.record.running) {
       throw new MaintenanceBusyError(label);
     }
     const operation: Operation = {
@@ -195,7 +208,7 @@ export function createMaintenanceRunner(
         updateState: null,
       },
     };
-    operations.set(instanceId, operation);
+    operations.set(key, operation);
     return operation;
   }
 
@@ -221,7 +234,7 @@ export function createMaintenanceRunner(
         startedAt,
         status: "running",
       });
-      const runningMessage = `${run.action === "install" ? "Installing" : "Updating"} ${run.label}: ${run.display}`;
+      const runningMessage = runningMessageOf(run);
       setUpdateState(run.instanceId, operation.record, running(runningMessage));
 
       let child: ChildProcess;
@@ -291,8 +304,9 @@ export function createMaintenanceRunner(
   }
 
   const runner: MaintenanceRunner = {
-    cancel(instanceId) {
-      const operation = operations.get(instanceId);
+    cancel(target) {
+      const { instanceId } = target;
+      const operation = operations.get(operationKey(target));
       if (!operation?.record.running) {
         return false;
       }
@@ -311,21 +325,22 @@ export function createMaintenanceRunner(
       return true;
     },
 
-    get(instanceId) {
-      const operation = operations.get(instanceId);
+    get(target) {
+      const operation = operations.get(operationKey(target));
       return operation ? { ...operation.record } : null;
     },
 
-    isRunning(instanceId) {
-      return operations.get(instanceId)?.record.running ?? false;
+    isRunning(target) {
+      return operations.get(operationKey(target))?.record.running ?? false;
     },
 
     runCommand(run) {
-      const operation = begin(run.instanceId, run.label, run.action);
+      const operation = begin(run, run.label, run.action);
       const { record } = operation;
 
+      // Set when the command starts: at once, or when the lock frees up.
+      let startedAt: string | null = null;
       const { queued, run: done } = withLock(run.lockKey, async () => {
-        let startedAt: string | null = null;
         const finish = (
           status: EngineUpdateState["status"],
           message: string,
@@ -350,7 +365,7 @@ export function createMaintenanceRunner(
         }
 
         try {
-          startedAt = iso();
+          startedAt ??= iso();
           const result = await execute(run, operation, startedAt);
           const output = result.output.trim() || null;
           if (result.reason === "cancelled") {
@@ -389,6 +404,11 @@ export function createMaintenanceRunner(
       });
       operation.done = done.catch(() => undefined);
 
+      // Recorded now, before the command starts: whoever reads the instance
+      // next (a refetch right after the click) already sees it.
+      if (!queued) {
+        startedAt = iso();
+      }
       const initial: EngineUpdateState = queued
         ? {
             finishedAt: null,
@@ -397,21 +417,19 @@ export function createMaintenanceRunner(
             startedAt: null,
             status: "queued",
           }
-        : (record.updateState ?? {
+        : {
             finishedAt: null,
-            message: null,
+            message: runningMessageOf(run),
             output: null,
-            startedAt: iso(),
+            startedAt,
             status: "running",
-          });
-      if (queued) {
-        setUpdateState(run.instanceId, record, initial);
-      }
+          };
+      setUpdateState(run.instanceId, record, initial);
       return initial;
     },
 
     runManaged(run) {
-      const operation = begin(run.instanceId, run.label, "install");
+      const operation = begin(run, run.label, "install");
       const { record } = operation;
       const state = (
         phase: EngineInstallState["phase"],
@@ -480,8 +498,8 @@ export function createMaintenanceRunner(
       return initial;
     },
 
-    async whenSettled(instanceId) {
-      await operations.get(instanceId)?.done;
+    async whenSettled(target) {
+      await operations.get(operationKey(target))?.done;
     },
   };
 

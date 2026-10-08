@@ -11,20 +11,20 @@ import {
 } from "./inspect";
 import { buildMaintenanceEnv } from "./env";
 import { getLatestVersionLookup } from "./latest-version";
-import { getMaintenanceRunner, type MaintenanceRunner } from "./runner";
 
 // The "update-state" snapshot enricher: the instance's version advisory
 // (newest release, whether it is behind, the update command), what can be
-// installed when the runtime is missing (setup.canInstall/installHint), and
-// the state of a running or finished install or update. It never waits
-// long: a cold version lookup gets a short head start, then finishes in
-// the background for the next probe.
+// installed when the runtime is missing (setup.canInstall/installHint). It
+// never waits long: a cold version lookup gets a short head start, then
+// finishes in the background for the next probe. The state of a running or
+// finished install or update is not part of the cached snapshot: the
+// snapshot service lays the runner's live state over every snapshot it
+// returns or emits.
 
 const COLD_LOOKUP_WAIT_MS = 1_500;
 
 export type UpdateStateEnricherDeps = {
   inspect?: Partial<MaintenanceInspectDeps>;
-  runner?: () => Pick<MaintenanceRunner, "get">;
 };
 
 const sharedPlanCache: NonNullable<MaintenanceInspectDeps["planCache"]> =
@@ -106,14 +106,8 @@ export function createUpdateStateEnricher(
 ): EngineSnapshotEnricher {
   return {
     async enrich({ driver, instance, snapshot }, { signal }) {
-      const record = (deps.runner ?? getMaintenanceRunner)().get(instance.id);
-      const withState: EngineSnapshot = {
-        ...snapshot,
-        installState: record?.installState ?? null,
-        updateState: record?.updateState ?? null,
-      };
       if (!snapshot.enabled || snapshot.availability !== "available") {
-        return withState;
+        return snapshot;
       }
 
       const inspection = await inspectMaintenance(
@@ -127,7 +121,7 @@ export function createUpdateStateEnricher(
         },
         getMaintenanceInspectDeps(deps.inspect),
       );
-      return applyMaintenanceInspection(withState, inspection);
+      return applyMaintenanceInspection(snapshot, inspection);
     },
     id: "update-state",
   };

@@ -8,6 +8,8 @@ import type {
   EngineSnapshot,
 } from "@/lib/ai/chat/engines/contract";
 
+import { isMaintenanceRunning } from "./maintenance-status";
+
 // Client-side state for the engines.onEvents subscription: whether it is
 // live (a tiny external store, so any component can switch its polling off
 // while events arrive) and the pure cache updates applied per event.
@@ -44,16 +46,23 @@ export const ENGINE_SNAPSHOT_IDLE_POLL_MS = 60_000;
 
 /**
  * How often the snapshots query refetches: never while events arrive, every
- * 2 s while any snapshot is still being checked, otherwise every minute.
+ * 2 s while any snapshot is still being checked or installed/updated (the
+ * server lays the live state over the snapshots it returns), otherwise
+ * every minute.
  */
 export function getEngineSnapshotPollInterval(
-  snapshots: readonly Pick<EngineSnapshot, "status">[] | undefined,
+  snapshots:
+    | readonly Pick<EngineSnapshot, "installState" | "status" | "updateState">[]
+    | undefined,
   live: boolean,
 ): number | false {
   if (live) {
     return false;
   }
-  return snapshots?.some((snapshot) => snapshot.status === "checking")
+  return snapshots?.some(
+    (snapshot) =>
+      snapshot.status === "checking" || isMaintenanceRunning(snapshot),
+  )
     ? ENGINE_SNAPSHOT_CHECKING_POLL_MS
     : ENGINE_SNAPSHOT_IDLE_POLL_MS;
 }
@@ -80,8 +89,9 @@ export function applyEngineEvent(
   }
 
   if (event.type === "maintenance") {
-    // Install and update progress lands on the instance's snapshot at once;
-    // the re-probe after it finishes brings the rest.
+    // Install and update progress lands on the instance's snapshot at once
+    // (the server's snapshots carry the same live state on a refetch); the
+    // re-probe after it finishes brings the rest.
     const index =
       snapshots?.findIndex((item) => item.instanceId === event.instanceId) ??
       -1;

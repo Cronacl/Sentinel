@@ -14,7 +14,7 @@ import type { EngineDriver } from "../driver";
 
 const signal = new AbortController().signal;
 
-function enricherWith(record: unknown) {
+function createEnricher() {
   return createUpdateStateEnricher({
     inspect: {
       latest: createLatestVersionLookup({
@@ -31,19 +31,11 @@ function enricherWith(record: unknown) {
       updateChecksEnabled: async () => true,
       which: async () => null,
     },
-    runner: () => ({ get: () => record as never }),
   });
 }
 
 describe("update-state enricher", () => {
-  it("adds the version advisory and the running update", async () => {
-    const updateState = {
-      finishedAt: null,
-      message: "Updating Claude",
-      output: null,
-      startedAt: "2026-10-08T12:00:00.000Z",
-      status: "running" as const,
-    };
+  it("adds the version advisory", async () => {
     const snapshot = makeFakeSnapshot({
       driver: "claude",
       install: {
@@ -54,12 +46,7 @@ describe("update-state enricher", () => {
       },
     });
 
-    const result = await enricherWith({
-      action: "update",
-      installState: null,
-      running: true,
-      updateState,
-    }).enrich(
+    const result = await createEnricher().enrich(
       {
         driver: {
           kind: "claude",
@@ -72,7 +59,8 @@ describe("update-state enricher", () => {
       { signal },
     );
 
-    expect(result.updateState).toEqual(updateState);
+    // Live install and update state is the snapshot service's overlay.
+    expect(result.updateState).toBe(null);
     expect(result.versionAdvisory).toEqual(
       expect.objectContaining({
         canUpdate: true,
@@ -84,9 +72,9 @@ describe("update-state enricher", () => {
     );
   });
 
-  it("only records state for disabled or unavailable instances", async () => {
+  it("leaves disabled or unavailable instances alone", async () => {
     const snapshot = makeFakeSnapshot({ driver: "claude", enabled: false });
-    const result = await enricherWith(null).enrich(
+    const result = await createEnricher().enrich(
       {
         driver: { kind: "claude" } as unknown as EngineDriver,
         instance: makeFakeInstance({ driver: "claude" }),
@@ -95,11 +83,7 @@ describe("update-state enricher", () => {
       },
       { signal },
     );
-    expect(result).toEqual({
-      ...snapshot,
-      installState: null,
-      updateState: null,
-    });
+    expect(result).toEqual(snapshot);
   });
 });
 

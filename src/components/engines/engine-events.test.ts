@@ -34,6 +34,25 @@ describe("getEngineSnapshotPollInterval", () => {
       ENGINE_SNAPSHOT_IDLE_POLL_MS,
     );
   });
+
+  it("polls every 2 s while an install or update runs without events", () => {
+    expect(
+      getEngineSnapshotPollInterval(
+        [
+          makeFakeSnapshot({
+            updateState: {
+              finishedAt: null,
+              message: "Updating Codex",
+              output: null,
+              startedAt: "2026-10-08T12:00:00.000Z",
+              status: "running",
+            },
+          }),
+        ],
+        false,
+      ),
+    ).toBe(ENGINE_SNAPSHOT_CHECKING_POLL_MS);
+  });
 });
 
 describe("applyEngineEvent", () => {

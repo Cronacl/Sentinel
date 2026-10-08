@@ -158,6 +158,9 @@ function createService(input: {
   instances: Instance[];
   extraSummaries?: EngineInstanceSummary[];
   enrichers?: Parameters<typeof createEngineSnapshotService>[0]["enrichers"];
+  maintenanceState?: Parameters<
+    typeof createEngineSnapshotService
+  >[0]["maintenanceState"];
 }) {
   const events: unknown[] = [];
   const disposed: string[] = [];
@@ -179,6 +182,7 @@ function createService(input: {
     emit: (event) => events.push(event),
     // The platform enrichers (manifest, maintenance) have their own tests.
     enrichers: input.enrichers ?? [],
+    maintenanceState: input.maintenanceState ?? (() => null),
     registry,
   });
   return { clock, disposed, events, retired, service, state };
@@ -619,6 +623,66 @@ describe("peekAll", () => {
     );
     expect(snapshots[2]?.availability).toBe("unavailable");
     expect(probe).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("live maintenance state", () => {
+  it("lays the running install or update over every snapshot it serves", async () => {
+    const running = {
+      finishedAt: null,
+      message: "Updating Codex: npm install -g @openai/codex@0.161.0",
+      output: null,
+      startedAt: "2026-10-07T12:00:00.000Z",
+      status: "running" as const,
+    };
+    let state: { updateState: typeof running } | null = null;
+    const states: Array<[string, string]> = [];
+    let version = "codex-cli 0.160.0";
+    const { driver } = createDriver(async () =>
+      readyProbe({
+        install: {
+          installed: true,
+          path: "/usr/local/bin/codex",
+          source: "managed-path",
+          version,
+        },
+      }),
+    );
+    const { events, service } = createService({
+      drivers: { codex: driver },
+      instances: [instance()],
+      maintenanceState: (userId, instanceId) => {
+        states.push([userId, instanceId]);
+        return state;
+      },
+    });
+
+    const before = await service.getSnapshot(USER, "codex");
+    expect(before?.updateState).toBe(null);
+
+    // A refetch (or a reconnect's replay) during the run: the cached
+    // snapshot is served with the run's state, not the one at probe time.
+    state = { updateState: running };
+    expect((await service.peekAll(USER))[0]?.updateState).toEqual(running);
+    expect((await service.getSnapshot(USER, "codex"))?.updateState).toEqual(
+      running,
+    );
+    // The verification probe while it still runs emits the new version
+    // with the run's state.
+    version = "codex-cli 0.161.0";
+    await service.refresh(USER, "codex", "update");
+    expect(events).toHaveLength(2);
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        snapshot: expect.objectContaining({ updateState: running }),
+        type: "snapshot",
+      }),
+    );
+    expect(states.every(([userId]) => userId === USER)).toBe(true);
+
+    // Without a run in this process (a restart), nothing is in progress.
+    state = null;
+    expect((await service.peekAll(USER))[0]?.updateState).toBe(null);
   });
 });
 

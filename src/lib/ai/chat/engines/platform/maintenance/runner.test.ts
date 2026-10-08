@@ -60,6 +60,9 @@ function createHarness() {
   return { children, events, runner, spawned, timers };
 }
 
+const USER = "user-1";
+const target = (instanceId: string, userId = USER) => ({ instanceId, userId });
+
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 async function until(check: () => boolean) {
@@ -79,6 +82,7 @@ function command(overrides: Record<string, unknown> = {}) {
     instanceId: "copilot",
     label: "Copilot",
     lockKey: "homebrew",
+    userId: USER,
     verify: mock(async () => ({
       message: "Copilot updated to 1.0.40.",
       status: "succeeded" as const,
@@ -104,22 +108,22 @@ describe("maintenance runner", () => {
         }),
       }),
     );
-    expect(runner.isRunning("copilot")).toBe(true);
+    expect(runner.isRunning(target("copilot"))).toBe(true);
 
     children[0]!.stdout.write("==> Upgrading copilot-cli\n");
     await tick();
     children[0]!.exit(0);
-    await runner.whenSettled("copilot");
+    await runner.whenSettled(target("copilot"));
 
     expect(run.verify).toHaveBeenCalledTimes(1);
-    expect(runner.get("copilot")?.updateState).toEqual(
+    expect(runner.get(target("copilot"))?.updateState).toEqual(
       expect.objectContaining({
         message: "Copilot updated to 1.0.40.",
         output: "==> Upgrading copilot-cli",
         status: "succeeded",
       }),
     );
-    expect(runner.isRunning("copilot")).toBe(false);
+    expect(runner.isRunning(target("copilot"))).toBe(false);
     expect(events.at(-1)).toEqual(
       expect.objectContaining({ instanceId: "copilot", type: "maintenance" }),
     );
@@ -135,12 +139,13 @@ describe("maintenance runner", () => {
     const { children, runner } = createHarness();
     const states: Array<string | undefined> = [];
     const run = command({
-      onSettled: () => states.push(runner.get("copilot")?.updateState?.status),
+      onSettled: () =>
+        states.push(runner.get(target("copilot"))?.updateState?.status),
     });
     runner.runCommand(run);
     await until(() => children.length === 1);
     children[0]!.exit(2);
-    await runner.whenSettled("copilot");
+    await runner.whenSettled(target("copilot"));
     expect(states).toEqual(["failed"]);
   });
 
@@ -152,10 +157,10 @@ describe("maintenance runner", () => {
     children[0]!.stderr.write("Error: permission denied\n");
     await tick();
     children[0]!.exit(1);
-    await runner.whenSettled("copilot");
+    await runner.whenSettled(target("copilot"));
 
     expect(run.verify).not.toHaveBeenCalled();
-    expect(runner.get("copilot")?.updateState).toEqual(
+    expect(runner.get(target("copilot"))?.updateState).toEqual(
       expect.objectContaining({
         message: "The command exited with code 1.",
         output: "Error: permission denied",
@@ -172,8 +177,8 @@ describe("maintenance runner", () => {
     children[0]!.stdout.write("END");
     await tick();
     children[0]!.exit(0);
-    await runner.whenSettled("copilot");
-    const output = runner.get("copilot")?.updateState?.output ?? "";
+    await runner.whenSettled(target("copilot"));
+    const output = runner.get(target("copilot"))?.updateState?.output ?? "";
     expect(output.length).toBe(10_000);
     expect(output.endsWith("END")).toBe(true);
   });
@@ -182,21 +187,21 @@ describe("maintenance runner", () => {
     const cancelled = createHarness();
     cancelled.runner.runCommand(command());
     await until(() => cancelled.children.length === 1);
-    expect(cancelled.runner.cancel("copilot")).toBe(true);
-    await cancelled.runner.whenSettled("copilot");
+    expect(cancelled.runner.cancel(target("copilot"))).toBe(true);
+    await cancelled.runner.whenSettled(target("copilot"));
     expect(cancelled.children[0]!.kill).toHaveBeenCalled();
-    expect(cancelled.runner.get("copilot")?.updateState).toEqual(
+    expect(cancelled.runner.get(target("copilot"))?.updateState).toEqual(
       expect.objectContaining({ message: "Cancelled.", status: "failed" }),
     );
-    expect(cancelled.runner.cancel("copilot")).toBe(false);
+    expect(cancelled.runner.cancel(target("copilot"))).toBe(false);
 
     const timedOut = createHarness();
     timedOut.runner.runCommand(command());
     await until(() => timedOut.children.length === 1);
     expect(timedOut.timers[0]?.ms).toBe(60_000);
     timedOut.timers[0]!.callback();
-    await timedOut.runner.whenSettled("copilot");
-    expect(timedOut.runner.get("copilot")?.updateState).toEqual(
+    await timedOut.runner.whenSettled(target("copilot"));
+    expect(timedOut.runner.get(target("copilot"))?.updateState).toEqual(
       expect.objectContaining({
         message: "Timed out after 1 minutes.",
         status: "failed",
@@ -210,7 +215,49 @@ describe("maintenance runner", () => {
     await until(() => children.length === 1);
     expect(() => runner.runCommand(command())).toThrow(MaintenanceBusyError);
     children[0]!.exit(0);
-    await runner.whenSettled("copilot");
+    await runner.whenSettled(target("copilot"));
+  });
+
+  it("records the running state before the command starts", async () => {
+    const { children, events, runner } = createHarness();
+    const initial = runner.runCommand(command());
+    // Synchronously: a refetch right after the click already sees it.
+    expect(initial).toEqual(
+      expect.objectContaining({
+        message: "Updating Copilot: brew upgrade --cask copilot-cli",
+        status: "running",
+      }),
+    );
+    expect(runner.get(target("copilot"))?.updateState).toEqual(initial);
+    expect(events).toHaveLength(1);
+    await until(() => children.length === 1);
+    expect(runner.get(target("copilot"))?.updateState?.startedAt).toBe(
+      initial.startedAt,
+    );
+    children[0]!.exit(0);
+    await runner.whenSettled(target("copilot"));
+  });
+
+  it("keeps the operations of users with the same instance id apart", async () => {
+    const { children, runner } = createHarness();
+    runner.runCommand(command());
+    runner.runCommand(command({ lockKey: "other", userId: "user-2" }));
+    await until(() => children.length === 2);
+
+    expect(runner.cancel(target("copilot", "user-3"))).toBe(false);
+    expect(runner.cancel(target("copilot", "user-2"))).toBe(true);
+    await runner.whenSettled(target("copilot", "user-2"));
+    expect(runner.get(target("copilot", "user-2"))?.updateState?.message).toBe(
+      "Cancelled.",
+    );
+    expect(runner.isRunning(target("copilot"))).toBe(true);
+    expect(runner.get(target("copilot", "user-3"))).toBe(null);
+
+    children[0]!.exit(0);
+    await runner.whenSettled(target("copilot"));
+    expect(runner.get(target("copilot"))?.updateState?.status).toBe(
+      "succeeded",
+    );
   });
 
   it("queues operations that share a lock and lets a queued one be cancelled", async () => {
@@ -226,16 +273,18 @@ describe("maintenance runner", () => {
     expect(third.status).toBe("queued");
     await until(() => children.length === 1);
 
-    expect(runner.cancel("copilot-other")).toBe(true);
-    expect(runner.get("copilot-other")?.updateState?.message).toBe(
+    expect(runner.cancel(target("copilot-other"))).toBe(true);
+    expect(runner.get(target("copilot-other"))?.updateState?.message).toBe(
       "Cancelled before it started.",
     );
 
     children[0]!.exit(0);
     await until(() => children.length === 2);
     children[1]!.exit(0);
-    await runner.whenSettled("copilot-work");
-    expect(runner.get("copilot-work")?.updateState?.status).toBe("succeeded");
+    await runner.whenSettled(target("copilot-work"));
+    expect(runner.get(target("copilot-work"))?.updateState?.status).toBe(
+      "succeeded",
+    );
     expect(children).toHaveLength(2);
   });
 
@@ -248,14 +297,14 @@ describe("maintenance runner", () => {
       },
     });
     failing.runCommand(command());
-    await failing.whenSettled("copilot");
-    expect(failing.get("copilot")?.updateState).toEqual(
+    await failing.whenSettled(target("copilot"));
+    expect(failing.get(target("copilot"))?.updateState).toEqual(
       expect.objectContaining({
         message: "Could not run brew upgrade --cask copilot-cli: spawn ENOENT",
         status: "failed",
       }),
     );
-    expect(runner.get("copilot")).toBe(null);
+    expect(runner.get(target("copilot"))).toBe(null);
   });
 
   it("reports managed installs through installState", async () => {
@@ -268,6 +317,7 @@ describe("maintenance runner", () => {
       instanceId: "antigravity",
       label: "Antigravity",
       lockKey: "antigravity-managed",
+      userId: USER,
       run: async ({ onProgress }) => {
         onProgress({
           downloadedBytes: 10,
@@ -285,9 +335,9 @@ describe("maintenance runner", () => {
       verify,
     });
     expect(initial.phase).toBe("downloading");
-    await runner.whenSettled("antigravity");
+    await runner.whenSettled(target("antigravity"));
 
-    expect(runner.get("antigravity")?.installState).toEqual({
+    expect(runner.get(target("antigravity"))?.installState).toEqual({
       downloadedBytes: 100,
       message: "Installed.",
       phase: "succeeded",
@@ -307,13 +357,14 @@ describe("maintenance runner", () => {
       instanceId: "antigravity",
       label: "Antigravity",
       lockKey: "antigravity-managed",
+      userId: USER,
       run: async () => {
         throw new Error("The download failed its SHA-256 check.");
       },
       verify,
     });
-    await failed.runner.whenSettled("antigravity");
-    expect(failed.runner.get("antigravity")?.installState).toEqual(
+    await failed.runner.whenSettled(target("antigravity"));
+    expect(failed.runner.get(target("antigravity"))?.installState).toEqual(
       expect.objectContaining({
         message: "The download failed its SHA-256 check.",
         phase: "failed",

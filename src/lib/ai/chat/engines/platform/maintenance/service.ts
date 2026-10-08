@@ -183,6 +183,7 @@ export function createEngineMaintenanceService(
       env: buildMaintenanceEnv(lookup.instance, deps.baseEnv),
       instance: lookup.instance,
       snapshot,
+      target: { instanceId, userId },
     };
   }
 
@@ -207,7 +208,7 @@ export function createEngineMaintenanceService(
     loaded: Awaited<ReturnType<typeof load>>,
     inspection: MaintenanceInspection,
   ): Promise<EngineMaintenanceStatus> {
-    const record = runner().get(loaded.instance.id);
+    const record = runner().get(loaded.target);
     return {
       bundled: inspection.bundled,
       canUpdate: inspection.canUpdate,
@@ -275,16 +276,6 @@ export function createEngineMaintenanceService(
     return found;
   }
 
-  /** The cached snapshot picks up the final state with a second probe. */
-  function settleHook(userId: string, instanceId: string) {
-    return () => {
-      void deps
-        .snapshots()
-        .refresh(userId, instanceId, "update")
-        .catch(() => undefined);
-    };
-  }
-
   function busy(error: unknown): never {
     if (error instanceof MaintenanceBusyError) {
       throw new EngineMaintenanceError(error.message, "busy");
@@ -295,11 +286,11 @@ export function createEngineMaintenanceService(
   const service: EngineMaintenanceService = {
     async cancel(userId, instanceId) {
       const loaded = await load(userId, instanceId);
-      runner().cancel(instanceId);
+      runner().cancel(loaded.target);
       // A queued operation is settled at once; a running one once its
       // process tree has ended.
-      if (runner().isRunning(instanceId)) {
-        await runner().whenSettled(instanceId);
+      if (runner().isRunning(loaded.target)) {
+        await runner().whenSettled(loaded.target);
       }
       return await toStatus(loaded, await inspect(loaded, { latest: "wait" }));
     },
@@ -374,9 +365,9 @@ export function createEngineMaintenanceService(
             instanceId,
             label: instance.label,
             lockKey: `${instance.driver}-managed`,
-            onSettled: settleHook(userId, instanceId),
             run: ({ onProgress, signal }) =>
               managed.run({ instance, onProgress, signal }),
+            userId,
             verify,
           });
         } else {
@@ -398,7 +389,7 @@ export function createEngineMaintenanceService(
             label: instance.label,
             // Installs through the same program (npm) run one at a time.
             lockKey: `install:${choice.requires[0] ?? choice.id}`,
-            onSettled: settleHook(userId, instanceId),
+            userId,
             verify,
           });
         }
@@ -452,7 +443,7 @@ export function createEngineMaintenanceService(
           instanceId,
           label: instance.label,
           lockKey: plan.command.lockKey,
-          onSettled: settleHook(userId, instanceId),
+          userId,
           verify: async () => {
             const after = await reprobe(userId, loaded);
             if (!after?.install.installed) {

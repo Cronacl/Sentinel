@@ -144,6 +144,8 @@ export function EngineMaintenanceButton({
   };
   const onStarted = () => {
     setIsOpen(false);
+    // Maintenance events bring the progress; the refetch covers an event
+    // stream that is down (the server's snapshots carry the live state).
     void utils.engines.snapshots.invalidate();
   };
   const update = api.engines.maintenance.update.useMutation({

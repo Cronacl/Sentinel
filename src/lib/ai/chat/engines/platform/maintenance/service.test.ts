@@ -221,12 +221,14 @@ describe("engine maintenance service", () => {
 
     snapshots.codex = codexSnapshot("codex-cli 0.161.0");
     children[0]!.emit("close", 0);
-    await runner.whenSettled("codex");
+    await runner.whenSettled({ instanceId: "codex", userId: USER });
 
     expect(invalidate).toHaveBeenCalledWith({ driver: "codex", id: "codex" });
     expect(dispose).toHaveBeenCalledWith("codex");
     expect(refresh).toHaveBeenCalledWith(USER, "codex", "update");
-    expect(runner.get("codex")?.updateState).toEqual(
+    expect(
+      runner.get({ instanceId: "codex", userId: USER })?.updateState,
+    ).toEqual(
       expect.objectContaining({
         message: "Codex updated to 0.161.0.",
         status: "succeeded",
@@ -239,10 +241,10 @@ describe("engine maintenance service", () => {
     await service.update(USER, "codex", { expectedCommand: NPM_COMMAND });
     await until(() => children.length === 1);
     children[0]!.emit("close", 0);
-    await runner.whenSettled("codex");
-    expect(runner.get("codex")?.updateState).toEqual(
-      expect.objectContaining({ status: "unchanged" }),
-    );
+    await runner.whenSettled({ instanceId: "codex", userId: USER });
+    expect(
+      runner.get({ instanceId: "codex", userId: USER })?.updateState,
+    ).toEqual(expect.objectContaining({ status: "unchanged" }));
   });
 
   it("updates the shared install without the instance's home or secrets", async () => {
@@ -278,7 +280,7 @@ describe("engine maintenance service", () => {
     expect(env.PATH).toBe("/usr/local/bin");
 
     children[0]!.emit("close", 0);
-    await runner.whenSettled("codex-work");
+    await runner.whenSettled({ instanceId: "codex-work", userId: USER });
   });
 
   it("refuses a command the user did not confirm", async () => {
@@ -304,7 +306,9 @@ describe("engine maintenance service", () => {
     );
     await until(() => children.length === 1);
     await service.cancel(USER, "codex");
-    expect(runner.get("codex")?.updateState?.message).toBe("Cancelled.");
+    expect(
+      runner.get({ instanceId: "codex", userId: USER })?.updateState?.message,
+    ).toBe("Cancelled.");
   });
 
   it("installs a missing CLI with the confirmed option", async () => {
@@ -338,8 +342,8 @@ describe("engine maintenance service", () => {
       },
     });
     children[0]!.emit("close", 0);
-    await runner.whenSettled("opencode");
-    expect(runner.get("opencode")).toEqual(
+    await runner.whenSettled({ instanceId: "opencode", userId: USER });
+    expect(runner.get({ instanceId: "opencode", userId: USER })).toEqual(
       expect.objectContaining({
         action: "install",
         updateState: expect.objectContaining({

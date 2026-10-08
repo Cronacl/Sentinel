@@ -39,6 +39,7 @@ import {
   type EngineInstanceRegistry,
 } from "./instances";
 import { createUpdateStateEnricher } from "./maintenance/enricher";
+import { getMaintenanceRunner } from "./maintenance/runner";
 import {
   createCompatibilityEnricher,
   createCustomModelsEnricher,
@@ -58,6 +59,9 @@ import { getInstanceRuntimeKey } from "./runtime/resolve-binary";
 //   cold start until the first probe settles;
 // - enrichment hooks (manifest, custom models, compatibility, update state,
 //   usage) that P11 fills in, bounded by their own deadline;
+// - the live install/update state laid over every snapshot it returns or
+//   emits (never cached or persisted), so a refetch, reload or reconnect
+//   shows a run in progress;
 // - change events on the engine event bus.
 
 const SNAPSHOT_FILE = "status.json";
@@ -162,6 +166,11 @@ export type EngineSnapshotServiceDeps = {
   enrichTimeoutMs?: number;
   /** Ends an instance's long-lived processes (default: instance resources). */
   disposeInstance?: (instanceId: string) => Promise<void>;
+  /** An instance's live install/update state (default: maintenance runner). */
+  maintenanceState?: (
+    userId: string,
+    instanceId: string,
+  ) => Partial<Pick<EngineSnapshot, "installState" | "updateState">> | null;
   emit?: (event: EngineEventInput) => void;
   fs?: EngineSnapshotFs;
   /**
@@ -586,7 +595,25 @@ export function createEngineSnapshotService(
   const disposeInstance = deps.disposeInstance ?? disposeInstanceResources;
   const retireInstance = deps.retireInstance ?? retireInstanceResources;
   const enrichTimeoutMs = deps.enrichTimeoutMs ?? DEFAULT_ENRICH_TIMEOUT_MS;
+  const maintenanceState =
+    deps.maintenanceState ??
+    ((userId: string, instanceId: string) =>
+      getMaintenanceRunner().get({ instanceId, userId }));
   const entries = new Map<string, Entry>();
+
+  /** The snapshot with the instance's install/update state as it is now. */
+  function withMaintenance(
+    userId: string,
+    snapshot: EngineSnapshot,
+  ): EngineSnapshot {
+    const state = maintenanceState(userId, snapshot.instanceId);
+    const installState = state?.installState ?? null;
+    const updateState = state?.updateState ?? null;
+    return snapshot.installState === installState &&
+      snapshot.updateState === updateState
+      ? snapshot
+      : { ...snapshot, installState, updateState };
+  }
 
   const reportError = (
     error: unknown,
@@ -758,7 +785,10 @@ export function createEngineSnapshotService(
       !previous ||
       snapshotSignature(previous) !== snapshotSignature(cached.snapshot)
     ) {
-      emit({ snapshot: cached.snapshot, type: "snapshot" });
+      emit({
+        snapshot: withMaintenance(entry.userId, cached.snapshot),
+        type: "snapshot",
+      });
     }
   }
 
@@ -994,6 +1024,17 @@ export function createEngineSnapshotService(
   }
 
   async function snapshotFor(
+    userId: string,
+    resolved: Extract<Resolved, { kind: "ok" }>,
+    options: SnapshotRequestOptions & { wait: boolean },
+  ): Promise<EngineSnapshot> {
+    return withMaintenance(
+      userId,
+      await cachedOrProbed(userId, resolved, options),
+    );
+  }
+
+  async function cachedOrProbed(
     userId: string,
     resolved: Extract<Resolved, { kind: "ok" }>,
     options: SnapshotRequestOptions & { wait: boolean },
