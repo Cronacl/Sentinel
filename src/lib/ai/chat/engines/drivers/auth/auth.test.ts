@@ -34,8 +34,25 @@ mock.module("@/lib/ai/chat/engines/copilot-sdk", () => ({
   getCopilotClientManager: mock(() => copilotManager),
   resolveCopilotLoginCli: mock(async () => runtimes.copilotCli),
 }));
-mock.module("@/lib/ai/chat/engines/cursor-acp", () => ({
-  resolveCursorRuntime: mock(async () => runtimes.cursor),
+mock.module("@/lib/ai/chat/engines/acp/agents/cursor", () => ({
+  resolveCursorBinary: mock(async () => {
+    const runtime = runtimes.cursor as {
+      cliDetected: boolean;
+      cliPath: string;
+      env: Record<string, string>;
+    } | null;
+    return runtime?.cliDetected
+      ? {
+          binary: {
+            env: runtime.env,
+            path: runtime.cliPath,
+            source: "path",
+            version: null,
+          },
+          error: null,
+        }
+      : { binary: null, error: "not found" };
+  }),
 }));
 mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   resolveOpenCodeRuntime: mock(async () => runtimes.opencode),

@@ -22,10 +22,10 @@ const API_KEY_VARIABLE = "CURSOR_API_KEY";
 // Engine modules load on first use: this module adds nothing to what the
 // driver itself imports.
 async function resolveCursorCli(instance: ResolvedEngineInstance) {
-  const { resolveCursorRuntime } =
-    await import("@/lib/ai/chat/engines/cursor-acp");
-  const runtime = await resolveCursorRuntime({ instance });
-  return runtime.cliDetected && runtime.cliPath ? runtime : null;
+  const { resolveCursorBinary } =
+    await import("@/lib/ai/chat/engines/acp/agents/cursor");
+  const { binary } = await resolveCursorBinary(instance);
+  return binary ? { cliPath: binary.path, env: binary.env } : null;
 }
 
 export const cursorAuth: EngineAuthController = {
