@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
   },
   terminal: {
     create: (cwd) => ipcRenderer.invoke(DESKTOP_CHANNELS.TERMINAL_CREATE, cwd),
+    createCommand: (input) =>
+      ipcRenderer.invoke(DESKTOP_CHANNELS.TERMINAL_CREATE_COMMAND, input),
     write: (sessionId, data) =>
       ipcRenderer.send(DESKTOP_CHANNELS.TERMINAL_WRITE, sessionId, data),
     resize: (sessionId, cols, rows) =>
@@ -104,8 +106,8 @@ contextBridge.exposeInMainWorld("sentinelDesktop", {
         ipcRenderer.removeListener(DESKTOP_CHANNELS.TERMINAL_DATA, handler);
     },
     onExit: (callback) => {
-      const handler = (_event, sessionId, exitCode) =>
-        callback(sessionId, exitCode);
+      const handler = (_event, sessionId, exitCode, signal) =>
+        callback(sessionId, exitCode, signal ?? null);
       ipcRenderer.on(DESKTOP_CHANNELS.TERMINAL_EXIT, handler);
       return () =>
         ipcRenderer.removeListener(DESKTOP_CHANNELS.TERMINAL_EXIT, handler);

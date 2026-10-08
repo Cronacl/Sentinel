@@ -3,6 +3,10 @@
 import { useSyncExternalStore } from "react";
 
 import { getDesktopApi } from "@/lib/desktop/client";
+import type {
+  DesktopTerminalCommandInput,
+  DesktopTerminalSession,
+} from "@/lib/desktop/contracts";
 
 export type TerminalSession = {
   cwd: string;
@@ -34,6 +38,9 @@ type TerminalState = {
 };
 
 type TerminalOutputListener = (data: string) => void;
+
+export type TerminalExit = { exitCode: number; signal: number | null };
+type TerminalExitListener = (exit: TerminalExit) => void;
 
 const PANEL_HEIGHT_STORAGE_KEY = "sentinel.terminal.panel-height";
 const MAX_OUTPUT_BUFFER_LENGTH = 200_000;
@@ -82,6 +89,10 @@ let didBindDesktopEvents = false;
 const listeners = new Set<() => void>();
 const sessionOutputs = new Map<string, string>();
 const sessionOutputListeners = new Map<string, Set<TerminalOutputListener>>();
+// Exits, kept until the session is removed: a command can end before the
+// call that created it resolves, or before its view subscribes.
+const sessionExits = new Map<string, TerminalExit>();
+const sessionExitListeners = new Map<string, Set<TerminalExitListener>>();
 
 function normalizeCwd(cwd: string | null | undefined) {
   const normalized = cwd?.trim();
@@ -117,6 +128,13 @@ function appendSessionOutput(sessionId: string, data: string) {
 function removeSessionOutput(sessionId: string) {
   sessionOutputs.delete(sessionId);
   sessionOutputListeners.delete(sessionId);
+  sessionExits.delete(sessionId);
+  sessionExitListeners.delete(sessionId);
+}
+
+function recordSessionExit(sessionId: string, exit: TerminalExit) {
+  sessionExits.set(sessionId, exit);
+  sessionExitListeners.get(sessionId)?.forEach((listener) => listener(exit));
 }
 
 function markTerminalSessionExited(sessionId: string, exitCode?: number) {
@@ -200,8 +218,9 @@ function bindDesktopEvents() {
     appendSessionOutput(sessionId, data);
   });
 
-  desktop.terminal.onExit((sessionId, exitCode) => {
+  desktop.terminal.onExit((sessionId, exitCode, signal) => {
     markTerminalSessionExited(sessionId, exitCode);
+    recordSessionExit(sessionId, { exitCode, signal: signal ?? null });
   });
 
   didBindDesktopEvents = true;
@@ -439,6 +458,69 @@ export async function runCommandInTerminal(
   );
 
   return session;
+}
+
+/**
+ * Starts a terminal that runs one sign-in command (see
+ * DesktopTerminalCommandInput). It is not one of the panel's shell tabs:
+ * the caller renders it and disposes of it.
+ */
+export async function createCommandTerminalSession(
+  input: DesktopTerminalCommandInput,
+): Promise<DesktopTerminalSession> {
+  bindDesktopEvents();
+
+  const createCommand = getDesktopApi()?.terminal.createCommand;
+  if (!createCommand) {
+    throw new Error("This version of Sentinel cannot run terminal commands.");
+  }
+
+  const session = await createCommand(input);
+  // Output that arrived before the call resolved is already buffered.
+  if (!sessionOutputs.has(session.sessionId)) {
+    sessionOutputs.set(session.sessionId, "");
+  }
+  return session;
+}
+
+/** Ends a command terminal (if still running) and forgets its output. */
+export async function disposeCommandTerminalSession(sessionId: string) {
+  const desktop = getDesktopApi();
+  try {
+    if (desktop && !sessionExits.has(sessionId)) {
+      await desktop.terminal.kill(sessionId);
+    }
+  } catch {
+    // Already gone.
+  } finally {
+    removeSessionOutput(sessionId);
+  }
+}
+
+/**
+ * Calls `listener` once the session exits (at once, asynchronously, when
+ * it already has).
+ */
+export function subscribeTerminalExit(
+  sessionId: string,
+  listener: TerminalExitListener,
+) {
+  const exited = sessionExits.get(sessionId);
+  if (exited) {
+    queueMicrotask(() => listener(exited));
+    return () => {};
+  }
+
+  let listenersForSession = sessionExitListeners.get(sessionId);
+  if (!listenersForSession) {
+    listenersForSession = new Set();
+    sessionExitListeners.set(sessionId, listenersForSession);
+  }
+  listenersForSession.add(listener);
+
+  return () => {
+    sessionExitListeners.get(sessionId)?.delete(listener);
+  };
 }
 
 export async function killTerminalSession(sessionId: string) {

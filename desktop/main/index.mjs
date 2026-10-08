@@ -22,6 +22,7 @@ import * as nodePty from "node-pty";
 import { DESKTOP_CHANNELS } from "../shared/channels.mjs";
 import { createDesktopUpdaterController } from "./updater.mjs";
 import { createDialogDefaultPaths } from "./dialog-paths.mjs";
+import { prepareTerminalCommand } from "./terminal-commands.mjs";
 import {
   configureDesktopPermissionHandlers,
   getDesktopMicrophonePermissionState,
@@ -621,6 +622,57 @@ function createTerminalSession(cwd) {
 
   ptyProcess.onExit(({ exitCode }) => {
     sendTerminalEvent(DESKTOP_CHANNELS.TERMINAL_EXIT, sessionId, exitCode ?? 0);
+    cleanupTerminalSession(sessionId);
+  });
+
+  return {
+    pid: ptyProcess.pid,
+    sessionId,
+  };
+}
+
+// A terminal that runs one server-vended command (an engine CLI's sign-in)
+// rather than a shell; see terminal-commands.mjs for how the request is
+// checked against the server before anything is spawned.
+async function createTerminalCommandSession(input) {
+  const prepared = await prepareTerminalCommand(input, {
+    internalToken: serverState?.internalToken ?? null,
+    serverUrl:
+      serverState?.url ??
+      process.env.SENTINEL_APP_URL ??
+      `http://localhost:${APP_PORT}`,
+  });
+  const sessionId = randomUUID();
+  ensureNodePtySpawnHelperExecutable();
+
+  const ptyProcess = nodePty.spawn(prepared.command, prepared.args, {
+    cols: prepared.cols,
+    cwd: prepared.cwd,
+    env: prepared.env,
+    name: prepared.env.TERM,
+    rows: prepared.rows,
+  });
+
+  terminalSessions.set(sessionId, {
+    createdAt: Date.now(),
+    cwd: prepared.cwd,
+    kind: "command",
+    pid: ptyProcess.pid,
+    pty: ptyProcess,
+    title: prepared.title,
+  });
+
+  ptyProcess.onData((data) => {
+    sendTerminalEvent(DESKTOP_CHANNELS.TERMINAL_DATA, sessionId, data);
+  });
+
+  ptyProcess.onExit(({ exitCode, signal }) => {
+    sendTerminalEvent(
+      DESKTOP_CHANNELS.TERMINAL_EXIT,
+      sessionId,
+      exitCode ?? 0,
+      signal ?? null,
+    );
     cleanupTerminalSession(sessionId);
   });
 
@@ -1863,6 +1915,11 @@ function registerIpc() {
     const normalizedPath = await assertProjectDirectory(cwd);
     return createTerminalSession(normalizedPath);
   });
+
+  ipcMain.handle(
+    DESKTOP_CHANNELS.TERMINAL_CREATE_COMMAND,
+    async (_event, input) => createTerminalCommandSession(input),
+  );
 
   ipcMain.on(DESKTOP_CHANNELS.TERMINAL_WRITE, (_event, sessionId, data) => {
     if (typeof sessionId !== "string" || typeof data !== "string") {

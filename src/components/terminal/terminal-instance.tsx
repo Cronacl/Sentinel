@@ -17,6 +17,11 @@ import { subscribeTerminalOutput } from "./terminal-store";
 import { isTerminalToggleShortcut } from "./terminal-shortcuts";
 
 type TerminalInstanceProps = {
+  /**
+   * Rendered outside the terminal panel (an engine sign-in): the panel's
+   * toggle shortcut is left to the page.
+   */
+  embedded?: boolean;
   isActive: boolean;
   sessionId: string;
 };
@@ -126,6 +131,7 @@ function getTerminalTheme(theme: "light" | "dark") {
 }
 
 export function TerminalInstance({
+  embedded = false,
   isActive,
   sessionId,
 }: TerminalInstanceProps) {
@@ -182,7 +188,7 @@ export function TerminalInstance({
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     terminal.attachCustomKeyEventHandler((event) => {
-      if (!isTerminalToggleShortcut(event, desktop.app.platform)) {
+      if (embedded || !isTerminalToggleShortcut(event, desktop.app.platform)) {
         return true;
       }
 
