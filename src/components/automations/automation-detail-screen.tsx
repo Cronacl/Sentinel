@@ -524,6 +524,11 @@ export function AutomationDetailScreen({
             values.modelId,
             values.modelOptionValues,
             availableModels,
+            {
+              instanceId: resolveAutomationInstanceId(automation),
+              modelId: automation.modelId ?? null,
+              modelOptions: automation.modelOptions,
+            },
           ),
           reasoningEffort: selectedReasoning,
         });

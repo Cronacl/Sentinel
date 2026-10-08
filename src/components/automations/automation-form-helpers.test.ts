@@ -438,9 +438,78 @@ describe("automation model options", () => {
     ).toBeNull();
   });
 
-  it("drops values the newly selected model does not offer", () => {
+  it("keeps stored picks of options the stored model does not describe right now", () => {
+    const degraded = {
+      ...sentinelModel,
+      engine: "opencode",
+      instanceId: "opencode",
+      modelId: "anthropic/claude-5",
+      options: [variant, effort],
+    };
+    const stored = {
+      instanceId: "opencode",
+      modelId: "anthropic/claude-5",
+      modelOptions: [
+        { id: "agent", value: "plan" },
+        { id: "variant", value: "low" },
+        { id: "effort", value: "high" },
+      ],
+    };
+
+    // A probe without the agents: the agent pick stays, the variant follows
+    // the form, and the reasoning option keeps to its own field.
+    expect(
+      resolveAutomationModelOptionsForSave(
+        "anthropic/claude-5",
+        { variant: "high" },
+        [degraded],
+        stored,
+      ),
+    ).toEqual([
+      { id: "variant", value: "high" },
+      { id: "agent", value: "plan" },
+    ]);
+    expect(
+      resolveAutomationModelOptionsForSave(
+        "anthropic/claude-5",
+        {},
+        [{ ...degraded, options: [] }],
+        stored,
+      ),
+    ).toEqual(stored.modelOptions);
+
+    // Another model, or the same model id on another instance, starts over.
+    expect(
+      resolveAutomationModelOptionsForSave(
+        "anthropic/claude-5",
+        {},
+        [{ ...degraded, options: [] }],
+        { ...stored, modelId: "anthropic/claude-4" },
+      ),
+    ).toBeNull();
+    expect(
+      resolveAutomationModelOptionsForSave(
+        "anthropic/claude-5",
+        {},
+        [{ ...degraded, instanceId: "opencode-work", options: [] }],
+        stored,
+      ),
+    ).toBeNull();
+  });
+
+  it("drops values the selected model's options no longer offer", () => {
+    expect(
+      pruneAutomationOptionValues({ agent: "plan", variant: "max" }, [
+        agent,
+        variant,
+      ]),
+    ).toEqual({ agent: "plan" });
+    expect(pruneAutomationOptionValues({ agent: "ghost" }, [agent])).toEqual(
+      {},
+    );
+    // Options the model does not describe keep their values for later.
     expect(
       pruneAutomationOptionValues({ agent: "plan", variant: "high" }, [agent]),
-    ).toEqual({ agent: "plan" });
+    ).toEqual({ agent: "plan", variant: "high" });
   });
 });

@@ -215,27 +215,58 @@ export function getAutomationModelOptionChoices(
   return options;
 }
 
+/** An automation's stored engine selection, as a save compares it. */
+export type StoredAutomationModelSelection = {
+  instanceId: string;
+  modelId: string | null;
+  modelOptions: unknown;
+};
+
 /**
  * The model_options a save writes: null for "Use default model", the picks
  * the selected model offers, or undefined (keep what is stored) while that
  * model is not in the catalog, so an unloaded or unavailable catalog never
- * wipes stored picks.
+ * wipes stored picks. While the form still selects the stored instance and
+ * model, stored values of options the model does not describe right now (a
+ * degraded probe without OpenCode's agents, say) are kept as well.
  */
 export function resolveAutomationModelOptionsForSave(
   modelId: string,
   values: Readonly<Record<string, string>>,
   models: readonly AutomationEngineModel[],
+  stored?: StoredAutomationModelSelection | null,
 ): EngineOptionSelection[] | null | undefined {
   if (modelId === "__default__") {
     return null;
   }
   const model = models.find((candidate) => candidate.modelId === modelId);
-  return model
-    ? toAutomationModelOptions(
-        values,
-        getAutomationModelOptionDescriptors(model),
-      )
-    : undefined;
+  if (!model) {
+    return undefined;
+  }
+  const descriptors = getAutomationModelOptionDescriptors(model);
+  const selections = toAutomationModelOptions(values, descriptors) ?? [];
+  if (
+    stored &&
+    stored.instanceId === model.instanceId &&
+    stored.modelId === modelId
+  ) {
+    // The form owns the picker options; the reasoning option has its own
+    // field (reasoningEffort).
+    const owned = new Set([
+      ...descriptors.map((descriptor) => descriptor.id),
+      ...model.options
+        .filter((option) => option.role === "reasoning")
+        .map((option) => option.id),
+    ]);
+    const storedSelections =
+      parseEngineOptionSelections(stored.modelOptions) ?? [];
+    for (const entry of storedSelections) {
+      if (!owned.has(entry.id)) {
+        selections.push(entry);
+      }
+    }
+  }
+  return selections.length > 0 ? selections : null;
 }
 
 /**
@@ -252,17 +283,27 @@ export function toAutomationOptionValues(
   );
 }
 
-/** Values still offered by the selected model's options. */
+/**
+ * Drops the values the selected model's options no longer offer. Values of
+ * options it does not describe stay in the form, unsaved for this model (a
+ * save keeps the stored ones instead), so they show again once its catalog
+ * entry recovers from a degraded probe.
+ */
 export function pruneAutomationOptionValues(
   values: Readonly<Record<string, string>>,
   descriptors: readonly EngineSelectOptionDescriptor[],
 ): Record<string, string> {
+  const byId = new Map(
+    descriptors.map((descriptor) => [descriptor.id, descriptor]),
+  );
   return Object.fromEntries(
-    descriptors.flatMap((descriptor) => {
-      const value = values[descriptor.id];
-      return value && descriptor.choices.some((choice) => choice.id === value)
-        ? [[descriptor.id, value]]
-        : [];
+    Object.entries(values).filter(([id, value]) => {
+      const descriptor = byId.get(id);
+      return (
+        Boolean(value) &&
+        (!descriptor ||
+          descriptor.choices.some((choice) => choice.id === value))
+      );
     }),
   );
 }
