@@ -17,6 +17,7 @@ import type {
   ResolvedEngineInstance,
 } from "../contract";
 import type { EngineMaintenanceDefinition } from "./maintenance/definitions";
+import type { EngineAuthController } from "./auth/controller";
 
 // The server half of an engine: what the platform needs to know about an
 // instance of it. Drivers stay small and stateless: they probe, and the
@@ -200,6 +201,8 @@ export interface EngineDriver<
    * carry its own.
    */
   readonly maintenance?: EngineMaintenanceDefinition;
+  /** Sign-in and sign-out (Settings → Engines); see platform/auth. */
+  readonly auth?: EngineAuthController;
 }
 
 export function defineEngineDriver<C extends BaseInstanceConfig>(

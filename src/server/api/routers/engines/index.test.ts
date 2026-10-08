@@ -513,10 +513,6 @@ describe("enginesRouter.instances", () => {
 describe("not-yet-built engine services", () => {
   it("answer not_supported rather than failing", async () => {
     for (const result of [
-      await enginesRouter.auth.start({
-        ctx: USER_CTX,
-        input: { instanceId: "claude" },
-      }),
       await enginesRouter.acpRegistry.list({ ctx: USER_CTX }),
     ]) {
       expect(result).toEqual(
