@@ -1,3 +1,6 @@
+import os from "node:os";
+import path from "node:path";
+
 import type { ComposerContext } from "@/lib/composer-context/types";
 
 // Turns `$skill` mentions in a Claude prompt into the slash invocation
@@ -79,17 +82,43 @@ export function planClaudeSkillDispatch(
 }
 
 /**
+ * The skill folders the run's Claude Code reads itself: `.claude/skills` in
+ * its working directory (the workspace) and `skills` in its config dir
+ * (the instance's CLAUDE_CONFIG_DIR, else ~/.claude). A Claude skill
+ * Sentinel lists from anywhere else (a skillsBasePath folder) is unknown to
+ * the CLI, so its chip must stay prose rather than become `/name`.
+ */
+export function getClaudeSkillRoots(input: {
+  cwd: string | null;
+  env: Record<string, string | undefined>;
+}): string[] {
+  const configDirectory =
+    input.env.CLAUDE_CONFIG_DIR?.trim() ||
+    path.join(input.env.HOME?.trim() || os.homedir(), ".claude");
+  return [
+    ...(input.cwd ? [path.join(input.cwd, ".claude", "skills")] : []),
+    path.join(configDirectory, "skills"),
+  ].map((root) => path.resolve(root));
+}
+
+/**
  * The skills of a message that Claude Code can run natively: the Claude
- * skill chips the composer inserted (`.claude/skills`, in the workspace or
- * the instance's config dir). Shared `.agents` skills stay prose.
+ * skill chips the composer inserted whose folder sits in one of `roots`
+ * (getClaudeSkillRoots). Shared `.agents` skills, and chips without a
+ * folder, stay prose.
  */
 export function getClaudeDispatchSkillNames(
   composerContext: Pick<ComposerContext, "skills"> | null | undefined,
+  roots: readonly string[],
 ): Set<string> {
+  const rootSet = new Set(roots.map((root) => path.resolve(root)));
   return new Set(
     (composerContext?.skills ?? [])
       .filter(
-        (skill) => skill.target === "claude" || skill.sourceKind === "claude",
+        (skill) =>
+          (skill.target === "claude" || skill.sourceKind === "claude") &&
+          Boolean(skill.directory) &&
+          rootSet.has(path.dirname(path.resolve(skill.directory!))),
       )
       .map((skill) => skill.name),
   );

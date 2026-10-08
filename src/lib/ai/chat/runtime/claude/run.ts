@@ -74,6 +74,7 @@ import {
 } from "./permissions";
 import {
   getClaudeDispatchSkillNames,
+  getClaudeSkillRoots,
   planClaudeSkillDispatch,
 } from "./skill-dispatch";
 import {
@@ -495,7 +496,11 @@ function isClaudeImageMediaType(
 function buildClaudeUserPrompt(
   message: ThreadUIMessage,
   sessionId: string,
-  options?: { promptPrefix?: string | null },
+  options?: {
+    promptPrefix?: string | null;
+    /** Folders the run's Claude Code reads skills from (dispatch only). */
+    skillRoots?: readonly string[];
+  },
 ): SDKUserMessage {
   const textParts = message.parts.filter(
     (
@@ -521,7 +526,7 @@ function buildClaudeUserPrompt(
   // sent as the last text block (skill-dispatch.ts).
   const dispatch = planClaudeSkillDispatch(
     userText,
-    getClaudeDispatchSkillNames(composerContext),
+    getClaudeDispatchSkillNames(composerContext, options?.skillRoots ?? []),
   );
   let text = dispatch ? (dispatch.leadingText ?? "") : userText;
 
@@ -1952,6 +1957,8 @@ export async function runClaudeThreadChat(
     inputQueue.enqueue(
       buildClaudeUserPrompt(request.message!, sessionId, {
         promptPrefix: planModePromptPrefix,
+        // The environment the CLI was started with (instance home included).
+        skillRoots: getClaudeSkillRoots({ cwd, env: options.env ?? {} }),
       }),
     );
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import {
   getClaudeDispatchSkillNames,
+  getClaudeSkillRoots,
   planClaudeSkillDispatch,
 } from "./skill-dispatch";
 
@@ -66,21 +67,73 @@ describe("planClaudeSkillDispatch", () => {
   });
 });
 
+describe("getClaudeSkillRoots", () => {
+  it("lists the workspace folder and the config dir's", () => {
+    expect(
+      getClaudeSkillRoots({
+        cwd: "/work/repo",
+        env: { CLAUDE_CONFIG_DIR: "/homes/claude-work", HOME: "/Users/me" },
+      }),
+    ).toEqual(["/work/repo/.claude/skills", "/homes/claude-work/skills"]);
+    expect(
+      getClaudeSkillRoots({ cwd: null, env: { HOME: "/Users/me" } }),
+    ).toEqual(["/Users/me/.claude/skills"]);
+  });
+});
+
 describe("getClaudeDispatchSkillNames", () => {
+  const roots = ["/work/repo/.claude/skills", "/Users/me/.claude/skills"];
+
   it("only dispatches skills Claude Code loads itself", () => {
     expect(
-      getClaudeDispatchSkillNames({
-        skills: [
-          { engine: "claude", name: "review", target: "claude" },
-          {
-            engine: "claude",
-            name: "shared",
-            sourceKind: "agents",
-            target: "sentinel",
-          },
-        ],
-      }),
-    ).toEqual(new Set(["review"]));
-    expect(getClaudeDispatchSkillNames(undefined)).toEqual(new Set());
+      getClaudeDispatchSkillNames(
+        {
+          skills: [
+            {
+              directory: "/work/repo/.claude/skills/review",
+              engine: "claude",
+              name: "review",
+              target: "claude",
+            },
+            {
+              directory: "/Users/me/.claude/skills/deploy/",
+              engine: "claude",
+              name: "deploy",
+              sourceKind: "claude",
+            },
+            {
+              directory: "/work/repo/.agents/skills/shared",
+              engine: "claude",
+              name: "shared",
+              sourceKind: "agents",
+              target: "sentinel",
+            },
+          ],
+        },
+        roots,
+      ),
+    ).toEqual(new Set(["review", "deploy"]));
+    expect(getClaudeDispatchSkillNames(undefined, roots)).toEqual(new Set());
+  });
+
+  it("keeps Claude skills from folders the CLI does not read as prose", () => {
+    expect(
+      getClaudeDispatchSkillNames(
+        {
+          skills: [
+            // A skillsBasePath folder Sentinel lists but Claude Code ignores.
+            {
+              directory: "/custom/base/.claude/skills/review",
+              engine: "claude",
+              name: "review",
+              target: "claude",
+            },
+            // No folder to check.
+            { engine: "claude", name: "lint", target: "claude" },
+          ],
+        },
+        roots,
+      ),
+    ).toEqual(new Set());
   });
 });

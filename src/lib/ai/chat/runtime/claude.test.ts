@@ -1092,6 +1092,7 @@ describe("runClaudeThreadChat approvals", () => {
               paths: [],
               skills: [
                 {
+                  directory: "/tmp/workspace/.claude/skills/review",
                   engine: "claude",
                   name: "review",
                   sourceKind: "claude",
@@ -1119,6 +1120,51 @@ describe("runClaudeThreadChat approvals", () => {
     expect(content.at(-1)).toEqual({ text: "/review the diff", type: "text" });
     expect(content[0].text).toContain('<skill name="review" />');
     expect(content[0].text).toEndWith("ok, now");
+    await flushClaudeRun();
+  });
+
+  it("keeps a Claude skill chip from a folder Claude Code does not read as prose", async () => {
+    queryMessages = [createSuccessResult({ result: "Done." })];
+
+    await runClaudeThreadChat(
+      {
+        message: {
+          ...createUserMessage("ok, now $review the diff"),
+          metadata: {
+            composerContext: {
+              paths: [],
+              skills: [
+                {
+                  // A skillsBasePath folder: listed by Sentinel only.
+                  directory: "/custom/base/.claude/skills/review",
+                  engine: "claude",
+                  name: "review",
+                  scope: "global",
+                  sourceKind: "claude",
+                  target: "claude",
+                },
+              ],
+            },
+          },
+        },
+        threadId: "thread-skill-elsewhere",
+        trigger: "submit-user-message",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+      },
+      { chatEngineState: null, mode: "chat", status: "idle" } as any,
+    );
+
+    const prompt = (
+      capturedClaudeQueryInput as unknown as {
+        prompt: AsyncIterable<{ message: { content: any[] } }>;
+      }
+    ).prompt;
+    const first = await prompt[Symbol.asyncIterator]().next();
+    const content = first.value.message.content;
+    expect(content).toHaveLength(1);
+    expect(content[0].text).toContain('<skill name="review" />');
+    expect(content[0].text).toEndWith("ok, now $review the diff");
     await flushClaudeRun();
   });
 
