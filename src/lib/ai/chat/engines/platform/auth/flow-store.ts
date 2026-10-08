@@ -787,7 +787,12 @@ export function createEngineAuthFlowStore(
       );
       update(record, {});
 
-      void run(record, input);
+      void run(record, input).catch((error: unknown) => {
+        complete(record, {
+          message: failureMessage(record, error),
+          phase: "failed",
+        });
+      });
       // Until the user has something to do, or the flow already finished.
       await waitForProgress(
         record,

@@ -60,6 +60,8 @@ export type EngineAuthPanelView = {
 export function getEngineAuthPanelView(input: {
   auth: Pick<EngineAuthSummary, "status">;
   canLogout: boolean;
+  /** The runtime was found (nothing to sign out of otherwise). */
+  installed: boolean;
   methods: readonly EngineAuthMethod[];
   state: EngineAuthFlowState | null | undefined;
 }): EngineAuthPanelView {
@@ -82,7 +84,10 @@ export function getEngineAuthPanelView(input: {
     active,
     outcome,
     showSignOut:
-      !active && input.canLogout && input.auth.status !== "unauthenticated",
+      !active &&
+      input.canLogout &&
+      input.installed &&
+      input.auth.status !== "unauthenticated",
     signInMethods: active ? [] : [...input.methods],
   };
 }

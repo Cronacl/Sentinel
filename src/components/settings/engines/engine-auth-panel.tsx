@@ -363,6 +363,7 @@ export function EngineAuthPanel({ snapshot }: { snapshot: EngineSnapshot }) {
   const view = getEngineAuthPanelView({
     auth: snapshot.auth,
     canLogout: methodsQuery.data?.canLogout ?? false,
+    installed: snapshot.install.installed,
     methods: methodsQuery.data?.methods ?? [],
     state,
   });

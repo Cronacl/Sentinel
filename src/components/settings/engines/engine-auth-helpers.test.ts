@@ -56,6 +56,7 @@ describe("panel view", () => {
       getEngineAuthPanelView({
         auth: { status: "authenticated" },
         canLogout: true,
+        installed: true,
         methods: METHODS,
         state: { phase: "idle" } as never,
       }),
@@ -69,7 +70,20 @@ describe("panel view", () => {
       getEngineAuthPanelView({
         auth: { status: "unauthenticated" },
         canLogout: true,
+        installed: true,
         methods: METHODS,
+        state: null,
+      }).showSignOut,
+    ).toBe(false);
+  });
+
+  it("offers no sign-out without a runtime", () => {
+    expect(
+      getEngineAuthPanelView({
+        auth: { status: "unknown" },
+        canLogout: true,
+        installed: false,
+        methods: [],
         state: null,
       }).showSignOut,
     ).toBe(false);
@@ -80,6 +94,7 @@ describe("panel view", () => {
       getEngineAuthPanelView({
         auth: { status: "unknown" },
         canLogout: true,
+        installed: true,
         methods: METHODS,
         state: {
           message: "Finish in the terminal.",
@@ -96,6 +111,7 @@ describe("panel view", () => {
       getEngineAuthPanelView({
         auth: { status: "unauthenticated" },
         canLogout: false,
+        installed: true,
         methods: METHODS,
         state: { message: "Sign-in expired.", phase: "failed" } as never,
       }).outcome,
