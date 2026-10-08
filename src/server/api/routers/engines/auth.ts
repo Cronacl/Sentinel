@@ -30,6 +30,8 @@ const clientInputSchema = {
 export type EngineAuthMethodsResult = {
   /** The driver can sign out from Sentinel. */
   canLogout: boolean;
+  /** Shown when confirming a sign-out (see EngineAuthController). */
+  logoutNotice: string | null;
   methods: EngineAuthMethod[];
   /** False for engines Sentinel cannot sign in (the built-in one). */
   supported: boolean;
@@ -93,11 +95,19 @@ export const engineAuthRouter = createTRPCRouter({
         input.instanceId,
       );
       if (!controller) {
-        return { canLogout: false, methods: [], supported: false };
+        return {
+          canLogout: false,
+          logoutNotice: null,
+          methods: [],
+          supported: false,
+        };
       }
 
       return {
         canLogout: Boolean(controller.logout),
+        logoutNotice: controller.logout
+          ? (controller.logoutNotice?.(instance) ?? null)
+          : null,
         methods: await controller.methods(instance, {
           terminal: input.terminal === true,
         }),

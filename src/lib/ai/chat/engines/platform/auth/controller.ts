@@ -111,6 +111,12 @@ export interface EngineAuthController {
     instance: ResolvedEngineInstance,
     context: EngineAuthFlowContext,
   ): Promise<EngineAuthResult>;
+  /**
+   * What signing out affects beyond this instance (a login it shares with
+   * the CLI on this computer, a runtime restart), for the confirmation.
+   * Null when it affects only the instance.
+   */
+  logoutNotice?(instance: ResolvedEngineInstance): string | null;
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   cliTerminalCommand,
   LOGIN_METHOD_ID,
   loginWithInstanceSecret,
+  sharedLoginNotice,
 } from "./shared";
 
 // GitHub Copilot runs on the runtime bundled with @github/copilot-sdk 1.0.16,
@@ -24,12 +25,14 @@ import {
 //   where the bundled runtime reads it;
 // - always: a GitHub token stored as the instance's COPILOT_GITHUB_TOKEN,
 //   which the runtime prefers over GH_TOKEN and GITHUB_TOKEN.
-// Signing out removes those variables and asks the runtime to forget the
-// stored login (account.logout). The SDK loads on first use: this module
-// adds nothing to what the driver itself imports.
+// Signing out removes the token this panel stores and asks the runtime to
+// forget the stored login (account.logout). GH_TOKEN and GITHUB_TOKEN stay:
+// a user may have set them for other tools (MCP servers, gh in agent
+// shells), so the outcome only names them. The SDK loads on first use: this
+// module adds nothing to what the driver itself imports.
 
 export const COPILOT_TOKEN_VARIABLE = "COPILOT_GITHUB_TOKEN";
-const TOKEN_VARIABLES = [COPILOT_TOKEN_VARIABLE, "GH_TOKEN", "GITHUB_TOKEN"];
+const OTHER_TOKEN_VARIABLES = ["GH_TOKEN", "GITHUB_TOKEN"] as const;
 const LOGOUT_TIMEOUT_MS = 15_000;
 
 /** Classic PATs are refused by Copilot; say so before storing one. */
@@ -43,7 +46,24 @@ async function loadCopilotSdk() {
   return await import("@/lib/ai/chat/engines/copilot-sdk");
 }
 
-/** Restarts the instance's runtime so it reads the new sign-in. */
+/** GH_TOKEN / GITHUB_TOKEN the instance sets, which Copilot can sign in with. */
+function otherTokenVariables(instance: ResolvedEngineInstance) {
+  return OTHER_TOKEN_VARIABLES.filter(
+    (name) => instance.envOverrides[name] !== undefined,
+  );
+}
+
+function keptTokensHint(names: readonly string[]) {
+  return names.length > 0
+    ? ` This instance still sets ${names.join(" and ")}, which Copilot can sign in with: remove ${names.length > 1 ? "them" : "it"} from its environment to sign out completely.`
+    : "";
+}
+
+/**
+ * Restarts the instance's runtime so it reads the new sign-in. Chats running
+ * on it stop, as on any change to the instance's configuration (the sign-out
+ * confirmation says so; a sign-in usually follows a signed-out runtime).
+ */
 async function restartRuntime(instance: ResolvedEngineInstance) {
   const { getCopilotClientManager } = await loadCopilotSdk();
   await getCopilotClientManager(instance)
@@ -123,16 +143,25 @@ export const copilotAuth: EngineAuthController = {
       // be what signs it in.
     }
 
-    const cleared = await context.clearInstanceSecrets(TOKEN_VARIABLES);
+    const cleared = await context.clearInstanceSecrets([
+      COPILOT_TOKEN_VARIABLE,
+    ]);
     await restartRuntime(instance);
 
+    const kept = keptTokensHint(otherTokenVariables(instance));
     if (!signedOut && cleared.length === 0) {
       throw new EngineAuthError(
-        "Copilot could not sign out here. Run `copilot`, then /logout.",
+        `Copilot could not sign out here. Run \`copilot\`, then /logout.${kept}`,
       );
     }
-    return cleared.length > 0
-      ? { message: "Signed out and removed this instance's GitHub token." }
-      : undefined;
+    if (cleared.length > 0 || kept) {
+      return {
+        message: `${cleared.length > 0 ? "Signed out and removed this instance's GitHub token." : "Signed out."}${kept}`,
+      };
+    }
+    return undefined;
   },
+
+  logoutNotice: (instance) =>
+    `${sharedLoginNotice(instance, "the GitHub Copilot CLI") ?? ""} Copilot restarts on this instance, which stops chats running on it.`.trim(),
 };

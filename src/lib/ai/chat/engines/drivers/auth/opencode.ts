@@ -70,4 +70,9 @@ export const openCodeAuth: EngineAuthController = {
       ? { message: "Removed the provider login you chose." }
       : undefined;
   },
+
+  logoutNotice: (instance) =>
+    instance.envOverrides.XDG_DATA_HOME?.trim()
+      ? null
+      : "OpenCode keeps provider logins per user: the one you remove is removed from the OpenCode CLI too.",
 };

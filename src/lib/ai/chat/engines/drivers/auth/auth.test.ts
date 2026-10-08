@@ -405,10 +405,22 @@ describe("Copilot", () => {
     const result = await copilotAuth.logout(instance, context);
 
     expect(copilotClient.rpc.account.logout).toHaveBeenCalledWith({});
-    expect(calls).toEqual([
-      ["clear", ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"]],
-    ]);
-    expect(result?.message).toContain("GitHub token");
+    // Only the token this panel stores: GH_TOKEN and GITHUB_TOKEN may be
+    // there for other tools.
+    expect(calls).toEqual([["clear", ["COPILOT_GITHUB_TOKEN"]]]);
+    expect(result).toEqual({
+      message: "Signed out and removed this instance's GitHub token.",
+    });
+
+    const withGhToken = makeFakeInstance({
+      driver: "copilot",
+      envOverrides: { GH_TOKEN: "gho_x" },
+    });
+    const kept = await copilotAuth.logout(withGhToken, createContext().context);
+    expect(kept.message).toBe(
+      "Signed out. This instance still sets GH_TOKEN, which Copilot can sign in with: remove it from its environment to sign out completely.",
+    );
+    expect(JSON.stringify(kept)).not.toContain("gho_x");
 
     copilotClient.rpc.account.logout.mockImplementationOnce(async () => {
       throw new Error("not signed in");
@@ -487,5 +499,40 @@ describe("OpenCode", () => {
 
     runtimes.opencode = { cliDetected: false, cliPath: null, env: {} };
     expect(await openCodeAuth.methods(instance)).toEqual([]);
+  });
+});
+
+describe("sign-out notices", () => {
+  it("say when signing out also signs the CLI out on this computer", async () => {
+    const { codexAuth } = await import("./codex");
+    const shared = (driver) => makeFakeInstance({ driver });
+    const ownHome = (driver, name) =>
+      makeFakeInstance({ driver, envOverrides: { [name]: "/Users/me/.w" } });
+
+    expect(claudeAuth.logoutNotice(shared("claude"))).toBe(
+      "This also signs out Claude Code on this computer, which shares this sign-in.",
+    );
+    expect(
+      claudeAuth.logoutNotice(ownHome("claude", "CLAUDE_CONFIG_DIR")),
+    ).toBeNull();
+    expect(codexAuth.logoutNotice(shared("codex"))).toContain("Codex CLI");
+    expect(codexAuth.logoutNotice(ownHome("codex", "CODEX_HOME"))).toBeNull();
+    // Copilot restarts either way.
+    expect(copilotAuth.logoutNotice(shared("copilot"))).toBe(
+      "This also signs out the GitHub Copilot CLI on this computer, which shares this sign-in. Copilot restarts on this instance, which stops chats running on it.",
+    );
+    expect(copilotAuth.logoutNotice(ownHome("copilot", "COPILOT_HOME"))).toBe(
+      "Copilot restarts on this instance, which stops chats running on it.",
+    );
+    // Cursor keeps one login per OS user.
+    expect(cursorAuth.logoutNotice(ownHome("cursor", "CURSOR_HOME"))).toContain(
+      "every Cursor instance",
+    );
+    expect(openCodeAuth.logoutNotice(shared("opencode"))).toContain(
+      "OpenCode CLI",
+    );
+    expect(
+      openCodeAuth.logoutNotice(ownHome("opencode", "XDG_DATA_HOME")),
+    ).toBeNull();
   });
 });

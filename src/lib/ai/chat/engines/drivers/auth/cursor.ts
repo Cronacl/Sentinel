@@ -103,4 +103,7 @@ export const cursorAuth: EngineAuthController = {
       ? { message: "Signed out and removed this instance's API key." }
       : undefined;
   },
+
+  logoutNotice: () =>
+    "Cursor keeps one sign-in per user: this also signs out the Cursor CLI and every Cursor instance in Sentinel.",
 };

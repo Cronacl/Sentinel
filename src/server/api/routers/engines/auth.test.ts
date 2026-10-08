@@ -55,6 +55,7 @@ mock.module("@/lib/ai/chat/engines/platform/instances", () => ({
 const claudeAuth = {
   login: mock(async () => {}),
   logout: mock(async () => {}),
+  logoutNotice: mock(() => "This also signs out the Claude Code CLI."),
   methods: mock(async () => [
     { id: "claude-login", label: "Sign in", type: "terminal-command" },
   ]),
@@ -106,6 +107,7 @@ describe("api.engines.auth", () => {
       }),
     ).resolves.toEqual({
       canLogout: true,
+      logoutNotice: "This also signs out the Claude Code CLI.",
       methods: [
         { id: "claude-login", label: "Sign in", type: "terminal-command" },
       ],
@@ -114,10 +116,16 @@ describe("api.engines.auth", () => {
     expect(claudeAuth.methods).toHaveBeenCalledWith(claudeInstance, {
       terminal: true,
     });
+    expect(claudeAuth.logoutNotice).toHaveBeenCalledWith(claudeInstance);
 
     await expect(
       engineAuthRouter.methods({ ctx, input: { instanceId: "sentinel" } }),
-    ).resolves.toEqual({ canLogout: false, methods: [], supported: false });
+    ).resolves.toEqual({
+      canLogout: false,
+      logoutNotice: null,
+      methods: [],
+      supported: false,
+    });
   });
 
   it("starts sign-in and sign-out flows on the caller's instance", async () => {

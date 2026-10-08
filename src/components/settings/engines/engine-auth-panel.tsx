@@ -465,6 +465,12 @@ export function EngineAuthPanel({ snapshot }: { snapshot: EngineSnapshot }) {
         )}
       </div>
 
+      {confirmingSignOut && methodsQuery.data?.logoutNotice ? (
+        <p className="border-warning/20 bg-warning-soft text-warning-soft-foreground mt-1.5 rounded-lg border px-2 py-1 text-[11px]">
+          {methodsQuery.data.logoutNotice}
+        </p>
+      ) : null}
+
       {view.active && state ? (
         <FlowStep
           embedTerminal={embedTerminal}

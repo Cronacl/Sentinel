@@ -10,7 +10,7 @@ import {
   EngineAuthError,
   type EngineAuthController,
 } from "../../platform/auth/controller";
-import { API_KEY_METHOD_ID } from "./shared";
+import { API_KEY_METHOD_ID, sharedLoginNotice } from "./shared";
 
 // Codex signs in through its app-server (account/login/start): ChatGPT in
 // the browser (Codex runs the local callback itself), a device code, or an
@@ -211,6 +211,8 @@ export function createCodexAuth(
     async logout(instance) {
       await (await getManager(instance)).logout();
     },
+
+    logoutNotice: (instance) => sharedLoginNotice(instance, "the Codex CLI"),
   };
 }
 

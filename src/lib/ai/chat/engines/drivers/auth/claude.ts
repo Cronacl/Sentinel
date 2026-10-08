@@ -10,6 +10,7 @@ import {
   launchTerminalCommand,
   LOGIN_METHOD_ID,
   loginWithInstanceSecret,
+  sharedLoginNotice,
   stringEnv,
 } from "./shared";
 
@@ -139,4 +140,6 @@ export const claudeAuth: EngineAuthController = {
       ? { message: "Signed out and removed this instance's API key." }
       : undefined;
   },
+
+  logoutNotice: (instance) => sharedLoginNotice(instance, "Claude Code"),
 };

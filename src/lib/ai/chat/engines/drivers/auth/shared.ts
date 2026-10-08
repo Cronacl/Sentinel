@@ -1,12 +1,16 @@
 import "server-only";
 
-import type { EngineAuthCredentialField } from "../../contract";
+import type {
+  EngineAuthCredentialField,
+  ResolvedEngineInstance,
+} from "../../contract";
 import {
   EngineAuthError,
   type EngineAuthFlowContext,
   type EngineAuthTerminalCommand,
 } from "../../platform/auth/controller";
 import { toAuthTerminalInvocation } from "../../platform/auth/terminal-command";
+import { getInstanceHomeDirectory } from "../../platform/instance-homes";
 
 // Building blocks the drivers' auth controllers share: running a CLI's own
 // sign-in in a terminal, and API keys stored as instance secrets.
@@ -59,6 +63,20 @@ export function cliTerminalCommand(input: {
     ...(env ? { env } : {}),
     title: input.title,
   };
+}
+
+/**
+ * The sign-out notice of an engine that keeps its login in the CLI's usual
+ * configuration unless the instance has a home of its own (CODEX_HOME,
+ * CLAUDE_CONFIG_DIR, COPILOT_HOME): signing out there signs the CLI out too.
+ */
+export function sharedLoginNotice(
+  instance: Pick<ResolvedEngineInstance, "driver" | "envOverrides">,
+  cli: string,
+) {
+  return getInstanceHomeDirectory(instance)
+    ? null
+    : `This also signs out ${cli} on this computer, which shares this sign-in.`;
 }
 
 /** A launch the Claude helpers built (env may hold unset entries). */
