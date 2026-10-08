@@ -84,6 +84,7 @@ const {
   normalizeCopilotErrorMessage,
   parseCopilotShellLookupOutput,
   resetCopilotRuntimeCache,
+  resolveCopilotLoginCli,
   resolveCopilotRuntime,
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./copilot-sdk.ts?copilot-sdk-test");
@@ -479,6 +480,58 @@ describe("resolveCopilotRuntime", () => {
     // The override is used as given; nothing is written back.
     expect(process.env.SENTINEL_COPILOT_PATH).toBe(relativePath);
     expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveCopilotLoginCli", () => {
+  it("finds the user's own copilot next to the bundled runtime, which cannot sign in", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const tempRoot = await realpath(
+      await mkdtemp(path.join(os.tmpdir(), "copilot-sdk-login-cli-")),
+    );
+    tempRoots.push(tempRoot);
+    const bundledCliPath = await writeBundledCopilotRuntime(tempRoot);
+    const binRoot = path.join(tempRoot, "bin");
+    await mkdir(binRoot);
+    const userCliPath = await writeLaunchableCopilotScript(binRoot, "copilot");
+
+    process.chdir(tempRoot);
+    process.env.HOME = tempRoot;
+    process.env.PATH = binRoot;
+    clearCopilotPathOverrides();
+    resetCopilotRuntimeCache();
+
+    expect((await resolveCopilotRuntime()).cliPath).toBe(bundledCliPath);
+    const loginCli = await resolveCopilotLoginCli();
+    expect(loginCli).toMatchObject({
+      cliPath: userCliPath,
+      nodeScript: false,
+    });
+    expect(loginCli?.env.PATH?.split(path.delimiter)[0]).toBe(binRoot);
+  });
+
+  it("uses the instance's runtime when it is a CLI, under Node for a script", async () => {
+    const tempRoot = await mkdtemp(
+      path.join(os.tmpdir(), "copilot-sdk-login-cli-js-"),
+    );
+    tempRoots.push(tempRoot);
+    const entrypointPath = await writeCopilotJsEntrypoint(
+      tempRoot,
+      "copilot.js",
+    );
+
+    process.env.SENTINEL_COPILOT_PATH = entrypointPath;
+    delete process.env.COPILOT_CLI_PATH;
+    delete process.env.COPILOT_PATH;
+    resetCopilotRuntimeCache();
+
+    await expect(resolveCopilotLoginCli()).resolves.toMatchObject({
+      cliPath: entrypointPath,
+      nodeScript: true,
+    });
   });
 });
 

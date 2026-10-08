@@ -293,6 +293,82 @@ describe("terminal flows", () => {
     expect(deps.refreshSnapshot).toHaveBeenCalledTimes(1);
   });
 
+  it("is what Electron main accepts and runs (renderer round trip)", async () => {
+    // The interaction the renderer echoes, through the embedded terminal's
+    // request, against main's checks and the server's ticket redemption.
+    const { toDesktopTerminalCommand } =
+      await import("@/components/settings/engines/engine-auth-helpers");
+    // Not a literal specifier: tsc would type-check main's plain JS.
+    const mainModule = new URL(
+      "../../../../../../../desktop/main/terminal-commands.mjs",
+      import.meta.url,
+    ).href;
+    const { prepareTerminalCommand } = await import(mainModule);
+    const { store } = setup();
+    const login = (args) =>
+      startInput(async (_instance, _methodId, context) => {
+        await context.runTerminalCommand({
+          args,
+          command: "/opt/homebrew/bin/copilot",
+          env: { ELECTRON_RUN_AS_NODE: "1" },
+          title: "GitHub Copilot sign-in",
+        });
+      });
+    const options = {
+      baseEnv: { HOME: "/Users/me", SENTINEL_INTERNAL_TOKEN: "t" },
+      // POST /api/engines/auth/terminal, as the route answers it.
+      fetchImpl: async (_url, init) => {
+        const spec = store.redeemTerminalTicket(JSON.parse(init.body).ticket);
+        return Response.json(spec ?? { error: "not_found" }, {
+          status: spec ? 200 : 404,
+        });
+      },
+      isDirectory: async () => true,
+      platform: "darwin",
+      serverUrl: "http://127.0.0.1:1",
+    };
+
+    const args = ["login", "--config-dir", "/Users/me/.copilot work"];
+    const waiting = await store.start(login(args));
+    const request = toDesktopTerminalCommand(waiting.interaction, {
+      cols: 90,
+      rows: 20,
+    });
+    await expect(prepareTerminalCommand(request, options)).resolves.toEqual({
+      args,
+      cols: 90,
+      command: "/opt/homebrew/bin/copilot",
+      cwd: "/Users/me",
+      env: {
+        CLAUDE_CONFIG_DIR: "/cfg",
+        COLORTERM: "truecolor",
+        ELECTRON_RUN_AS_NODE: "1",
+        HOME: "/Users/me",
+        PATH: "/managed/bin:/usr/bin",
+        TERM: "xterm-256color",
+      },
+      rows: 20,
+      title: "GitHub Copilot sign-in",
+    });
+    // Spent: the same request is refused.
+    await expect(prepareTerminalCommand(request, options)).rejects.toThrow(
+      "no longer available",
+    );
+
+    // A renderer that changes what runs is refused, and the ticket is gone.
+    const next = await store.start(login(["login"]));
+    const tampered = {
+      ...toDesktopTerminalCommand(next.interaction),
+      args: ["login", "--evil"],
+    };
+    await expect(prepareTerminalCommand(tampered, options)).rejects.toThrow(
+      "does not match",
+    );
+    expect(
+      store.redeemTerminalTicket(next.interaction.launch.ticket),
+    ).toBeNull();
+  });
+
   it("shows a copyable command without a ticket in a browser", async () => {
     const { store } = setup();
     const input = startInput(async (_instance, _methodId, context) => {
