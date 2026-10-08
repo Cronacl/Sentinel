@@ -29,6 +29,7 @@ import {
 } from "./archive";
 import { downloadFile, DownloadError } from "./download";
 import {
+  MANAGED_TOOL_ACTIVE_FILE,
   readActiveManagedToolVersion,
   readManagedToolReceipt,
   writeActiveManagedToolVersion,
@@ -74,6 +75,18 @@ export const DEFAULT_MANAGED_DOWNLOAD_MAX_BYTES = 1024 * 1024 * 1024;
 
 const TOOL_SEGMENT = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 const VERSION_PATTERN = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/;
+
+/**
+ * A version usable as a directory name next to active.json (which a
+ * version must not shadow; names starting with "." are Sentinel's own:
+ * .staging-*, .old-*, the receipt).
+ */
+function isValidVersion(version: string) {
+  return (
+    VERSION_PATTERN.test(version) &&
+    version.toLowerCase() !== MANAGED_TOOL_ACTIVE_FILE
+  );
+}
 
 export function getManagedToolsRoot(stateRoot = getSentinelStateRoot()) {
   return path.join(stateRoot, "tools");
@@ -143,7 +156,7 @@ async function runInstall(
   options: ManagedInstallOptions,
 ): Promise<ManagedInstallResult> {
   const platform = options.platform ?? process.platform;
-  if (!VERSION_PATTERN.test(options.version)) {
+  if (!isValidVersion(options.version)) {
     throw new ManagedInstallError(
       `Invalid version "${options.version}".`,
       "invalid",
@@ -351,7 +364,7 @@ export async function installManagedTool(
 export async function readActiveManagedTool(tool: string, stateRoot?: string) {
   const toolDir = getManagedToolDirectory(tool, stateRoot);
   const version = await readActiveManagedToolVersion(toolDir);
-  if (!version || !VERSION_PATTERN.test(version)) {
+  if (!version || !isValidVersion(version)) {
     return null;
   }
   const installDir = path.join(toolDir, version);
@@ -372,12 +385,12 @@ export async function removeManagedTool(
   version: string,
   stateRoot?: string,
 ) {
-  if (!VERSION_PATTERN.test(version)) {
+  if (!isValidVersion(version)) {
     throw new ManagedInstallError(`Invalid version "${version}".`, "invalid");
   }
   const toolDir = getManagedToolDirectory(tool, stateRoot);
   if ((await readActiveManagedToolVersion(toolDir)) === version) {
-    await rm(path.join(toolDir, "active.json"), { force: true });
+    await rm(path.join(toolDir, MANAGED_TOOL_ACTIVE_FILE), { force: true });
   }
   await rm(path.join(toolDir, version), { force: true, recursive: true });
 }

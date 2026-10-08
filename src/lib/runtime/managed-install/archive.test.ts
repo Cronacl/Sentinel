@@ -189,6 +189,23 @@ describe("extractArchive: tar", () => {
     expect(await readdir(outside)).toEqual([]);
   });
 
+  it("never creates a link's directories through an earlier link", async () => {
+    // Each target is inside the tree on paper; `esc` really points at the
+    // tree's parent, and a recursive mkdir for `esc/escaped/l` would have
+    // created `escaped` there before any check ran.
+    await expect(
+      extract(
+        "tar",
+        buildTar([
+          { linkname: "../../..", name: "a/b/c/up", type: "2" },
+          { linkname: "a/b/c/up/..", name: "esc", type: "2" },
+          { linkname: "x", name: "esc/escaped/l", type: "2" },
+        ]),
+      ),
+    ).rejects.toThrow("inside another link");
+    expect(await readdir(root)).not.toContain("escaped");
+  });
+
   it("refuses a chain of links that climbs out of the tree", async () => {
     await expect(
       extract(

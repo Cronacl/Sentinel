@@ -23,9 +23,11 @@ import { createGunzip, createInflateRaw } from "node:zlib";
 //   a later member outside the tree);
 // - symlinks must point inside the tree and are created last, once every
 //   file and directory is written, so no member is ever written through a
-//   link; once all exist, each must still resolve inside the tree (a chain
-//   of links cannot climb out); hard links are copies of a member already
-//   extracted; devices and FIFOs are skipped;
+//   link; a link's own parent directories are walked without following
+//   links (a link inside a linked directory is refused, so no directory is
+//   ever created through one); once all exist, each must still resolve
+//   inside the tree (a chain of links cannot climb out); hard links are
+//   copies of a member already extracted; devices and FIFOs are skipped;
 // - entry count and total extracted bytes are capped (zip bombs), zip
 //   members must match their declared size and CRC-32;
 // - modes are normalized (0755 for executables, 0644 otherwise), so no
@@ -164,6 +166,33 @@ async function ensureParent(context: ExtractContext, relativePath: string) {
   return path.join(realParent, path.basename(target));
 }
 
+/**
+ * The location of a symlink member, its parent directories created one at
+ * a time without following links: by now earlier links exist, and a
+ * recursive mkdir would create directories wherever they point.
+ */
+async function ensureLinkParent(context: ExtractContext, relativePath: string) {
+  const segments = relativePath.split("/");
+  let current = context.root;
+  for (const segment of segments.slice(0, -1)) {
+    current = path.join(current, segment);
+    const stats = await lstat(current).catch(() => null);
+    if (stats?.isSymbolicLink()) {
+      throw new ArchiveError(
+        `Archive symlink "${relativePath}" is inside another link.`,
+      );
+    }
+    if (!stats) {
+      await mkdir(current, { mode: 0o755 });
+    } else if (!stats.isDirectory()) {
+      throw new ArchiveError(
+        `Archive member "${relativePath}" is inside a file.`,
+      );
+    }
+  }
+  return path.join(current, segments.at(-1)!);
+}
+
 async function writeDirectory(context: ExtractContext, relativePath: string) {
   countEntry(context);
   const target = await ensureParent(context, relativePath);
@@ -281,7 +310,7 @@ async function createSymlinks(context: ExtractContext) {
   const created: string[] = [];
   for (const link of context.links) {
     checkAborted(context);
-    const location = await ensureParent(context, link.relativePath);
+    const location = await ensureLinkParent(context, link.relativePath);
     await symlink(link.target, location).catch(
       (error: NodeJS.ErrnoException) => {
         throw error.code === "EEXIST"

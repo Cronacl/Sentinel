@@ -322,5 +322,21 @@ describe("installManagedTool", () => {
         version: "../1",
       }),
     ).rejects.toThrow("Invalid version");
+    // A version must not shadow the tool's own active.json.
+    for (const version of ["active.json", "Active.JSON"]) {
+      await expect(
+        installManagedTool({
+          executable: "agent",
+          fetch: serve(archive),
+          source: { url: "https://downloads.example.test/agent" },
+          stateRoot: root,
+          tool: "demo",
+          version,
+        }),
+      ).rejects.toThrow("Invalid version");
+    }
+    await expect(
+      removeManagedTool("demo", "active.json", root),
+    ).rejects.toThrow("Invalid version");
   });
 });
