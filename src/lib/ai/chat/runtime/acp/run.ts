@@ -221,7 +221,8 @@ function handleSessionUpdate(
   if (
     control.sessionId &&
     envelope.sessionId &&
-    envelope.sessionId !== control.sessionId
+    envelope.sessionId !== control.sessionId &&
+    !control.descriptor.routeUnknownSessionsToRoot
   ) {
     return;
   }

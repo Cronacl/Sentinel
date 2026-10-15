@@ -1,3 +1,5 @@
+import type * as acp from "@agentclientprotocol/sdk";
+
 import type {
   DriverKind,
   EngineInstallSource,
@@ -17,7 +19,6 @@ import type {
 } from "@/lib/ai/chat/runtime/external/user-input";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { PermissionMode } from "@/server/db/enums";
-import type * as acp from "@agentclientprotocol/sdk";
 
 import type { AcpAgentProcess } from "./connection";
 import type { AcpCatalogModel, AcpConfigOptionInfo } from "./config-options";
@@ -39,6 +40,16 @@ export type AcpResolvedBinary = {
   path: string;
   source: EngineInstallSource;
   version: string | null;
+  /**
+   * What to spawn when it is not `path` with the descriptor's launchArgs
+   * (registry agents: a bin script under Node, the registry's arguments),
+   * and variables the launch adds under the instance's own.
+   */
+  launch?: {
+    args: readonly string[];
+    command: string;
+    env?: Readonly<Record<string, string>>;
+  };
 };
 
 export type AcpBinaryResolution = {
@@ -326,6 +337,11 @@ export interface AcpAgentDescriptor {
   readonly idleNotifications?: Readonly<
     Record<string, (params: unknown, context: AcpIdleContext) => void>
   >;
+  /**
+   * Treat session updates for another session id as the thread's own
+   * (agents that stream subagents under their own ids: Devin).
+   */
+  readonly routeUnknownSessionsToRoot?: boolean;
 
   /** How long Stop waits for the prompt to end after session/cancel (default 5 s). */
   readonly cancelGraceMs?: number;

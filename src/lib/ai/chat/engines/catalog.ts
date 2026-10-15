@@ -105,13 +105,29 @@ const antigravityConfigSchema = binaryConfigSchema.extend({
   gcpProject: z.string().trim().min(1).optional(),
 });
 
-const acpConfigSchema = z.looseObject({
-  agentId: z.string().trim().min(1).max(128),
-  authMethodId: z.string().trim().min(1).optional(),
-  commandArgs: z.array(z.string().max(4096)).max(64).optional(),
-  commandPath: z.string().trim().min(1).max(4096).optional(),
-  distribution: z.enum(["binary", "npx", "uvx", "custom"]).optional(),
-});
+// A registry agent (its registry id, the distribution to install, how to
+// sign in, its name and CDN icon for display) or a custom ACP command
+// (`commandPath` with `commandArgs`), which also overrides a registry
+// agent's installed launch.
+const acpConfigSchema = z
+  .looseObject({
+    agentId: z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9][a-z0-9._-]{0,127}$/)
+      .optional(),
+    agentName: z.string().trim().min(1).max(160).optional(),
+    authMethodId: z.string().trim().min(1).max(256).optional(),
+    /** Serve fs/read_text_file and fs/write_text_file (default per agent). */
+    clientFs: z.boolean().optional(),
+    commandArgs: z.array(z.string().max(4096)).max(64).optional(),
+    commandPath: z.string().trim().min(1).max(4096).optional(),
+    distribution: z.enum(["auto", "binary", "npx", "uvx", "custom"]).optional(),
+    iconUrl: z.string().trim().max(2048).optional(),
+  })
+  .refine((config) => Boolean(config.agentId || config.commandPath), {
+    message: "Name an ACP Registry agent or a command.",
+  });
 
 const emptyConfigSchema = z.looseObject({});
 
@@ -417,10 +433,22 @@ export const DRIVER_CATALOG = {
     transport: "rpc",
   },
   acp: {
-    capabilities: { ...EXTERNAL_CAPABILITIES, supportsPlanMode: "acp-mode" },
+    capabilities: {
+      ...EXTERNAL_CAPABILITIES,
+      // The shared ACP engine maps each mode (runtime/external/permissions.ts).
+      permissionModes: ["default", "accept_edits", "full"],
+      reportsSlashCommands: true,
+      // Narrowed per instance by the probe (promptCapabilities.image).
+      supportsImages: true,
+      supportsMcpInjection: true,
+      // The agent's own plan mode (session/set_mode), else the preamble.
+      supportsPlanMode: "acp-mode",
+      supportsUserInput: true,
+    },
     config: acpConfigSchema,
     defaultInstance: false,
-    description: "Agents installed from the ACP Registry.",
+    description: "Agents installed from the ACP Registry, or any ACP command.",
+    docsUrl: "https://agentclientprotocol.com/registry",
     homeEnvVar: null,
     kind: "acp",
     label: "ACP agent",
@@ -428,7 +456,7 @@ export const DRIVER_CATALOG = {
     multiInstance: true,
     runtime: "external",
     stability: "experimental",
-    status: "planned",
+    status: "available",
     toolPrefix: "acp_",
     transport: "acp",
   },
@@ -450,7 +478,9 @@ export const AVAILABLE_DRIVER_KINDS = BUILTIN_DRIVER_KINDS.filter(
  * Each lands by flipping its own catalog entry to "available".
  */
 export const PLANNED_DRIVER_KINDS = BUILTIN_DRIVER_KINDS.filter(
-  (kind) => DRIVER_CATALOG[kind].status === "planned",
+  // Widened: every builtin kind may be available, and a new one lands as
+  // "planned" first.
+  (kind) => (DRIVER_CATALOG[kind] as EngineDriverMeta).status === "planned",
 );
 
 export function isAvailableDriverKind(kind: string) {

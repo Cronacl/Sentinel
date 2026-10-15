@@ -1,6 +1,10 @@
 import "server-only";
 
-import { DRIVER_CATALOG, type BuiltinDriverKind } from "../catalog";
+import {
+  DRIVER_CATALOG,
+  type BuiltinDriverKind,
+  type EngineDriverMeta,
+} from "../catalog";
 import {
   defaultInstanceIdForDriver,
   type EngineProbeResult,
@@ -40,7 +44,8 @@ export function getPlannedDriverMessage(label: string) {
 export function definePlannedEngineDriver(
   kind: PlannedDriverKind,
 ): EngineDriver {
-  const meta = DRIVER_CATALOG[kind];
+  // Widened: with no kind planned, PlannedDriverKind is never.
+  const meta: EngineDriverMeta = DRIVER_CATALOG[kind as BuiltinDriverKind];
   const message = getPlannedDriverMessage(meta.label);
   const unavailable = (instanceId: string) =>
     new EngineInstanceUnavailableError(

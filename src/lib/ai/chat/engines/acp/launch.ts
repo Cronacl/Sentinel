@@ -102,7 +102,7 @@ function withProcessTempDirectory(launch: AcpLaunch) {
 
 export function buildAcpLaunch(
   descriptor: Pick<AcpAgentDescriptor, "launchArgs" | "launchArgsFor">,
-  instance: Pick<ResolvedEngineInstance, "config" | "env">,
+  instance: Pick<ResolvedEngineInstance, "config" | "env" | "envOverrides">,
   binary: AcpResolvedBinary,
   cwd: string,
   options: { permissionMode?: PermissionMode } = {},
@@ -112,12 +112,21 @@ export function buildAcpLaunch(
       permissionMode: options.permissionMode ?? "default",
     }) ?? descriptor.launchArgs;
   return {
-    args: [...args, ...(instance.config.launchArgs ?? [])],
-    command: binary.path,
+    args: [
+      ...(binary.launch?.args ?? args),
+      ...(instance.config.launchArgs ?? []),
+    ],
+    command: binary.launch?.command ?? binary.path,
     cwd,
-    // The instance env wins; the binary's env only contributes the PATH it
-    // was found on (a login shell's).
-    env: { ...instance.env, PATH: binary.env.PATH ?? instance.env.PATH },
+    // The instance env wins (over the launch's own variables too); the
+    // binary's env only contributes the PATH it was found on (a login
+    // shell's).
+    env: {
+      ...instance.env,
+      ...binary.launch?.env,
+      ...instance.envOverrides,
+      PATH: binary.env.PATH ?? instance.env.PATH,
+    },
   };
 }
 

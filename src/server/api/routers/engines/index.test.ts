@@ -512,14 +512,30 @@ describe("enginesRouter.instances", () => {
   });
 });
 
-describe("not-yet-built engine services", () => {
-  it("answer not_supported rather than failing", async () => {
-    for (const result of [
-      await enginesRouter.acpRegistry.list({ ctx: USER_CTX }),
-    ]) {
-      expect(result).toEqual(
-        expect.objectContaining({ code: "not_supported", ok: false }),
-      );
+describe("enginesRouter.acpRegistry", () => {
+  it("lists nothing, without fetching, before the registry was browsed", async () => {
+    const { mkdtemp, rm } = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const root = await mkdtemp(path.join(os.tmpdir(), "sentinel-acp-router-"));
+    const previous = process.env.SENTINEL_STATE_PATH;
+    process.env.SENTINEL_STATE_PATH = path.join(root, "state.json");
+    try {
+      await expect(
+        enginesRouter.acpRegistry.search({
+          ctx: USER_CTX,
+          input: { query: "gemini" },
+        }),
+      ).resolves.toEqual({
+        agents: [],
+        fetchedAt: null,
+        fetchError: null,
+        registryVersion: null,
+      });
+    } finally {
+      if (previous === undefined) delete process.env.SENTINEL_STATE_PATH;
+      else process.env.SENTINEL_STATE_PATH = previous;
+      await rm(root, { force: true, recursive: true });
     }
   });
 });
