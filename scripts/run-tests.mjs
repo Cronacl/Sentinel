@@ -125,7 +125,11 @@ const testFiles = ROOTS.flatMap((root) => {
     (file) =>
       options.filters.length === 0 ||
       options.filters.some((filter) =>
-        path.relative(process.cwd(), file).includes(filter),
+        path
+          .relative(process.cwd(), file)
+          .split(path.sep)
+          .join("/")
+          .includes(filter),
       ),
   )
   .sort((left, right) => left.localeCompare(right));
