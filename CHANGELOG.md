@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.68](https://github.com/Cronacl/Sentinel/compare/v0.0.67...v0.0.68) (2026-10-15)
+
+
+### Bug Fixes
+
+* **desktop:** keep packaged symlinks inside the app so codesign accepts it ([2f666b3](https://github.com/Cronacl/Sentinel/commit/2f666b3c0255ddd2289710754c9ae3c75aacd0ed))
+* **desktop:** keep packaged symlinks inside the app so codesign accepts it ([98c1b4f](https://github.com/Cronacl/Sentinel/commit/98c1b4f91b54fdc61bd3ffbe3912c3ff3d585335))
+
 ## [0.0.67](https://github.com/Cronacl/Sentinel/compare/v0.0.66...v0.0.67) (2026-10-15)
 
 
