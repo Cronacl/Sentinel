@@ -81,7 +81,11 @@ function runTestFile(testFile, { captureOutput }) {
   };
 
   return new Promise((resolve) => {
-    const child = spawn(resolveBunCommand(), ["test", testFile], {
+    // Process-spawning tests run several files at once on loaded CI
+    // runners, where bun's 5 s default timeout flakes; real hangs still fail.
+    const timeout = process.env.SENTINEL_TEST_TIMEOUT_MS ?? "15000";
+    const args = ["test", "--timeout", timeout, testFile];
+    const child = spawn(resolveBunCommand(), args, {
       cwd: process.cwd(),
       env,
       shell: false,
