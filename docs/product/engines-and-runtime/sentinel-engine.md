@@ -100,7 +100,7 @@ Active background shell tasks are also exposed to the terminal panel through the
 
 The harness manages more than message history.
 
-It also has to keep track of the active stream ID, thread status, queued follow-ups, the session snapshot used by the UI, plan state, repo checkpoint state, and the engine-specific state for Codex and Claude threads. That is where a lot of the product feel comes from.
+It also has to keep track of the active stream ID, thread status, queued follow-ups, the session snapshot used by the UI, plan state, repo checkpoint state, and the engine-specific state for threads that run on another engine. That is where a lot of the product feel comes from.
 
 The thread is really the durable state holder. The run comes and goes. The thread stays.
 
@@ -141,16 +141,16 @@ That gives the app a place to start checkpoint capture, update checkpoint pointe
 
 `sentinel` is always available because it is the app harness.
 
-`codex` and `claude` use local runtimes, but Sentinel still keeps the shell and thread model around them.
+The other engines (`claude`, `codex`, `copilot`, `cursor`, `opencode`, `grok`, `antigravity`, `pi`, and `acp`) use local runtimes, but Sentinel still keeps the shell and thread model around them. See [Engines by agent](./agents.md).
 
 So there are really two meanings packed into the name:
 
 `sentinel` is the built-in engine choice, and it is also the outer harness that keeps the whole product coherent.
 
-That overlap is deliberate. The same layer that runs the built-in engine is also the layer that keeps Codex and Claude threads attached to the rest of the app.
+That overlap is deliberate. The same layer that runs the built-in engine is also the layer that keeps threads on the other engines attached to the rest of the app.
 
 ## Code references
 
 - [`run-thread-chat.ts`](../../../src/lib/ai/chat/runtime/run-thread-chat.ts)
-- [`session-server.ts`](../../../src/lib/ai/chat/session-server.ts)
-- [`types.ts`](../../../src/lib/ai/chat/engines/types.ts)
+- [`session/server.ts`](../../../src/lib/ai/chat/session/server.ts)
+- [`catalog.ts`](../../../src/lib/ai/chat/engines/catalog.ts)

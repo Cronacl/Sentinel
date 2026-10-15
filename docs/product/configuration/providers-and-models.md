@@ -18,7 +18,9 @@ The providers screen is where you connect, edit, enable, disable, or remove a pr
 
 ## What providers are supported
 
-Current provider support includes:
+Sentinel's built-in engine talks to providers through the AI SDK (version 7).
+
+Chat providers:
 
 - OpenAI
 - Anthropic
@@ -30,10 +32,18 @@ Current provider support includes:
 - Groq
 - Cohere
 - Moonshot AI
-- Mistral
+- Mistral AI
+- DeepSeek
 - Ollama
 - OpenRouter
 - Vercel AI Gateway
+
+Black Forest Labs, Kling AI, ByteDance, Fal, and Replicate are image and video providers. See [Search, voice, images, and videos](./search-voice-and-media.md).
+
+A few provider details:
+
+- xAI runs on its Responses API with response storage turned off, so xAI does not keep prompts and responses.
+- Azure model IDs are deployment names.
 
 ## Models
 
@@ -45,7 +55,15 @@ That includes:
 - enable and disable state
 - custom model IDs
 - capability labels
-- runtime status for Codex and Claude integrations
+- reasoning options per model
+
+The built-in catalog starts each provider's list with its current flagship, for example Claude Opus 5.5, Sonnet 5.5, and Fable 5.1, GPT-6 and GPT-5.6, Gemini 3.x, Grok 4.x, DeepSeek V4, Kimi K3, and Mistral Large.
+
+Reasoning options follow each provider's own values, such as effort levels for Claude, OpenAI, and Grok, or thinking levels for Gemini.
+
+When a provider retires a model, Sentinel moves threads, automations, and saved defaults that use it to the provider's recommended successor. If you still have the retired ID enabled, for example as a custom model, Sentinel keeps using it.
+
+Retired image and video models move to their replacement the same way.
 
 ## Connected vs enabled
 
@@ -60,22 +78,11 @@ You can:
 
 ## Engines
 
-Sentinel has six engines:
+Providers only apply to the `sentinel` engine.
 
-- `sentinel`
-- `codex`
-- `claude`
-- `copilot`
-- `cursor`
-- `opencode`
+The other engines (Claude, Codex, Copilot, Cursor, OpenCode, Grok Build, Antigravity, Pi, and ACP Registry agents) bring their own models and sign-in. Sentinel asks each one for its models and shows them in the composer. The engine manifest adds metadata such as context windows, reasoning options, and badges when the engine does not report them.
 
-The `sentinel` engine is the app-managed runtime.
-
-`codex`, `claude`, `copilot`, `cursor`, and `opencode` are local runtime integrations. The models screen shows runtime status for those engines and includes refresh actions for their availability.
-
-For Codex, Sentinel can also hold onto thread-specific runtime state like sandbox mode, approval policy, and the linked Codex thread ID.
-
-For Claude, Sentinel keeps the linked Claude session state for the thread.
+Engine setup lives in Settings → Engines, not on the providers screen. See [Engines settings](./engines.md) and [Engines by agent](../engines-and-runtime/agents.md).
 
 That is why engine choice changes more than the label in the model picker.
 

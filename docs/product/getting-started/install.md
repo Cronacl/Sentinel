@@ -25,9 +25,9 @@ Linux notes:
 
 ## Run from source
 
-Sentinel uses Bun.
+Sentinel uses Bun 1.4.2 or later (`packageManager` in `package.json` pins 1.4.2).
 
-Source runs also need Node.js 24 LTS (the version pinned in `.nvmrc`). Sentinel checks its native dependencies at startup:
+Source runs also need Node.js 24 LTS, 24.14 or later (the major version pinned in `.nvmrc`). Sentinel checks its native dependencies at startup:
 
 - `better-sqlite3` loads the N-API prebuild bundled for your OS and CPU and is never compiled locally. On Linux that prebuild needs glibc 2.34 and libstdc++ from GCC 11 or newer.
 - `node-pty` uses its prebuilt binary on macOS and Windows. On Linux, `bun install` compiles it. If the binary does not load, the startup script rebuilds it locally.
@@ -47,7 +47,7 @@ The app runs at `http://localhost:3232`.
 
 `ENCRYPTION_KEY` can be left empty in `.env`. Sentinel generates one on first desktop launch.
 
-`bun install` does not download the Electron binary. `bun run dev:desktop` and the desktop build commands fetch it on first use, or you can run `bun run electron:install` ahead of time.
+Sentinel runs on Electron 44. `bun install` does not download the Electron binary. `bun run dev:desktop` and the desktop build commands fetch it on first use, or you can run `bun run electron:install` ahead of time.
 
 ## Build commands
 
@@ -89,3 +89,9 @@ bun run build:desktop:linux:rpm
 - [Getting started](./index.md)
 - [Quickstart](./quickstart.md)
 - [Environment and build](../reference/environment-and-build.md)
+
+## Coding agents
+
+The built-in `sentinel` engine needs only a connected provider. The other engines run agents installed on your machine, such as the Claude Code, Codex, Cursor, OpenCode, Grok, or Pi CLIs. Copilot's runtime ships with Sentinel, and Antigravity and ACP Registry agents are installed by Sentinel itself.
+
+You can install, update, and sign in to each of them from Settings → Engines. See [Engines by agent](../engines-and-runtime/agents.md).

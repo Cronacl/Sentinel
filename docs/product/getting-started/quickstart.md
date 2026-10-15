@@ -4,7 +4,7 @@ This is the shortest path to a working local Sentinel setup.
 
 ## 1. Install dependencies
 
-Sentinel uses Bun.
+Sentinel uses Bun 1.4.2 and Node.js 24 LTS.
 
 ```bash
 bun install
@@ -56,7 +56,7 @@ If you want hosted models, configure providers in Settings:
 - Voice
 - Search
 
-If you want local runtime options, configure Codex or Claude in the app as well.
+If you want a local coding agent such as Claude, Codex, Copilot, Cursor, or OpenCode, open Settings → Engines. You can install it and sign in from there. See [Engines settings](../configuration/engines.md).
 
 ## 7. Use the built-in workflow
 

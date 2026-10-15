@@ -18,7 +18,9 @@ It keeps messages and the rest of the state around the task.
 
 An engine is the runtime layer for a thread.
 
-Sentinel supports `sentinel`, `codex`, and `claude`.
+Sentinel supports its own `sentinel` engine and nine local coding agents: `claude`, `codex`, `copilot`, `cursor`, `opencode`, `grok`, `antigravity`, `pi`, and `acp` (ACP Registry agents).
+
+An engine can have several instances, each with its own binary, environment, and sometimes its own home directory.
 
 ## Chat mode
 

@@ -20,7 +20,9 @@ An automation stores:
 
 Runs are stored separately and can link back to the thread created by that run.
 
-Automations can use any configured chat engine: `sentinel`, `codex`, `claude`, `copilot`, `cursor`, or `opencode`.
+Automations can use any usable engine instance. The form picks a driver (`sentinel`, `claude`, `codex`, `copilot`, `cursor`, `opencode`, `grok`, `antigravity`, `pi`, or an ACP agent), then an instance, then the model and its options.
+
+Nobody is there to answer an automation, so tool calls that would ask for approval are declined unless the permission mode allows them, and questions are skipped.
 
 ## Schedule types
 

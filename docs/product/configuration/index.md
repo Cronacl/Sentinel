@@ -7,6 +7,7 @@ Some of it is one-time setup. Some of it changes as you go.
 Main areas:
 
 - [Providers and models](./providers-and-models.md)
+- [Engines](./engines.md)
 - [Search, voice, images, and videos](./search-voice-and-media.md)
 - [Memory, security, and data](./memory-security-and-data.md)
 - [Integrations and MCP](./integrations-and-mcp.md)

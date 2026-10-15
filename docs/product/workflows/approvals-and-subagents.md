@@ -28,10 +28,16 @@ That is especially useful when you want different behavior for:
 
 Sentinel also has a broader security setting for permission mode.
 
-The visible choices are:
+Sentinel stores four permission modes:
 
-- `default`
-- `full`
+- `default`: tools are limited to the selected workspace directory
+- `accept_edits`: file edits are applied without asking; other actions still ask
+- `auto`: the agent decides which actions need your approval
+- `full`: tools can access any path on this machine
+
+Each engine supports a subset, and the composer only offers that subset. The built-in engine, Claude, Codex, and Copilot support `default` and `full`. See [Engines by agent](../engines-and-runtime/agents.md) for the rest.
+
+If a stored mode is not supported by the thread's engine, Sentinel uses the most permissive supported mode that is not above it. Sentinel never grants more than you chose.
 
 Workspace-level permission overrides can also exist, so a workspace can differ from the global default.
 

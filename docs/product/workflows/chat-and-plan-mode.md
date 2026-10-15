@@ -43,6 +43,18 @@ Plan tasks have tracked status values:
 
 Question sets also have tracked status values.
 
+### Plan mode on other engines
+
+Plan mode is not the same on every engine:
+
+- `sentinel`, Claude, and Codex use their own plan mode.
+- Cursor and ACP Registry agents switch into the agent's plan mode when it has one, else they get Sentinel's plan instructions.
+- OpenCode runs the turn with its `plan` agent and denies file edits.
+- Copilot and Grok Build get Sentinel's plan instructions.
+- Antigravity and Pi have no plan mode, so the composer hides it.
+
+See [Engines by agent](../engines-and-runtime/agents.md).
+
 ## When to use plan mode
 
 Plan mode makes sense when the task needs shape before implementation.

@@ -26,6 +26,25 @@ For local Sentinel, Claude, Copilot, Cursor, and OpenCode skills, installs can b
 
 Codex skills are global only.
 
+Where each target keeps its skills:
+
+| Target     | Workspace          | Global                                          |
+| ---------- | ------------------ | ----------------------------------------------- |
+| `sentinel` | `.sentinel/skills` | `~/.sentinel/skills`                            |
+| `claude`   | `.claude/skills`   | `skills` in `CLAUDE_CONFIG_DIR`, or `~/.claude` |
+| `codex`    | none               | Codex's own skills, through its app server      |
+| `copilot`  | `.github/skills`   | `skills` in `COPILOT_HOME`, or `~/.copilot`     |
+| `cursor`   | `.cursor/skills`   | `~/.cursor/skills`                              |
+| `opencode` | `.opencode/skills` | `~/.config/opencode/skills`                     |
+
+The Sentinel engine also reads `.agents/skills`, in the workspace and in your home folder.
+
+A Claude or Copilot instance with its own home directory lists and installs global skills in that home. The composer lists the skills of the instance a thread uses.
+
+Grok Build and Pi report their own skills, and Pi's appear in the slash menu. Sentinel does not install skills for either.
+
+On Claude, a skill chip from a Claude skills folder is sent as Claude Code's `/name` command.
+
 ## Sources
 
 Skills can come from:
