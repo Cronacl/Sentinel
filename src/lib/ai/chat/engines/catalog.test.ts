@@ -89,9 +89,10 @@ describe("DRIVER_CATALOG", () => {
       "cursor",
       "opencode",
     ] as const) {
-      // Cursor runs on the shared ACP engine, which also maps accept_edits.
+      // Cursor runs on the shared ACP engine, which also maps accept_edits;
+      // OpenCode maps it onto its session rules.
       expect(getDriverPermissionModes(kind)).toEqual(
-        kind === "cursor"
+        kind === "cursor" || kind === "opencode"
           ? ["default", "accept_edits", "full"]
           : DEFAULT_DRIVER_PERMISSION_MODES,
       );

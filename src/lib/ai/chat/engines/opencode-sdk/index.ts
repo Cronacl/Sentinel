@@ -1,20 +1,13 @@
 import "server-only";
 
-import { type ChildProcessByStdio } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import net from "node:net";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { Readable } from "node:stream";
 
 import {
   createOpencodeClient,
   type Agent,
   type OpencodeClient,
-  type PermissionRuleset,
   type ProviderListResponse,
-  type QuestionAnswer,
-  type QuestionRequest,
 } from "@opencode-ai/sdk/v2";
 
 import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
@@ -39,36 +32,41 @@ import {
   buildManagedExecutablePathValue,
   buildPreferredExecutablePathValue,
 } from "@/lib/runtime/platform-paths";
-import { terminateProcessTree } from "@/lib/runtime/process/kill-tree";
-import { spawnManagedProcess } from "@/lib/runtime/process/spawn";
 import { withTimeout } from "@/lib/runtime/process/with-timeout";
 
-// `opencode serve` prints "opencode server listening on http://<host>:<port>"
-// once it accepts connections (packages/opencode/src/cli/cmd/serve.ts; the
-// text is unchanged from 1.2 through 1.18). Match the tail loosely, like
-// t3code's opencodeRuntime.ts, so a log prefix cannot break startup. Polling
-// GET /global/health backs this up if the line ever changes.
-const OPENCODE_SERVER_READY_PATTERN = /server listening on\s+(https?:\/\/\S+)/i;
-const ANSI_ESCAPE_PATTERN = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
-const OPENCODE_SERVER_HOSTNAME = "127.0.0.1";
-// Basic-auth user for OPENCODE_SERVER_PASSWORD; set explicitly so an inherited
-// OPENCODE_SERVER_USERNAME cannot desynchronize server and client.
-const OPENCODE_SERVER_USERNAME = "opencode";
-const OPENCODE_HEALTH_PATH = "/global/health";
-const OPENCODE_HEALTH_POLL_INTERVAL_MS = 100;
-const OPENCODE_HEALTH_REQUEST_TIMEOUT_MS = 1_000;
-const OPENCODE_SERVER_KILL_GRACE_MS = 2_000;
-const OPENCODE_SERVER_OUTPUT_MAX_CHARS = 64 * 1024;
+import {
+  startOpenCodeServerProcess,
+  type OpenCodeServerProcess,
+} from "./server";
+import { peekOpenCodeServer } from "./server-pool";
+import {
+  openOpenCodeSession,
+  type OpenCodeModelRef,
+  type OpenCodeTurnSession,
+} from "./session";
+import { createOpenCode2Client, type OpenCode2Client } from "./v2/client";
+import {
+  classifyOpenCodeVersion,
+  compareOpenCodeSemver,
+  parseOpenCodeSemver,
+  type OpenCodeGeneration,
+} from "./version";
+
+export * from "./server";
+export * from "./server-pool";
+export * from "./session";
+export {
+  classifyOpenCodeVersion,
+  parseOpenCodeSemver,
+  probeOpenCodeServer,
+  type OpenCodeGeneration,
+} from "./version";
+export type * from "./events";
+export { resolveOpenCodeSessionError } from "./v1/events";
+
 const OPENCODE_RUNTIME_CACHE_TTL_MS = 15_000;
 const OPENCODE_STATUS_CACHE_TTL_MS = 15_000;
 const OPENCODE_STATUS_QUERY_TIMEOUT_MS = 4_000;
-// Default bound for a turn's server start, matching t3code's
-// DEFAULT_OPENCODE_SERVER_TIMEOUT_MS (opencodeRuntime.ts). A warm start is
-// ~1 s (1.3.17 measured here; 1.18 listens before it bootstraps an instance),
-// but the first launch of a freshly installed ~120 MB binary can sit in
-// Gatekeeper/Defender scanning for several seconds, and failing the user's
-// turn there is worse than waiting.
-const OPENCODE_SERVER_START_TIMEOUT_MS = 30_000;
 // Status probes answer the UI within OPENCODE_STATUS_QUERY_TIMEOUT_MS either
 // way; the probe itself may outlive that window on purpose so a slow cold start
 // still refreshes the status snapshot in the background (the server is closed
@@ -100,6 +98,11 @@ export const OPENCODE_MINIMUM_VERSION = "1.0.224";
 // advisory.
 export const OPENCODE_RECOMMENDED_VERSION = "1.14.19";
 export const OPENCODE_RECOMMENDED_RANGE = `>=${OPENCODE_RECOMMENDED_VERSION} <2.0.0`;
+// The 2.x release t3code's OpenCode 2 adapter was recorded against; the
+// `/api/*` protocol of earlier 2.x builds may differ, so they keep working
+// with an "update recommended" advisory.
+export const OPENCODE2_RECOMMENDED_VERSION = "2.0.18";
+export const OPENCODE2_RECOMMENDED_RANGE = `>=${OPENCODE2_RECOMMENDED_VERSION}`;
 
 export type OpenCodeEngineState =
   | "auth_unavailable"
@@ -145,15 +148,21 @@ export type OpenCodeCompatibilityAdvisory = {
   status: OpenCodeCompatibilityStatus;
 };
 
+export type OpenCodeCommandInfo = { description?: string; name: string };
+
 export type OpenCodeEngineStatus = {
   authReady: boolean;
   availableModels: OpenCodeModelInfo[];
+  /** The server's commands (`/name` in the composer). */
+  commands?: OpenCodeCommandInfo[];
   cliDetected: boolean;
   cliPath: string | null;
   cliVersion: string | null;
   compatibilityAdvisory: OpenCodeCompatibilityAdvisory | null;
   engine: "opencode";
   error: string | null;
+  /** Server generation, from `--version` or the server itself. */
+  generation?: OpenCodeGeneration | null;
   lastSuccessfulProbeAt: string | null;
   state: OpenCodeEngineState;
   usedCachedStatus: boolean;
@@ -179,33 +188,10 @@ export type ResolvedOpenCodeRuntime = {
   source: EngineInstallSource | null;
 };
 
-export type OpenCodeServerExit = {
-  code: number | null;
-  signal: NodeJS.Signals | null;
-};
-
-export type OpenCodeServerProcess = {
-  // `Basic …` header for the per-spawn OPENCODE_SERVER_PASSWORD.
-  authorization: string;
-  close: () => void;
-  exited: Promise<OpenCodeServerExit>;
-  stderr: () => string;
-  stdout: () => string;
-  url: string;
-  // From GET /global/health; null when the server did not answer it.
-  version: string | null;
-};
-
-export type OpenCodeSession = {
-  client: OpencodeClient;
-  runtime: ResolvedOpenCodeRuntime;
-  server: OpenCodeServerProcess;
-  sessionId: string;
-};
-
 type OpenCodeStatusSnapshot = {
   availableModels: OpenCodeModelInfo[];
   cliPath: string;
+  commands?: OpenCodeCommandInfo[];
   cliVersion: string | null;
   recordedAt: string;
 };
@@ -239,68 +225,87 @@ const OPENCODE_FALLBACK_SHELLS = [
   "/usr/local/bin/fish",
 ];
 
+// `--version` results by binary path, kept while the file's mtime and size
+// hold (design §5): the generation only changes when the binary does.
+const verifiedClis = new Map<
+  string,
+  { key: string; result: { cliPath: string; cliVersion: string | null } }
+>();
+
 /** Launchable when `--version` succeeds or at least prints something. */
 async function verifyOpenCodeCli(
   candidatePath: string,
   env: NodeJS.ProcessEnv,
 ) {
-  const result = await probeBinaryVersion({
+  const stats = await stat(candidatePath).catch(() => null);
+  const key = stats ? `${stats.mtimeMs}:${stats.size}` : null;
+  const cached = verifiedClis.get(candidatePath);
+  if (key && cached?.key === key) {
+    return cached.result;
+  }
+  const probed = await probeBinaryVersion({
     acceptFailureOutput: true,
     command: candidatePath,
     env,
     timeoutMs: OPENCODE_CLI_VERIFY_TIMEOUT_MS,
   });
-  return result.launchable
-    ? { cliPath: candidatePath, cliVersion: result.version }
-    : null;
+  if (!probed.launchable) {
+    verifiedClis.delete(candidatePath);
+    return null;
+  }
+  const result = { cliPath: candidatePath, cliVersion: probed.version };
+  // A timed-out probe (no version) is retried next time.
+  if (key && probed.version) {
+    verifiedClis.set(candidatePath, { key, result });
+  }
+  return result;
 }
 
-type OpenCodeSemver = readonly [major: number, minor: number, patch: number];
-
-// `opencode --version` prints `1.18.32` on 1.x and `opencode v2.0.18` on 2.x
-// (t3code opencodeVersionProbe.ts). Snapshot builds such as
-// `0.0.0-dev-202610062254` stay unknown rather than "too old".
-export function parseOpenCodeSemver(
-  value: string | null | undefined,
-): OpenCodeSemver | null {
-  const firstLine = value?.trim().split(/\r?\n/)[0] ?? "";
-  for (const token of firstLine.split(/\s+/)) {
-    const match = token.match(/^v?(\d+)\.(\d+)\.(\d+)$/);
-    if (match) {
-      return [Number(match[1]), Number(match[2]), Number(match[3])];
-    }
-  }
-  return null;
-}
-
-function compareOpenCodeSemver(left: OpenCodeSemver, right: OpenCodeSemver) {
-  for (let index = 0; index < 3; index += 1) {
-    const difference = left[index]! - right[index]!;
-    if (difference !== 0) return difference;
-  }
-  return 0;
+/** The generation `--version` (or the server) reported, null when unknown. */
+export function getOpenCodeGeneration(version: string | null | undefined) {
+  return classifyOpenCodeVersion(version)?.generation ?? null;
 }
 
 export function resolveOpenCodeCompatibility(
   version: string | null | undefined,
 ): OpenCodeCompatibilityAdvisory {
+  const parsed = parseOpenCodeSemver(version);
+  if (!parsed) {
+    return {
+      message: null,
+      recommendedRange: OPENCODE_RECOMMENDED_RANGE,
+      recommendedVersion: OPENCODE_RECOMMENDED_VERSION,
+      status: "unknown",
+    };
+  }
+
+  const label = parsed.join(".");
+  // Each generation is updated within itself (`opencode upgrade`); 1.x is
+  // never pointed at 2.x, nor the other way round.
+  if (parsed[0] >= 2) {
+    const recommendation = {
+      recommendedRange: OPENCODE2_RECOMMENDED_RANGE,
+      recommendedVersion: OPENCODE2_RECOMMENDED_VERSION,
+    };
+    if (
+      compareOpenCodeSemver(
+        parsed,
+        parseOpenCodeSemver(OPENCODE2_RECOMMENDED_VERSION)!,
+      ) < 0
+    ) {
+      return {
+        ...recommendation,
+        message: `OpenCode ${label} works with Sentinel, but ${OPENCODE2_RECOMMENDED_VERSION} or newer is recommended. Update it with \`opencode upgrade\`.`,
+        status: "graceful",
+      };
+    }
+    return { ...recommendation, message: null, status: "supported" };
+  }
+
   const recommendation = {
     recommendedRange: OPENCODE_RECOMMENDED_RANGE,
     recommendedVersion: OPENCODE_RECOMMENDED_VERSION,
   };
-  const parsed = parseOpenCodeSemver(version);
-  if (!parsed) {
-    return { ...recommendation, message: null, status: "unknown" };
-  }
-
-  const label = parsed.join(".");
-  if (parsed[0] >= 2) {
-    return {
-      ...recommendation,
-      message: `OpenCode ${label} is the 2.x generation, which Sentinel does not support yet. Install OpenCode 1.x (npm i -g opencode-ai) to use it here.`,
-      status: "unsupported",
-    };
-  }
   if (
     compareOpenCodeSemver(
       parsed,
@@ -383,6 +388,7 @@ async function readOpenCodeStatusSnapshot(
       cliPath: parsed.cliPath,
       cliVersion:
         typeof parsed.cliVersion === "string" ? parsed.cliVersion : null,
+      ...(Array.isArray(parsed.commands) ? { commands: parsed.commands } : {}),
       recordedAt: recordedAt.toISOString(),
     } satisfies OpenCodeStatusSnapshot;
   } catch {
@@ -394,6 +400,7 @@ function buildOpenCodeEngineStatus(input: {
   authReady: boolean;
   availableModels: OpenCodeModelInfo[];
   cliDetected: boolean;
+  commands?: OpenCodeCommandInfo[];
   cliPath: string | null;
   cliVersion: string | null;
   compatibilityAdvisory: OpenCodeCompatibilityAdvisory | null;
@@ -408,9 +415,11 @@ function buildOpenCodeEngineStatus(input: {
     cliDetected: input.cliDetected,
     cliPath: input.cliPath,
     cliVersion: input.cliVersion,
+    commands: input.commands ?? [],
     compatibilityAdvisory: input.compatibilityAdvisory,
     engine: "opencode" as const,
     error: input.error,
+    generation: getOpenCodeGeneration(input.cliVersion),
     lastSuccessfulProbeAt: input.lastSuccessfulProbeAt,
     state: input.state,
     usedCachedStatus: input.usedCachedStatus,
@@ -427,6 +436,7 @@ function buildCachedOpenCodeStatus(input: {
     cliDetected: true,
     cliPath: input.snapshot.cliPath,
     cliVersion: input.snapshot.cliVersion,
+    commands: input.snapshot.commands ?? [],
     compatibilityAdvisory: input.compatibilityAdvisory,
     error: null,
     lastSuccessfulProbeAt: input.snapshot.recordedAt,
@@ -458,7 +468,9 @@ function inferDefaultVariant(providerID: string, variants: string[]) {
   return undefined;
 }
 
-function inferDefaultAgent(agents: ReadonlyArray<Agent>) {
+type OpenCodeAgentEntry = Pick<Agent, "hidden" | "mode" | "name">;
+
+function inferDefaultAgent(agents: ReadonlyArray<OpenCodeAgentEntry>) {
   return (
     agents.find((agent) => agent.name === "build")?.name ??
     agents[0]?.name ??
@@ -467,12 +479,11 @@ function inferDefaultAgent(agents: ReadonlyArray<Agent>) {
 }
 
 function openCodeCapabilitiesForModel(input: {
-  agents: ReadonlyArray<Agent>;
-  model: ProviderListResponse["all"][number]["models"][string];
+  agents: ReadonlyArray<OpenCodeAgentEntry>;
   providerID: string;
+  variants: string[];
 }): OpenCodeModelTraits {
-  const variantValues = Object.keys(input.model.variants ?? {});
-  const defaultVariant = inferDefaultVariant(input.providerID, variantValues);
+  const defaultVariant = inferDefaultVariant(input.providerID, input.variants);
   const primaryAgents = input.agents.filter(
     (agent) =>
       !agent.hidden && (agent.mode === "primary" || agent.mode === "all"),
@@ -485,7 +496,7 @@ function openCodeCapabilitiesForModel(input: {
       label: titleCaseSlug(agent.name),
       value: agent.name,
     })),
-    variantOptions: variantValues.map((value) => ({
+    variantOptions: input.variants.map((value) => ({
       ...(defaultVariant === value ? { isDefault: true } : {}),
       label: titleCaseSlug(value),
       value,
@@ -524,13 +535,15 @@ export function flattenOpenCodeModels(input: OpenCodeInventory) {
         description: subProvider ? `${name} via ${subProvider}` : name,
         displayName: name,
         id: slug,
-        inputModalities: ["text"],
+        inputModalities: model.capabilities?.input?.image
+          ? ["text", "image"]
+          : ["text"],
         isDefault: slug === "openai/gpt-5",
         model: slug,
         openCode: openCodeCapabilitiesForModel({
           agents: input.agents,
-          model,
           providerID: provider.id,
+          variants: Object.keys(model.variants ?? {}),
         }),
         supportedReasoningEfforts: [],
       });
@@ -538,6 +551,55 @@ export function flattenOpenCodeModels(input: OpenCodeInventory) {
   }
 
   return [...models].sort((left, right) =>
+    left.displayName.localeCompare(right.displayName),
+  );
+}
+
+type OpenCode2Inventory = {
+  agents: Awaited<ReturnType<OpenCode2Client["agent"]["list"]>>["data"];
+  models: Awaited<ReturnType<OpenCode2Client["model"]["list"]>>["data"];
+  providers: ReadonlyArray<{ id: string; name?: string }>;
+};
+
+/** 2.x `model.list` (enabled models of active providers) as models. */
+export function flattenOpenCode2Models(input: OpenCode2Inventory) {
+  const providerNames = new Map(
+    input.providers.map((provider) => [provider.id, provider.name?.trim()]),
+  );
+  const agents = input.agents.map((agent) => ({
+    hidden: agent.hidden,
+    mode: agent.mode,
+    name: agent.id,
+  }));
+  const models: OpenCodeModelInfo[] = input.models.flatMap((model) => {
+    const name = model.name?.trim();
+    if (!name || model.enabled === false) return [];
+    const slug = `${model.providerID}/${model.modelID}`;
+    const subProvider = providerNames.get(model.providerID);
+    const modalities = model.capabilities?.input ?? [];
+    const context = model.limit?.context;
+    return [
+      {
+        ...(typeof context === "number" ? { contextWindow: context } : {}),
+        defaultReasoningEffort: null,
+        description: subProvider ? `${name} via ${subProvider}` : name,
+        displayName: name,
+        id: slug,
+        inputModalities: modalities.includes("image")
+          ? ["text", "image"]
+          : ["text"],
+        isDefault: false,
+        model: slug,
+        openCode: openCodeCapabilitiesForModel({
+          agents,
+          providerID: model.providerID,
+          variants: (model.variants ?? []).map((variant) => variant.id),
+        }),
+        supportedReasoningEfforts: [],
+      },
+    ];
+  });
+  return models.sort((left, right) =>
     left.displayName.localeCompare(right.displayName),
   );
 }
@@ -588,17 +650,21 @@ export function isOpenCodeEngineAvailable(status: OpenCodeEngineStatus) {
 
 export function buildOpenCodeThreadState(input: {
   cwd?: string | null;
+  generation?: OpenCodeGeneration | null;
   modelId?: string | null;
   selectedAgent?: string | null;
   selectedVariant?: string | null;
   sessionId: string;
+  syncedMessageId?: string | null;
 }): OpenCodeThreadState {
   return {
     cwd: input.cwd ?? null,
+    generation: input.generation ?? null,
     modelId: input.modelId ?? null,
     selectedAgent: input.selectedAgent ?? null,
     selectedVariant: input.selectedVariant ?? null,
     sessionId: input.sessionId,
+    syncedMessageId: input.syncedMessageId ?? null,
   };
 }
 
@@ -724,256 +790,6 @@ export async function resolveOpenCodeRuntime(options?: {
   return promise;
 }
 
-async function findAvailablePort() {
-  return await new Promise<number>((resolve, reject) => {
-    const server = net.createServer();
-    server.unref();
-    server.on("error", reject);
-    server.listen(0, OPENCODE_SERVER_HOSTNAME, () => {
-      const address = server.address();
-      server.close(() => {
-        if (address && typeof address === "object") {
-          resolve(address.port);
-          return;
-        }
-        reject(new Error("Unable to reserve a local OpenCode server port."));
-      });
-    });
-  });
-}
-
-// Only complete lines count: a chunk can end mid-URL, and matching that partial
-// line would hand back a truncated address.
-export function parseOpenCodeServerUrl(output: string) {
-  const lines = output.split(/\r?\n/);
-  lines.pop();
-  for (const line of lines) {
-    const match = line
-      .replace(ANSI_ESCAPE_PATTERN, "")
-      .match(OPENCODE_SERVER_READY_PATTERN);
-    if (match?.[1]) return match[1];
-  }
-  return null;
-}
-
-export function buildOpenCodeServerAuthorization(password: string) {
-  return `Basic ${Buffer.from(
-    `${OPENCODE_SERVER_USERNAME}:${password}`,
-    "utf8",
-  ).toString("base64")}`;
-}
-
-// 1.x answers GET /global/health with {healthy: true, version}. A 2.x server
-// (and the 1.x web UI on unknown paths) answers HTML with a 200, so only a JSON
-// body counts (t3code opencodeVersionProbe.ts).
-export async function fetchOpenCodeHealth(input: {
-  authorization: string;
-  baseUrl: string;
-}): Promise<{ version: string } | null> {
-  try {
-    const response = await fetch(new URL(OPENCODE_HEALTH_PATH, input.baseUrl), {
-      headers: {
-        accept: "application/json",
-        authorization: input.authorization,
-      },
-      signal: AbortSignal.timeout(OPENCODE_HEALTH_REQUEST_TIMEOUT_MS),
-    });
-    const mediaType = response.headers
-      .get("content-type")
-      ?.split(";")[0]
-      ?.trim()
-      .toLowerCase();
-    if (response.status !== 200 || mediaType !== "application/json") {
-      await response.body?.cancel().catch(() => undefined);
-      return null;
-    }
-    const body = (await response.json()) as {
-      healthy?: unknown;
-      version?: unknown;
-    } | null;
-    return body?.healthy === true && typeof body.version === "string"
-      ? { version: body.version }
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-type OpenCodeServerChild = ChildProcessByStdio<null, Readable, Readable>;
-
-function hasOpenCodeServerExited(child: OpenCodeServerChild) {
-  return child.exitCode !== null || child.signalCode !== null;
-}
-
-// The server is a managed agent process (its own process group on POSIX,
-// taskkill /T /F on Windows): SIGTERM (the npm launcher forwards it)
-// escalates to SIGKILL after a grace period so a wedged server cannot outlive
-// the run.
-function stopOpenCodeServerChild(child: OpenCodeServerChild) {
-  if (hasOpenCodeServerExited(child)) return;
-
-  void terminateProcessTree(child, { graceMs: OPENCODE_SERVER_KILL_GRACE_MS });
-}
-
-function appendCappedOutput(current: string, chunk: string | Buffer) {
-  const next = current + String(chunk);
-  return next.length > OPENCODE_SERVER_OUTPUT_MAX_CHARS
-    ? next.slice(-OPENCODE_SERVER_OUTPUT_MAX_CHARS)
-    : next;
-}
-
-export async function startOpenCodeServerProcess(input: {
-  binaryPath: string;
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
-  /** Aborting it before the server is ready kills the server. */
-  signal?: AbortSignal;
-  timeoutMs?: number;
-}): Promise<OpenCodeServerProcess> {
-  const cancelled = () => new Error("OpenCode server start was cancelled.");
-  if (input.signal?.aborted) {
-    throw cancelled();
-  }
-  const port = await findAvailablePort();
-  if (input.signal?.aborted) {
-    throw cancelled();
-  }
-  const baseEnv = input.env ?? process.env;
-  // A fresh password per server: the server only accepts Sentinel's requests,
-  // and an OPENCODE_SERVER_PASSWORD inherited from the user's shell can no
-  // longer lock Sentinel's own client out with a 401.
-  const password = randomBytes(24).toString("base64url");
-  const authorization = buildOpenCodeServerAuthorization(password);
-  const timeoutMs = input.timeoutMs ?? OPENCODE_SERVER_START_TIMEOUT_MS;
-  const child = spawnManagedProcess({
-    args: ["serve", `--hostname=${OPENCODE_SERVER_HOSTNAME}`, `--port=${port}`],
-    command: input.binaryPath,
-    cwd: input.cwd,
-    env: {
-      ...baseEnv,
-      // Keep a caller's or the user's OPENCODE_CONFIG_CONTENT; forcing "{}"
-      // clobbered it (t3code resolveOpenCodeConfigContent).
-      OPENCODE_CONFIG_CONTENT: baseEnv.OPENCODE_CONFIG_CONTENT ?? "{}",
-      OPENCODE_SERVER_PASSWORD: password,
-      OPENCODE_SERVER_USERNAME,
-    },
-    // Only the given env: the caller's copy already starts from process.env.
-    extendEnv: false,
-    label: "opencode serve",
-    stdio: ["ignore", "pipe", "pipe"],
-  }) as OpenCodeServerChild;
-
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
-
-  let stdout = "";
-  let stderr = "";
-  let settled = false;
-  let resolveExited!: (exit: OpenCodeServerExit) => void;
-  const exited = new Promise<OpenCodeServerExit>((resolve) => {
-    resolveExited = resolve;
-  });
-  const close = () => stopOpenCodeServerChild(child);
-  const pollBaseUrl = `http://${OPENCODE_SERVER_HOSTNAME}:${port}`;
-
-  return await new Promise<OpenCodeServerProcess>((resolve, reject) => {
-    let pollTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const settle = () => {
-      if (settled) return false;
-      settled = true;
-      clearTimeout(timeoutId);
-      if (pollTimer) clearTimeout(pollTimer);
-      input.signal?.removeEventListener("abort", onAbort);
-      return true;
-    };
-
-    const succeed = (url: string, version: string | null) => {
-      if (!settle()) return;
-      resolve({
-        authorization,
-        close,
-        exited,
-        stderr: () => stderr,
-        stdout: () => stdout,
-        url,
-        version,
-      });
-    };
-
-    const fail = (error: Error) => {
-      if (!settle()) return;
-      close();
-      reject(error);
-    };
-    const onAbort = () => fail(cancelled());
-    input.signal?.addEventListener("abort", onAbort, { once: true });
-
-    // Readiness is whichever comes first: the stdout line or a JSON answer
-    // from /global/health on the port Sentinel picked.
-    const pollHealth = async () => {
-      pollTimer = null;
-      const health = await fetchOpenCodeHealth({
-        authorization,
-        baseUrl: pollBaseUrl,
-      });
-      if (settled) return;
-      if (health) {
-        succeed(pollBaseUrl, health.version);
-        return;
-      }
-      pollTimer = setTimeout(pollHealth, OPENCODE_HEALTH_POLL_INTERVAL_MS);
-    };
-
-    const timeoutId = setTimeout(() => {
-      fail(
-        new Error(
-          `Timed out waiting for OpenCode server start after ${timeoutMs}ms.`,
-        ),
-      );
-    }, timeoutMs);
-
-    // Both pipes stay drained for the server's lifetime; a full pipe would
-    // block OpenCode. Output is capped and kept only for diagnostics.
-    let announcedUrl: string | null = null;
-    child.stdout.on("data", (chunk: string | Buffer) => {
-      stdout = appendCappedOutput(stdout, chunk);
-      if (settled || announcedUrl) return;
-      announcedUrl = parseOpenCodeServerUrl(stdout);
-      if (!announcedUrl) return;
-      const url = announcedUrl;
-      // The server is up; one health call only fills in its version.
-      void fetchOpenCodeHealth({ authorization, baseUrl: url }).then((health) =>
-        succeed(url, health?.version ?? null),
-      );
-    });
-    child.stderr.on("data", (chunk: string | Buffer) => {
-      stderr = appendCappedOutput(stderr, chunk);
-    });
-    // Stays attached after startup: an unhandled "error" event would throw.
-    child.on("error", (error) => {
-      fail(error);
-    });
-    child.on("exit", (code, signal) => {
-      resolveExited({ code, signal });
-      fail(
-        new Error(
-          [
-            `OpenCode server exited before startup completed`,
-            code != null ? `with code ${code}` : null,
-            signal ? `(${signal})` : null,
-            stderr.trim() ? `stderr: ${stderr.trim()}` : null,
-          ]
-            .filter(Boolean)
-            .join(" "),
-        ),
-      );
-    });
-
-    pollTimer = setTimeout(pollHealth, OPENCODE_HEALTH_POLL_INTERVAL_MS);
-  });
-}
-
 export function createOpenCodeSdkClient(input: {
   authorization?: string | null;
   baseUrl: string;
@@ -1000,6 +816,72 @@ export async function loadOpenCodeInventory(client: OpencodeClient) {
   }
 
   return { agents, providerList } satisfies OpenCodeInventory;
+}
+
+type OpenCodeServerInventory = {
+  commands: OpenCodeCommandInfo[];
+  models: OpenCodeModelInfo[];
+};
+
+function toCommandInfo(
+  commands: ReadonlyArray<{ description?: string; name: string }>,
+) {
+  return commands.map((command) => ({
+    ...(command.description ? { description: command.description } : {}),
+    name: command.name,
+  }));
+}
+
+/** Models and commands from a running server of either generation. */
+export async function loadOpenCodeServerInventory(
+  server: Pick<OpenCodeServerProcess, "authorization" | "generation" | "url">,
+  directory: string,
+): Promise<OpenCodeServerInventory> {
+  if (server.generation === "v2") {
+    const client = createOpenCode2Client({
+      authorization: server.authorization,
+      baseUrl: server.url,
+    });
+    const location = { directory };
+    const [models, agents, providers, commands] = await Promise.all([
+      client.model.list({ location }),
+      client.agent.list({ location }),
+      client.provider
+        .list({ location })
+        .then((result) => (result as { data?: unknown }).data)
+        .catch(() => []),
+      client.command
+        .list({ location })
+        .then((result) => result.data)
+        .catch(() => []),
+    ]);
+    return {
+      commands: toCommandInfo(commands),
+      models: flattenOpenCode2Models({
+        agents: agents.data,
+        models: models.data,
+        providers: Array.isArray(providers)
+          ? (providers as Array<{ id: string; name?: string }>)
+          : [],
+      }),
+    };
+  }
+  const client = createOpenCodeSdkClient({
+    authorization: server.authorization,
+    baseUrl: server.url,
+    directory,
+  });
+  const [inventory, commands] = await Promise.all([
+    loadOpenCodeInventory(client),
+    client.command
+      .list()
+      .then((result) => result.data ?? [])
+      .catch(() => []),
+  ]);
+  return {
+    commands: toCommandInfo(commands),
+    models: flattenOpenCodeModels(inventory),
+  };
 }
 
 function buildIncompatibleOpenCodeStatus(input: {
@@ -1030,20 +912,38 @@ export async function probeOpenCodeEngineStatus(
   runtime: ResolvedOpenCodeRuntime & { cliPath: string },
   snapshotPath: string,
   signal?: AbortSignal,
+  instance?: OpenCodeRuntimeInstance | null,
 ) {
   let server: OpenCodeServerProcess | null = null;
+  let ownsServer = false;
   let cliVersion = runtime.cliVersion;
   let compatibilityAdvisory = resolveOpenCodeCompatibility(cliVersion);
-  const closeOnAbort = () => server?.close();
+  const closeOnAbort = () => {
+    if (ownsServer) server?.close();
+  };
   signal?.addEventListener("abort", closeOnAbort, { once: true });
 
   try {
-    server = await startOpenCodeServerProcess({
+    // The instance's own server answers when one is running; otherwise a
+    // short-lived one is started (and closed) for the probe, so a probe
+    // never keeps a server alive.
+    server = peekOpenCodeServer({
       binaryPath: runtime.cliPath,
       env: runtime.env,
-      signal,
-      timeoutMs: OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS,
+      instanceId: instance?.id ?? "opencode",
+      runtimeKey: getInstanceRuntimeKey(instance),
+      version: runtime.cliVersion,
     });
+    if (!server) {
+      ownsServer = true;
+      server = await startOpenCodeServerProcess({
+        binaryPath: runtime.cliPath,
+        env: runtime.env,
+        generation: getOpenCodeGeneration(cliVersion),
+        signal,
+        timeoutMs: OPENCODE_STATUS_PROBE_SERVER_START_TIMEOUT_MS,
+      });
+    }
     signal?.throwIfAborted();
     // `--version` can time out on a cold start; the server reports it too.
     if (!cliVersion && server.version) {
@@ -1057,30 +957,26 @@ export async function probeOpenCodeEngineStatus(
         });
       }
     }
-    const client = createOpenCodeSdkClient({
-      authorization: server.authorization,
-      baseUrl: server.url,
-      directory: process.cwd(),
-    });
-    const inventory = await loadOpenCodeInventory(client);
+    const inventory = await loadOpenCodeServerInventory(server, process.cwd());
     // A probe given up on must not overwrite a newer snapshot later.
     signal?.throwIfAborted();
-    const models = flattenOpenCodeModels(inventory);
     const recordedAt = new Date().toISOString();
 
     await writeOpenCodeStatusSnapshot(snapshotPath, {
-      availableModels: models,
+      availableModels: inventory.models,
       cliPath: runtime.cliPath,
       cliVersion,
+      commands: inventory.commands,
       recordedAt,
     }).catch(() => undefined);
 
     return buildOpenCodeEngineStatus({
       authReady: true,
-      availableModels: models,
+      availableModels: inventory.models,
       cliDetected: true,
       cliPath: runtime.cliPath,
       cliVersion,
+      commands: inventory.commands,
       compatibilityAdvisory,
       error: null,
       lastSuccessfulProbeAt: recordedAt,
@@ -1104,7 +1000,7 @@ export async function probeOpenCodeEngineStatus(
     });
   } finally {
     signal?.removeEventListener("abort", closeOnAbort);
-    server?.close();
+    if (ownsServer) server?.close();
   }
 }
 
@@ -1158,6 +1054,7 @@ export async function getOpenCodeEngineStatus(options?: {
           { ...runtime, cliPath },
           snapshotPath,
           signal,
+          options?.instance,
         ),
       OPENCODE_STATUS_PROBE_DEADLINE_MS,
     );
@@ -1193,57 +1090,29 @@ export async function getOpenCodeEngineStatus(options?: {
   return promise;
 }
 
-export function buildOpenCodePermissionRules(
-  fullAccess: boolean,
-): PermissionRuleset {
-  if (fullAccess) {
-    return [{ action: "allow", pattern: "*", permission: "*" }];
-  }
-
-  return [
-    { action: "ask", pattern: "*", permission: "*" },
-    { action: "ask", pattern: "*", permission: "bash" },
-    { action: "ask", pattern: "*", permission: "edit" },
-    { action: "ask", pattern: "*", permission: "webfetch" },
-    { action: "ask", pattern: "*", permission: "websearch" },
-    { action: "allow", pattern: "*", permission: "question" },
-  ];
-}
-
-export function toOpenCodePermissionReply(approved: boolean) {
-  return approved ? "once" : "reject";
-}
-
-export function openCodeQuestionId(
-  index: number,
-  question: QuestionRequest["questions"][number],
-) {
-  const header = question.header
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-");
-  return header.length > 0
-    ? `question-${index}-${header}`
-    : `question-${index}`;
-}
-
-export function toOpenCodeQuestionAnswers(
-  request: QuestionRequest,
-  response: string,
-): Array<QuestionAnswer> {
-  return request.questions.map(() => {
-    const trimmed = response.trim();
-    return trimmed.length > 0 ? [trimmed] : [];
-  });
-}
-
-export async function startOpenCodeSession(input: {
+export type StartOpenCodeSessionInput = {
   cwd: string;
-  fullAccess: boolean;
   /** The thread's instance: its binary and environment. */
   instance?: OpenCodeRuntimeInstance | null;
+  model: OpenCodeModelRef;
+  permissionMode: OpenCodeTurnSessionPermissionMode;
+  /** The thread's persisted session, continued when it still exists. */
+  resume?: { generation: OpenCodeGeneration | null; sessionId: string } | null;
+  signal?: AbortSignal;
   title: string;
-}) {
+};
+
+type OpenCodeTurnSessionPermissionMode = Parameters<
+  typeof openOpenCodeSession
+>[0]["permissionMode"];
+
+/**
+ * The thread's OpenCode session for one turn on the instance's pooled
+ * server (started when none runs). Release it when the turn ends.
+ */
+export async function startOpenCodeSession(
+  input: StartOpenCodeSessionInput,
+): Promise<OpenCodeTurnSession> {
   const runtime = await resolveOpenCodeRuntime({ instance: input.instance });
   if (!runtime.cliDetected || !runtime.cliPath) {
     throw new Error(runtime.error ?? "OpenCode is unavailable.");
@@ -1256,38 +1125,17 @@ export async function startOpenCodeSession(input: {
       compatibilityAdvisory.message ?? "This OpenCode version is unsupported.",
     );
   }
-
-  const server = await startOpenCodeServerProcess({
+  return await openOpenCodeSession({
     binaryPath: runtime.cliPath,
+    cliVersion: runtime.cliVersion,
     cwd: input.cwd,
     env: runtime.env,
+    instance: input.instance ?? null,
+    model: input.model,
+    permissionMode: input.permissionMode,
+    resumeGeneration: input.resume?.generation ?? null,
+    resumeSessionId: input.resume?.sessionId ?? null,
+    signal: input.signal,
+    title: input.title,
   });
-  const client = createOpenCodeSdkClient({
-    authorization: server.authorization,
-    baseUrl: server.url,
-    directory: input.cwd,
-  });
-  let sessionId: string | undefined;
-  try {
-    const session = await client.session.create({
-      permission: buildOpenCodePermissionRules(input.fullAccess),
-      title: input.title,
-    });
-    sessionId = session.data?.id;
-  } catch (error) {
-    server.close();
-    throw error;
-  }
-
-  if (!sessionId) {
-    server.close();
-    throw new Error("OpenCode session.create returned no session id.");
-  }
-
-  return {
-    client,
-    runtime,
-    server,
-    sessionId,
-  } satisfies OpenCodeSession;
 }

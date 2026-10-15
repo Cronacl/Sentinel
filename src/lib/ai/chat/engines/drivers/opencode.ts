@@ -13,6 +13,7 @@ import { DRIVER_CATALOG } from "../catalog";
 import type { EngineInstallSource, EngineProbeResult } from "../contract";
 import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
 import { openCodeAuth } from "./auth/opencode";
+import { normalizeEngineSlashCommands } from "../slash-commands";
 import { readOpenCodeGoUsageLimits } from "../usage/opencode-go";
 import { buildFallbackOpenCodeModels } from "./fallback-models";
 import {
@@ -25,7 +26,7 @@ export function fromOpenCodeStatus(
   status: OpenCodeEngineStatus,
   source: EngineInstallSource | null,
 ): EngineProbeResult {
-  return fromLegacyStatus(
+  const result = fromLegacyStatus(
     {
       account: NO_LEGACY_ACCOUNT,
       authReady: status.authReady,
@@ -43,9 +44,19 @@ export function fromOpenCodeStatus(
       fallbackModels: buildFallbackOpenCodeModels,
     },
   );
+  // The server's commands (`/name`), run through session.command.
+  const slashCommands = normalizeEngineSlashCommands(
+    status.commands ?? [],
+    "native",
+  );
+  return slashCommands.length > 0 ? { ...result, slashCommands } : result;
 }
 
-/** OpenCode through `opencode serve` and its SDK. */
+/**
+ * OpenCode 1.x and 2.x through one long-lived `opencode serve` per
+ * instance (opencode-sdk/server-pool.ts); the generation is detected from
+ * `--version` and confirmed by the server.
+ */
 export const openCodeDriver = defineEngineDriver({
   auth: openCodeAuth,
   capabilities: DRIVER_CATALOG.opencode.capabilities,

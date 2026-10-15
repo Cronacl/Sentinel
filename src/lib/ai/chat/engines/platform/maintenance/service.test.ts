@@ -358,11 +358,10 @@ describe("engine maintenance service", () => {
     const { service } = createHarness();
     await expect(
       service.install(USER, "opencode", {
-        expectedCommand:
-          "npm install -g --allow-scripts=@opencode/cli @opencode/cli",
-        optionId: "npm-v2",
+        expectedCommand: null,
+        optionId: "brew",
       }),
-    ).rejects.toThrow("does not support it yet");
+    ).rejects.toThrow("not available for OpenCode");
     await expect(
       service.install(USER, "codex", {
         expectedCommand: null,

@@ -317,17 +317,23 @@ export const DRIVER_CATALOG = {
   opencode: {
     capabilities: {
       ...EXTERNAL_CAPABILITIES,
-      // Typed literally so the runtime's mapping is checked when this widens.
-      permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
+      // Rules on the session: accept_edits allows edits and asks the rest.
+      permissionModes: ["default", "accept_edits", "full"],
+      // The server's commands (`/name`), run through session.command.
+      reportsSlashCommands: true,
       // OpenCode Go plan usage, when Go is configured.
       reportsUsageLimits: true,
+      // Images go as file parts (1.x) or files (2.x).
+      supportsImages: true,
       supportsPlanMode: "agent-select",
-      // A new OpenCode session is created every turn; history is replayed.
-      supportsResume: "replay",
+      // The instance's server keeps the thread's session between turns.
+      supportsResume: "native",
+      // OpenCode questions (1.x) and forms (2.x).
+      supportsUserInput: true,
     },
     config: binaryConfigSchema,
     defaultInstance: true,
-    description: "Use the locally configured OpenCode runtime.",
+    description: "Use the locally configured OpenCode runtime (1.x or 2.x).",
     docsUrl: "https://opencode.ai/docs",
     homeEnvVar: null,
     kind: "opencode",

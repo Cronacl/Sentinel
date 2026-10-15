@@ -282,11 +282,12 @@ describe("inspectMaintenance", () => {
         command: "npm install -g --allow-scripts=opencode-ai opencode-ai",
         id: "npm",
       }),
+      // Both generations are driven; neither install migrates the other.
       expect.objectContaining({
-        available: false,
+        available: true,
         command: "npm install -g --allow-scripts=@opencode/cli @opencode/cli",
         id: "npm-v2",
-        reason: "This version of Sentinel does not support it yet.",
+        reason: null,
       }),
     ]);
 

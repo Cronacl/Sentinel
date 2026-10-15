@@ -98,6 +98,10 @@ type SessionRecord = {
   updated: number;
   agent?: string;
   model?: JsonObject;
+  /** 1.x ruleset from session.create / session.update. */
+  permission?: JsonObject[];
+  /** 2.x rules from session.create / session.update. */
+  permissions?: JsonObject[];
   messages: JsonObject[];
   run?: {
     controller: AbortController;
@@ -391,6 +395,46 @@ class FakeOpenCodeServer {
         });
         return json(true);
       }
+      if (method === "PATCH" && rest === "") {
+        // session.update: title and the permission ruleset.
+        if (typeof input.title === "string") session.title = input.title;
+        if (Array.isArray(input.permission))
+          session.permission = input.permission as JsonObject[];
+        session.updated = Date.now();
+        const info = this.sessionInfoV1(session);
+        this.publish("session.updated", { sessionID: session.id, info });
+        return json(info);
+      }
+      if (method === "POST" && rest === "/command") {
+        // `/name args` runs the script matched by that text.
+        const text =
+          `/${String(input.command ?? "")} ${String(input.arguments ?? "")}`.trim();
+        const script = this.selectScript(text);
+        if (script.reject)
+          return json(script.reject.body, script.reject.status);
+        const model =
+          typeof input.model === "string" && input.model.includes("/")
+            ? {
+                providerID: input.model.slice(0, input.model.indexOf("/")),
+                modelID: input.model.slice(input.model.indexOf("/") + 1),
+              }
+            : undefined;
+        await this.enqueue(session, (signal) =>
+          this.runV1(
+            session,
+            signal,
+            {
+              ...(typeof input.agent === "string"
+                ? { agent: input.agent }
+                : {}),
+              ...(model ? { model } : {}),
+              parts: [{ type: "text", text }],
+            },
+            script,
+          ),
+        );
+        return json(session.messages.at(-1) ?? {});
+      }
       if (method === "GET" && rest === "/message")
         return json(session.messages);
       if (method === "POST" && rest === "/abort") {
@@ -509,8 +553,22 @@ class FakeOpenCodeServer {
           cursor: { previous: null, next: null },
         });
       }
-      if (method === "POST" && rest === "/prompt") {
-        const text = typeof input.text === "string" ? input.text : "";
+      if (method === "PATCH" && rest === "") {
+        // session.update: title, metadata and the permission rules.
+        if (typeof input.title === "string") session.title = input.title;
+        if (Array.isArray(input.permissions))
+          session.permissions = input.permissions as JsonObject[];
+        session.updated = Date.now();
+        return new Response(null, { status: 204 });
+      }
+      if (method === "POST" && (rest === "/prompt" || rest === "/command")) {
+        // A command runs like a prompt of `/name text`.
+        const text =
+          rest === "/command"
+            ? `/${String(input.name ?? "")} ${typeof input.text === "string" ? input.text : ""}`.trim()
+            : typeof input.text === "string"
+              ? input.text
+              : "";
         const script = this.selectScript(text);
         if (script.reject)
           return json(script.reject.body, script.reject.status);
@@ -550,6 +608,7 @@ class FakeOpenCodeServer {
             String(userMessage.id),
           );
         }
+        if (rest === "/command") return new Response(null, { status: 204 });
         return json({ data: userMessage });
       }
       if (method === "GET" && rest === "/inbox") {
@@ -638,6 +697,13 @@ class FakeOpenCodeServer {
         }
         pending.resolve(String(input.decision));
         return new Response(null, { status: 204 });
+      }
+      if (method === "GET" && rest === "/form") {
+        return json({
+          data: [...this.forms.values()]
+            .filter((pending) => pending.sessionID === id)
+            .map((pending) => pending.form),
+        });
       }
       if ((match = /^\/form\/([^/]+)(\/reply)?$/.exec(rest))) {
         const formID = decodeURIComponent(match[1] ?? "");

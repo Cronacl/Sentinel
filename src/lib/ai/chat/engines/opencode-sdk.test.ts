@@ -32,6 +32,7 @@ delete process.env.OPENCODE_CONFIG_CONTENT;
 
 const {
   createOpenCodeSdkClient,
+  disposeAllOpenCodeServers,
   getOpenCodeEngineStatus,
   isOpenCodeAuthError,
   OPENCODE_MINIMUM_VERSION,
@@ -46,6 +47,8 @@ const {
   startOpenCodeServerProcess,
   startOpenCodeSession,
 } = await import("./opencode-sdk");
+const { createFakeOpenCode: createFixtureOpenCode } =
+  await import("./opencode-sdk/__tests__/fake-opencode");
 
 type FakeMode =
   "ansi" | "exit" | "hang" | "html" | "normal" | "silent" | "split";
@@ -273,6 +276,7 @@ afterEach(async () => {
     server.close();
     await server.exited;
   }
+  await disposeAllOpenCodeServers();
   delete process.env.SENTINEL_OPENCODE_PATH;
   delete process.env.OPENCODE_SERVER_PASSWORD;
   resetOpenCodeRuntimeCache();
@@ -357,10 +361,17 @@ describe("OpenCode version compatibility", () => {
         status: "broken",
       }),
     );
-    expect(resolveOpenCodeCompatibility("opencode v2.0.24")).toEqual(
+    // 2.x is driven by its own adapter and updated within its generation.
+    expect(resolveOpenCodeCompatibility("opencode v2.0.24")).toEqual({
+      message: null,
+      recommendedRange: ">=2.0.18",
+      recommendedVersion: "2.0.18",
+      status: "supported",
+    });
+    expect(resolveOpenCodeCompatibility("opencode v2.0.10")).toEqual(
       expect.objectContaining({
-        message: expect.stringContaining("2.x generation"),
-        status: "unsupported",
+        message: expect.stringContaining("2.0.18 or newer is recommended"),
+        status: "graceful",
       }),
     );
     expect(resolveOpenCodeCompatibility(null).status).toBe("unknown");
@@ -684,7 +695,12 @@ describe.skipIf(process.platform === "win32")("getOpenCodeEngineStatus", () => {
     );
     expect(await fake.invocations()).toEqual([]);
     await expect(
-      startOpenCodeSession({ cwd: tempRoot, fullAccess: false, title: "t" }),
+      startOpenCodeSession({
+        cwd: tempRoot,
+        model: { modelID: "gpt-5", providerID: "openai" },
+        permissionMode: "default",
+        title: "t",
+      }),
     ).rejects.toThrow("needs 1.0.224 or newer");
   });
 
@@ -707,15 +723,47 @@ describe.skipIf(process.platform === "win32")("getOpenCodeEngineStatus", () => {
     );
   });
 
-  it("reports OpenCode 2.x as not supported yet", async () => {
-    const fake = await createFakeOpenCode({ version: "opencode v2.0.24" });
-    process.env.SENTINEL_OPENCODE_PATH = fake.binaryPath;
+  it("probes a 2.x server through its own API", async () => {
+    const fixture = await createFixtureOpenCode({
+      generation: 2,
+      scenario: {
+        commands: {
+          data: [{ description: "Review", name: "review" }],
+          location: { directory: "/" },
+        },
+      },
+    });
 
-    const status = await getOpenCodeEngineStatus({ forceRefresh: true });
+    const status = await getOpenCodeEngineStatus({
+      forceRefresh: true,
+      instance: fixture.instance,
+    });
 
-    expect(status.state).toBe("error");
-    expect(status.compatibilityAdvisory?.status).toBe("unsupported");
-    expect(await fake.invocations()).toEqual([]);
+    expect(status).toEqual(
+      expect.objectContaining({
+        cliVersion: "opencode v2.0.18",
+        commands: [{ description: "Review", name: "review" }],
+        compatibilityAdvisory: expect.objectContaining({ status: "supported" }),
+        generation: "v2",
+        state: "ready",
+      }),
+    );
+    expect(status.availableModels).toEqual([
+      expect.objectContaining({
+        id: "anthropic/claude-sonnet-4-5",
+        inputModalities: ["text", "image"],
+        openCode: {
+          agentOptions: [
+            { isDefault: true, label: "Build", value: "build" },
+            { label: "Plan", value: "plan" },
+          ],
+          variantOptions: [{ isDefault: true, label: "High", value: "high" }],
+        },
+      }),
+    ]);
+    // The probe's own server is gone once it answered.
+    const requests = await fixture.requests();
+    expect(requests.some((r) => r.path === "/api/model")).toBe(true);
   });
 });
 
@@ -795,12 +843,15 @@ describe.skipIf(process.platform === "win32")("startOpenCodeSession", () => {
 
     const session = await startOpenCodeSession({
       cwd: tempRoot,
-      fullAccess: false,
+      model: { modelID: "gpt-5", providerID: "openai" },
+      permissionMode: "default",
       title: "Fix the bug",
     });
-    openServers.push(session.server);
+    session.release();
 
     expect(session.sessionId).toBe("ses_fake");
+    expect(session.generation).toBe("v1");
+    expect(session.resumed).toBe(false);
     const created = (await fake.invocations()).find((entry) => entry.session);
     expect(created).toEqual({
       directory: encodeURIComponent(tempRoot),
@@ -818,17 +869,29 @@ describe.skipIf(process.platform === "win32")("startOpenCodeSession", () => {
     });
   });
 
-  it("stops the server and surfaces the server message when session.create fails", async () => {
+  it("surfaces the server message when session.create fails and keeps the server", async () => {
     const fake = await createFakeOpenCode({
       session: "fail",
       version: "1.18.35",
     });
     process.env.SENTINEL_OPENCODE_PATH = fake.binaryPath;
+    const input = {
+      cwd: tempRoot,
+      model: { modelID: "gpt-5", providerID: "openai" },
+      permissionMode: "full" as const,
+      title: "t",
+    };
 
-    await expect(
-      startOpenCodeSession({ cwd: tempRoot, fullAccess: true, title: "t" }),
-    ).rejects.toThrow("Session storage is locked");
-    const serve = (await fake.invocations()).find((entry) => entry.pid);
-    expect(await waitFor(() => !isProcessAlive(serve!.pid))).toBe(true);
+    await expect(startOpenCodeSession(input)).rejects.toThrow(
+      "Session storage is locked",
+    );
+    await expect(startOpenCodeSession(input)).rejects.toThrow(
+      "Session storage is locked",
+    );
+    // One `opencode serve` served both attempts; disposal ends it.
+    const serves = (await fake.invocations()).filter((entry) => entry.pid);
+    expect(serves).toHaveLength(1);
+    await disposeAllOpenCodeServers();
+    expect(await waitFor(() => !isProcessAlive(serves[0]!.pid))).toBe(true);
   });
 });

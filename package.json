@@ -84,6 +84,7 @@
     "@notionhq/client": "^5.27.0",
     "@octokit/rest": "^22.0.1",
     "@opencode-ai/sdk": "^1.18.35",
+    "@opencode/client": "2.0.24",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@paralleldrive/cuid2": "^3.3.0",
     "@pierre/diffs": "^1.5.2",

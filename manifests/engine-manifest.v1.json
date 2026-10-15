@@ -80,9 +80,13 @@
       "recommendedVersion": "1.14.19",
       "ranges": [
         {
-          "range": ">=2.0.0",
-          "status": "unsupported",
-          "message": "OpenCode {version} is the 2.x generation, which Sentinel does not support yet. Install OpenCode 1.x (npm i -g opencode-ai) to use it here."
+          "range": ">=2.0.18",
+          "status": "supported"
+        },
+        {
+          "range": ">=2.0.0 <2.0.18",
+          "status": "graceful",
+          "message": "OpenCode {version} works with Sentinel, but 2.0.18 or newer is recommended. Update it with `opencode upgrade`."
         },
         {
           "range": ">=1.14.19 <2.0.0",

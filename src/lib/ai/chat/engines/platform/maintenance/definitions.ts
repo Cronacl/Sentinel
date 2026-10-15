@@ -263,20 +263,21 @@ export const ENGINE_MAINTENANCE_DEFINITIONS: Record<
   opencode: {
     install: [
       npmGlobalInstall({
-        description: "OpenCode 1.x, the generation Sentinel drives today.",
+        description: "OpenCode 1.x (opencode-ai).",
         label: "npm (global), OpenCode 1.x",
         packageName: "opencode-ai",
         representativeVersion: "1.14.19",
       }),
       npmGlobalInstall({
-        description: "OpenCode 2.x, the new server generation.",
+        description: "OpenCode 2.x (@opencode/cli), the new server generation.",
         id: "npm-v2",
         label: "npm (global), OpenCode 2.x",
         packageName: "@opencode/cli",
         representativeVersion: "2.0.18",
       }),
     ],
-    installHint: "Install OpenCode 1.x: npm install -g opencode-ai",
+    installHint:
+      "Install OpenCode: npm install -g opencode-ai (1.x) or npm install -g @opencode/cli (2.x)",
     nativeUpdate: {
       // `opencode upgrade` alone may cross from 1.x to 2.x, which converts
       // the shared database in place: it only runs with the latest version

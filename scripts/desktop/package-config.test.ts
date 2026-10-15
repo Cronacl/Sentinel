@@ -90,9 +90,13 @@ describe("desktop packaging configuration", () => {
 // koffi (from @github/copilot-sdk) ships its binaries in @koromix/koffi-<os>
 // packages and only backs the SDK's in-process transport, which Sentinel does
 // not use, so its CMake-capable install script never needs to run.
+// msgpackr-extract is msgpackr's optional native speed-up, pulled in through
+// effect by @opencode/client's protocol packages; Sentinel only loads the
+// client's self-contained Promise entry, so neither ever runs.
 const INTENTIONALLY_UNTRUSTED = new Set([
   "better-sqlite3",
   "koffi",
+  "msgpackr-extract",
   "tesseract.js",
 ]);
 

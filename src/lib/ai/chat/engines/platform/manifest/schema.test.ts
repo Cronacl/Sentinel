@@ -178,7 +178,8 @@ describe("bundled engine manifest", () => {
     expect(advisory(OPENCODE_RECOMMENDED_VERSION).status).toBe("supported");
     expect(advisory(OPENCODE_MINIMUM_VERSION).status).toBe("graceful");
     expect(advisory("1.0.223").status).toBe("broken");
-    expect(advisory("2.0.18").status).toBe("unsupported");
+    expect(advisory("2.0.18").status).toBe("supported");
+    expect(advisory("opencode v2.0.10").status).toBe("graceful");
     expect(advisory("1.3.17")).toEqual(
       expect.objectContaining({
         recommendedRange: OPENCODE_RECOMMENDED_RANGE,

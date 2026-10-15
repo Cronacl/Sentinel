@@ -11,6 +11,14 @@ export const openCodeThreadStateSchema = z.object({
   selectedAgent: z.string().nullish(),
   selectedVariant: z.string().nullish(),
   sessionId: z.string(),
+  /**
+   * The last thread message the session holds (its last answered turn).
+   * Turns after it are sent with the next prompt; a thread that no longer
+   * contains it has diverged and gets a new session. Absent on state from
+   * builds that made a new session every turn: such a session is not
+   * continued.
+   */
+  syncedMessageId: z.string().nullish(),
 });
 
 export type OpenCodeThreadState = z.infer<typeof openCodeThreadStateSchema>;

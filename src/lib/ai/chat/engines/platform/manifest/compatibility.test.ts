@@ -86,7 +86,14 @@ describe("resolveEngineCompatibility", () => {
         status: "graceful",
       }),
     );
-    expect(resolve("opencode", "opencode v2.0.18").status).toBe("unsupported");
+    expect(resolve("opencode", "opencode v2.0.18").status).toBe("supported");
+    expect(resolve("opencode", "opencode v2.0.12")).toEqual(
+      expect.objectContaining({
+        message:
+          "OpenCode 2.0.12 works with Sentinel, but 2.0.18 or newer is recommended. Update it with `opencode upgrade`.",
+        status: "graceful",
+      }),
+    );
   });
 
   it("writes a default message with the recommendation", () => {
