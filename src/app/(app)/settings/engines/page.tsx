@@ -5,6 +5,10 @@ import { useCallback, useState } from "react";
 import { sileo } from "sileo";
 
 import { useEngineSnapshots } from "@/components/engines/use-engine-snapshots";
+import {
+  AcpRegistryBrowser,
+  AcpRegistrySection,
+} from "@/components/settings/engines/acp-registry-browser";
 import { EngineInstanceCard } from "@/components/settings/engines/engine-instance-card";
 import {
   EngineDriverSection,
@@ -43,6 +47,7 @@ export default function EnginesPage() {
   const [actionError, setActionError] = useState("");
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const instances = useEngineInstanceManager();
+  const [registryOpen, setRegistryOpen] = useState(false);
 
   const snapshots = (snapshotsQuery.data ?? []).filter(isRuntimeSnapshot);
 
@@ -112,9 +117,12 @@ export default function EnginesPage() {
                 driver={group.driver}
                 key={group.driver}
                 onAdd={
-                  instances.canAdd(group.driver)
-                    ? () => instances.openCreate(group.driver)
-                    : undefined
+                  // Registry agents are added from the registry browser.
+                  group.driver === "acp"
+                    ? () => setRegistryOpen(true)
+                    : instances.canAdd(group.driver)
+                      ? () => instances.openCreate(group.driver)
+                      : undefined
                 }
               >
                 {group.snapshots.map((snapshot) => (
@@ -129,6 +137,8 @@ export default function EnginesPage() {
               </EngineDriverSection>
             ))}
 
+            <AcpRegistrySection onBrowse={() => setRegistryOpen(true)} />
+
             <EngineUsageLimitsSection snapshots={snapshots} />
 
             <EngineModelsList snapshots={snapshots} />
@@ -136,6 +146,10 @@ export default function EnginesPage() {
             <EngineNetworkSettings />
           </div>
           {instances.dialogs}
+          <AcpRegistryBrowser
+            isOpen={registryOpen}
+            onClose={() => setRegistryOpen(false)}
+          />
         </>
       )}
     </SettingsPageWrapper>
