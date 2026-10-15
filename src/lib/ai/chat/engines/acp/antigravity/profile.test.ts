@@ -96,11 +96,11 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
   it("prepares a private profile, links the user's skills and curates the env", async () => {
     const dir = await tempDir();
     const home = path.join(dir, "home");
-    await mkdir(path.join(home, ".gemini", "config", "skills"), {
-      recursive: true,
-    });
+    const userSkills = path.join(home, ".gemini", "config", "skills");
+    await mkdir(userSkills, { recursive: true });
+    await writeFile(path.join(userSkills, "marker.md"), "user skill\n");
     const target = instance({
-      env: { HOME: home },
+      env: { HOME: home, USERPROFILE: home },
       envOverrides: { GEMINI_API_KEY: "instance-key" },
       stateDir: path.join(dir, "state"),
     });
@@ -111,7 +111,10 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
     });
 
     expect(prepared.geminiHome).toBe(path.join(dir, "state", "gemini-home"));
-    expect((await lstat(prepared.geminiHome)).mode & 0o777).toBe(0o700);
+    // Windows reports no POSIX permission bits.
+    if (process.platform !== "win32") {
+      expect((await lstat(prepared.geminiHome)).mode & 0o777).toBe(0o700);
+    }
     expect(
       JSON.parse(
         await readFile(
@@ -120,12 +123,21 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
         ),
       ),
     ).toEqual({ auth: { type: "gemini-api-key" } });
+    // A directory symlink on POSIX, a junction on Windows: read through it.
     expect(
-      await readlink(path.join(prepared.geminiHome, "config", "skills")),
-    ).toBe(path.join(home, ".gemini", "config", "skills"));
-    expect(await readFile(prepared.browser.browser, "utf8")).toStartWith(
-      "#!/bin/sh",
-    );
+      await readFile(
+        path.join(prepared.geminiHome, "config", "skills", "marker.md"),
+        "utf8",
+      ),
+    ).toBe("user skill\n");
+    if (process.platform !== "win32") {
+      expect(
+        await readlink(path.join(prepared.geminiHome, "config", "skills")),
+      ).toBe(userSkills);
+      expect(await readFile(prepared.browser.browser, "utf8")).toStartWith(
+        "#!/bin/sh",
+      );
+    }
 
     const env = profile.buildAntigravityEnv({
       auth,
@@ -144,6 +156,7 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
     expect(env).toEqual({
       AGY_ACP_FORCE_FILE_STORAGE: "1",
       ANTIGRAVITY_HARNESS_PATH: "/opt/agy/localharness_external",
+      ...prepared.browser.env,
       BROWSER: prepared.browser.browser,
       GEMINI_API_KEY: "instance-key",
       GEMINI_HOME: prepared.geminiHome,

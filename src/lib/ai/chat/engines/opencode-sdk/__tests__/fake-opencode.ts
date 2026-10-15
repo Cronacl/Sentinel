@@ -1,6 +1,6 @@
 // Test helpers: the scripts/fixtures OpenCode fake as an `opencode` binary
-// (a launcher script) that Sentinel resolves, spawns and talks to through
-// real HTTP and SSE. Not a test file; tests only.
+// (a launcher script, a .cmd shim on Windows) that Sentinel resolves, spawns
+// and talks to through real HTTP and SSE. Not a test file; tests only.
 
 import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -43,13 +43,24 @@ export async function createFakeOpenCode(input: {
   scenario?: OpenCodeFakeScenario;
 }): Promise<FakeOpenCodeBinary> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "sentinel-fake-opencode-"));
-  const binaryPath = path.join(dir, "opencode");
   const logPath = path.join(dir, "requests.jsonl");
-  await writeFile(
-    binaryPath,
-    `#!/bin/sh\nexec "${process.execPath}" "${FAKE_OPENCODE_SERVER}" "$@"\n`,
+  // Windows runs no shebang script: a .cmd shim there.
+  const binaryPath = path.join(
+    dir,
+    process.platform === "win32" ? "opencode.cmd" : "opencode",
   );
-  await chmod(binaryPath, 0o755);
+  if (process.platform === "win32") {
+    await writeFile(
+      binaryPath,
+      `@echo off\r\n"${process.execPath}" "${FAKE_OPENCODE_SERVER}" %*\r\n`,
+    );
+  } else {
+    await writeFile(
+      binaryPath,
+      `#!/bin/sh\nexec "${process.execPath}" "${FAKE_OPENCODE_SERVER}" "$@"\n`,
+    );
+    await chmod(binaryPath, 0o755);
+  }
   counter += 1;
   const id = `opencode-test-${process.pid}-${counter}`;
   const instance = makeFakeInstance({

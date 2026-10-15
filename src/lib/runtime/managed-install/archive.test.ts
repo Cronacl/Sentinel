@@ -142,8 +142,9 @@ describe("extractArchive: tar", () => {
     ]);
     await expectPosixMode(path.join(destination, "pkg/bin/agent"), 0o755);
     await expectPosixMode(path.join(destination, "pkg/README.md"), 0o644);
+    // Windows stores a relative link target with backslashes.
     expect(await readlink(path.join(destination, "pkg/agent"))).toBe(
-      "bin/agent",
+      path.join("bin", "agent"),
     );
     expect(
       await readFile(path.join(destination, "pkg/README.copy"), "utf8"),

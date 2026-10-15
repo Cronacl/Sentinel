@@ -45,10 +45,9 @@ const setLocalRuntimeEnvValueMock = mock(
       .split(/\r?\n/)
       .filter((line) => line && !line.startsWith(`${key}=`));
     if (normalizedValue) {
-      const escapedValue = normalizedValue
-        .replaceAll("\\", "\\\\")
-        .replaceAll('"', '\\"');
-      nextLines.push(`${key}="${escapedValue}"`);
+      // As local-runtime-env writes it: quotes escaped, backslashes (Windows
+      // paths) kept.
+      nextLines.push(`${key}="${normalizedValue.replaceAll('"', '\\"')}"`);
     }
 
     await writeFile(

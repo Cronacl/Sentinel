@@ -1,5 +1,4 @@
 import {
-  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -24,6 +23,8 @@ const {
   uninstallAcpRegistryAgent,
 } = await import("./install");
 const { buildTarGz } = await import("@/lib/runtime/managed-install/testing");
+const { writeFakeCli } =
+  await import("@/lib/ai/chat/engines/platform/testing/fake-cli");
 const { registryIndex } = await import("./__tests__/fixtures");
 
 // Installs run the real installers: the managed download (a served archive)
@@ -36,52 +37,85 @@ let bin: string;
 const agents = parseAcpRegistryIndex(registryIndex())!.agents;
 const agent = (id: string) => agents.find((entry) => entry.id === id)!;
 
-const FAKE_NPM = `#!/bin/sh
-echo "$@" >> "$FAKE_LOG"
-spec="$5"
-name="\${spec%@*}"
-version="\${spec##*@}"
-dir="$npm_config_prefix/lib/node_modules/$name"
-mkdir -p "$dir/bundle"
-printf '{"name":"%s","version":"%s","bin":{"gemini":"bundle/gemini.js"}}' "$name" "$version" > "$dir/package.json"
-echo 'console.log("gemini")' > "$dir/bundle/gemini.js"
+// The fakes are Node scripts (run through a .cmd shim on Windows), so they
+// behave the same on every host. Arguments start at process.argv[2].
+const FAKE_PROGRAM_PRELUDE = `
+const fs = require("node:fs");
+const path = require("node:path");
+const args = process.argv.slice(2);
+`;
+
+// npm install --global --no-audit --no-fund <spec>, into the prefix layout
+// of the injected platform: <prefix>/lib/node_modules on POSIX,
+// <prefix>/node_modules on Windows (FAKE_WINDOWS_LAYOUT).
+const FAKE_NPM_PACKAGE = `
+const spec = args[4];
+const at = spec.lastIndexOf("@");
+const name = spec.slice(0, at);
+const version = spec.slice(at + 1);
+const dir = path.join(
+  process.env.npm_config_prefix,
+  ...(process.env.FAKE_WINDOWS_LAYOUT ? [] : ["lib"]),
+  "node_modules",
+  name,
+);
+`;
+
+const FAKE_NPM = `${FAKE_PROGRAM_PRELUDE}
+fs.appendFileSync(process.env.FAKE_LOG, args.join(" ") + "\\n");
+${FAKE_NPM_PACKAGE}
+fs.mkdirSync(path.join(dir, "bundle"), { recursive: true });
+fs.writeFileSync(
+  path.join(dir, "package.json"),
+  JSON.stringify({ name, version, bin: { gemini: "bundle/gemini.js" } }),
+);
+fs.writeFileSync(path.join(dir, "bundle", "gemini.js"), 'console.log("gemini")\\n');
 `;
 
 // Like @xai-official/grok: after postinstall the bin is a link to a native
 // executable (here, a file starting with the ELF magic).
-const FAKE_NPM_NATIVE_BIN = `#!/bin/sh
-spec="$5"
-name="\${spec%@*}"
-version="\${spec##*@}"
-dir="$npm_config_prefix/lib/node_modules/$name"
-mkdir -p "$dir/bin"
-printf '{"name":"%s","version":"%s","bin":{"gemini":"bin/gemini"}}' "$name" "$version" > "$dir/package.json"
-printf '\\177ELF\\002\\001' > "$dir/bin/gemini-native"
-chmod +x "$dir/bin/gemini-native"
-ln -s gemini-native "$dir/bin/gemini"
+const FAKE_NPM_NATIVE_BIN = `${FAKE_PROGRAM_PRELUDE}
+${FAKE_NPM_PACKAGE}
+fs.mkdirSync(path.join(dir, "bin"), { recursive: true });
+fs.writeFileSync(
+  path.join(dir, "package.json"),
+  JSON.stringify({ name, version, bin: { gemini: "bin/gemini" } }),
+);
+const native = path.join(dir, "bin", "gemini-native");
+fs.writeFileSync(native, Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1]), { mode: 0o755 });
+try {
+  fs.symlinkSync("gemini-native", path.join(dir, "bin", "gemini"));
+} catch {
+  // Windows without the symlink privilege: the native file itself.
+  fs.copyFileSync(native, path.join(dir, "bin", "gemini"));
+}
 `;
 
-const FAKE_UV = `#!/bin/sh
-echo "$@" >> "$FAKE_LOG"
-mkdir -p "$UV_TOOL_DIR/fast-agent-acp"
-printf '#!/bin/sh\\necho fast\\n' > "$UV_TOOL_BIN_DIR/fast-agent-acp"
-chmod +x "$UV_TOOL_BIN_DIR/fast-agent-acp"
+const FAKE_UV = `${FAKE_PROGRAM_PRELUDE}
+fs.appendFileSync(process.env.FAKE_LOG, args.join(" ") + "\\n");
+fs.mkdirSync(path.join(process.env.UV_TOOL_DIR, "fast-agent-acp"), { recursive: true });
+fs.writeFileSync(
+  path.join(
+    process.env.UV_TOOL_BIN_DIR,
+    process.env.FAKE_WINDOWS_LAYOUT ? "fast-agent-acp.exe" : "fast-agent-acp",
+  ),
+  "#!/bin/sh\\necho fast\\n",
+  { mode: 0o755 },
+);
 `;
 
-const FAILING = `#!/bin/sh
-echo "npm ERR! 404 Not Found" >&2
-exit 1
+const FAILING = `
+process.stderr.write("npm ERR! 404 Not Found\\n");
+process.exitCode = 1;
 `;
 
-async function fakeProgram(name: string, script: string) {
-  const file = path.join(bin, name);
-  await writeFile(file, script);
-  await chmod(file, 0o755);
-  return file;
+function fakeProgram(name: string, source: string) {
+  return writeFakeCli(path.join(bin, name), source);
 }
 
 function env() {
-  return { FAKE_LOG: path.join(root, "calls.log"), PATH: process.env.PATH };
+  // The whole host env: Windows' cmd.exe and runtime need SystemRoot & co.
+  return { ...process.env, FAKE_LOG: path.join(root, "calls.log") };
 }
 
 beforeEach(async () => {
@@ -161,6 +195,43 @@ describe("installAcpRegistryAgent", () => {
     );
   });
 
+  it("finds npm and uv installs where they land on Windows", async () => {
+    const npm = await fakeProgram("npm", FAKE_NPM);
+    const uv = await fakeProgram("uv", FAKE_UV);
+    const windowsEnv = { ...env(), FAKE_WINDOWS_LAYOUT: "1" };
+    const deps = {
+      arch: "x64",
+      platform: "win32" as const,
+      stateRoot: root,
+      which: async (command: string) =>
+        command === "npm" ? npm : command === "uv" ? uv : null,
+    };
+    const signal = new AbortController().signal;
+    expect(
+      await installAcpRegistryAgent(
+        agent("gemini"),
+        { env: windowsEnv, preference: "npx", signal },
+        deps,
+      ),
+    ).toMatchObject({
+      command: path.join(
+        root,
+        "tools/npm/gemini/node_modules/@google/gemini-cli/bundle/gemini.js",
+      ),
+      launcher: "node",
+    });
+    expect(
+      await installAcpRegistryAgent(
+        agent("fast-agent"),
+        { env: windowsEnv, preference: "auto", signal },
+        deps,
+      ),
+    ).toMatchObject({
+      command: path.join(root, "tools/uv/fast-agent/bin/fast-agent-acp.exe"),
+      launcher: "direct",
+    });
+  });
+
   it("downloads a binary agent with the managed installer", async () => {
     const archive = buildTarGz([
       { data: "#!/bin/sh\necho devin\n", mode: 0o755, name: "bin/devin" },
@@ -193,7 +264,10 @@ describe("installAcpRegistryAgent", () => {
       // linux-x86_64 publishes no checksum.
       verified: false,
     });
-    expect((await stat(receipt.command)).mode & 0o111).not.toBe(0);
+    // Windows has no execute bits.
+    if (process.platform !== "win32") {
+      expect((await stat(receipt.command)).mode & 0o111).not.toBe(0);
+    }
   });
 
   it("refuses a pinned checksum that does not match", async () => {
