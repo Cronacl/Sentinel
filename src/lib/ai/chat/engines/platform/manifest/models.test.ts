@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import bundledManifestJson from "../../../../../../../manifests/engine-manifest.v1.json";
+import { BUILTIN_DRIVER_KINDS } from "../../contract/ids";
 import { makeFakeModel, makeFakeSnapshot } from "../../contract/testing";
 import type { EngineOptionDescriptor } from "../../contract";
 import {
@@ -8,6 +9,7 @@ import {
   applyManifestModels,
   findManifestModel,
   getRuntimeOptionIds,
+  RUNTIME_OPTION_IDS,
 } from "./models";
 import { engineManifestSchema } from "./schema";
 
@@ -283,5 +285,41 @@ describe("getRuntimeOptionIds", () => {
     expect(getRuntimeOptionIds("opencode")).toEqual(["agent", "variant"]);
     expect(getRuntimeOptionIds("claude")).toEqual(["effort"]);
     expect(getRuntimeOptionIds("unknown")).toEqual(["effort"]);
+  });
+
+  it("names every external driver explicitly", () => {
+    const external = BUILTIN_DRIVER_KINDS.filter((kind) => kind !== "sentinel");
+    expect(
+      external.filter((kind) => !Object.hasOwn(RUNTIME_OPTION_IDS, kind)),
+    ).toEqual([]);
+    expect(getRuntimeOptionIds("grok")).toEqual(["effort"]);
+    expect(getRuntimeOptionIds("pi")).toEqual(["effort"]);
+    expect(getRuntimeOptionIds("acp")).toEqual(["effort"]);
+    expect(getRuntimeOptionIds("antigravity")).toEqual([]);
+  });
+
+  it("never offers Antigravity a manifest effort it would ignore", () => {
+    const withEffort = engineManifestSchema.parse({
+      ...bundledManifestJson,
+      drivers: {
+        ...bundledManifestJson.drivers,
+        antigravity: {
+          ...bundledManifestJson.drivers.antigravity,
+          profiles: { flash: { options: [effort(["low", "high"])] } },
+          models: bundledManifestJson.drivers.antigravity.models.map(
+            (model) => ({ ...model, profile: "flash" }),
+          ),
+        },
+      },
+    });
+    const snapshot = applyManifestModels(
+      makeFakeSnapshot({ driver: "antigravity", models: [] }),
+      withEffort,
+    );
+
+    expect(snapshot.models.length).toBeGreaterThan(0);
+    expect(snapshot.models.every((model) => model.options.length === 0)).toBe(
+      true,
+    );
   });
 });

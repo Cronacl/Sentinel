@@ -36,11 +36,20 @@ import type {
  * the reasoning effort only.
  */
 export const RUNTIME_OPTION_IDS: Record<string, readonly string[]> = {
+  // ACP registry agents and Grok map the effort onto the agent's
+  // thought-level config option; Pi onto its thinking level.
+  acp: [REASONING_OPTION_ID],
+  // The effort is part of the model id (gemini-3.8-flash-high), so the
+  // runtime reads no option at all.
+  antigravity: [],
   claude: [REASONING_OPTION_ID],
   codex: [REASONING_OPTION_ID],
   copilot: [REASONING_OPTION_ID],
   cursor: [REASONING_OPTION_ID],
+  grok: [REASONING_OPTION_ID],
+  // The variant carries the effort; the request's reasoningEffort is unused.
   opencode: [AGENT_OPTION_ID, VARIANT_OPTION_ID],
+  pi: [REASONING_OPTION_ID],
 };
 
 export function getRuntimeOptionIds(driver: string): readonly string[] {

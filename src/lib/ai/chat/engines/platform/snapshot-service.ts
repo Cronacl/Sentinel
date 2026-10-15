@@ -132,8 +132,9 @@ function passthroughEnricher(
 
 /**
  * The platform's enrichers, in the order they run (one per
- * ENGINE_SNAPSHOT_ENRICHER_IDS entry). Hooks no service fills yet pass the
- * snapshot through.
+ * ENGINE_SNAPSHOT_ENRICHER_IDS entry). The "usage" slot needs the service's
+ * limits store, so createEngineSnapshotService puts the usage enricher in
+ * it; without a store (tests) it passes the snapshot through.
  */
 export const DEFAULT_ENGINE_SNAPSHOT_ENRICHERS: readonly EngineSnapshotEnricher[] =
   [
