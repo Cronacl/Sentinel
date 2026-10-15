@@ -3,6 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { z } from "zod";
 
+import { toolCallNeedsApproval } from "../../tools/approval";
+
 const aiTestState = ((globalThis as any).__sentinelAiTestState ??= {
   agentConfig: null,
 });
@@ -3237,10 +3239,10 @@ describe("runThreadChat approvals and lifecycle", () => {
     await runThreadChat(createSubmitRequest(), "user-1");
     await flushAsyncWork();
 
-    expect(await aiTestState.prepared?.tools.list.needsApproval({}, {})).toBe(
+    expect(await toolCallNeedsApproval(aiTestState.prepared?.tools.list, {})).toBe(
       true,
     );
-    expect(await aiTestState.prepared?.tools.edit.needsApproval({}, {})).toBe(
+    expect(await toolCallNeedsApproval(aiTestState.prepared?.tools.edit, {})).toBe(
       false,
     );
   });

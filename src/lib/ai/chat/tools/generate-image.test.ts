@@ -21,15 +21,17 @@ const generateImageMock = mock(
           mediaType: "image/png",
         },
       ],
-      providerMetadata: {
-        provider: {
-          quality: "high",
-        },
-      },
-      responses: [
+      calls: [
         {
-          modelId: model.modelId,
-          timestamp: new Date("2026-04-03T12:00:00.000Z"),
+          providerMetadata: {
+            provider: {
+              quality: "high",
+            },
+          },
+          response: {
+            modelId: model.modelId,
+            timestamp: new Date("2026-04-03T12:00:00.000Z"),
+          },
         },
       ],
       warnings:
@@ -129,6 +131,8 @@ describe("executeGenerateImage", () => {
     expect(result.targets[0]).toMatchObject({
       modelId: "gpt-image-1.5",
       provider: "openai",
+      providerMetadataSummary: '{"provider":{"quality":"high"}}',
+      responseModelId: "gpt-image-1.5",
       status: "success",
     });
   });

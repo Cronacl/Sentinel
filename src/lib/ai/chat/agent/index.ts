@@ -26,7 +26,10 @@ import { computeLatentToolSummary } from "../tools/selection";
 import { buildToolRoutingEvidence, routeToolExposure } from "../tools/router";
 import { buildTools } from "../tools";
 import { buildThreadAgentInstructions } from "../context/instructions";
-import { declineUserApprovalsWhenUnattended } from "./unattended-approval";
+import {
+  askUserForToolApproval,
+  declineUserApprovalsWhenUnattended,
+} from "./tool-approval";
 
 // ---------------------------------------------------------------------------
 // Call options schema
@@ -340,9 +343,10 @@ export function createThreadAgent({
           toolRouting: initialRouting.audit,
         },
         // Nobody answers an unattended run: what would ask is declined.
-        ...(options.interactive === false
-          ? { toolApproval: declineUserApprovalsWhenUnattended }
-          : {}),
+        toolApproval:
+          options.interactive === false
+            ? declineUserApprovalsWhenUnattended
+            : askUserForToolApproval,
         tools,
       };
     },

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { withToolApproval } from "@/lib/ai/chat/tools/approval";
 import { createLogger } from "@/lib/logger";
 import {
   buildMcpOAuthRedirectUrl,
@@ -208,11 +209,10 @@ function namespaceMcpTools(entry: McpServerRuntimeEntry, tools: McpToolMap) {
   for (const [toolName, toolConfig] of Object.entries(tools)) {
     const description = toolConfig.description ?? toolName;
 
-    namespaced[`mcp_${namespace}__${toolName}`] = {
-      ...toolConfig,
-      description: `${entry.name} MCP: ${description}`,
-      needsApproval: () => shouldRequireMcpApproval(toolName, description),
-    };
+    namespaced[`mcp_${namespace}__${toolName}`] = withToolApproval(
+      { ...toolConfig, description: `${entry.name} MCP: ${description}` },
+      () => shouldRequireMcpApproval(toolName, description),
+    );
   }
 
   return namespaced;

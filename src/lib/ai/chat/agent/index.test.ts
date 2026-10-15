@@ -3,6 +3,8 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { z } from "zod";
 
+import { toolCallNeedsApproval } from "../tools/approval";
+
 const tool = mock((config) => config);
 const generateText = mock(async () => ({
   output: {
@@ -477,13 +479,13 @@ describe("createThreadAgent", () => {
       webFetchSettings: { batchEnabled: false, batchLimit: 10 },
       workspaceId: "workspace-1",
     };
-    const { declineUserApprovalsWhenUnattended } =
-      await import("./unattended-approval");
+    const { askUserForToolApproval, declineUserApprovalsWhenUnattended } =
+      await import("./tool-approval");
 
-    expect((await prepareWith(base)).toolApproval).toBeUndefined();
+    expect((await prepareWith(base)).toolApproval).toBe(askUserForToolApproval);
     expect(
       (await prepareWith({ ...base, interactive: true })).toolApproval,
-    ).toBeUndefined();
+    ).toBe(askUserForToolApproval);
     expect(
       (await prepareWith({ ...base, interactive: false })).toolApproval,
     ).toBe(declineUserApprovalsWhenUnattended);
@@ -675,7 +677,7 @@ describe("createThreadAgent", () => {
     expect(prepared.instructions).toContain(
       "the read tool: to read text file contents without approval.",
     );
-    expect(await prepared.tools.read.needsApproval({}, {})).toBe(false);
+    expect(await toolCallNeedsApproval(prepared.tools.read, {})).toBe(false);
     expect(aiTestState.agentConfig.stopWhen).toHaveLength(3);
     expect(aiTestState.agentConfig.stopWhen[0]).toEqual({
       kind: "stop-when",

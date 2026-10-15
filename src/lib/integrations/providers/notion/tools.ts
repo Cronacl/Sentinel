@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { withToolApproval } from "@/lib/ai/chat/tools/approval";
 
 import type { IntegrationContext } from "../../types";
 import { NotionService } from "./service";
@@ -72,301 +73,343 @@ export function buildNotionTools(
   approvalFn: (toolName: string) => boolean,
 ) {
   return {
-    notion_search: tool({
-      description:
-        "Search Notion pages and databases by query text. Optionally filter by page or data_source (databases).",
-      inputSchema: z.object({
-        query: z.string().min(1).describe("Search query text"),
-        filter: z
-          .enum(["page", "data_source"])
-          .optional()
-          .describe("Restrict to pages or databases (data_source)"),
-        maxResults: z.number().optional().describe("Max results (default 20)"),
+    notion_search: withToolApproval(
+      tool({
+        description:
+          "Search Notion pages and databases by query text. Optionally filter by page or data_source (databases).",
+        inputSchema: z.object({
+          query: z.string().min(1).describe("Search query text"),
+          filter: z
+            .enum(["page", "data_source"])
+            .optional()
+            .describe("Restrict to pages or databases (data_source)"),
+          maxResults: z
+            .number()
+            .optional()
+            .describe("Max results (default 20)"),
+        }),
+        outputSchema: z.object({
+          results: z.array(z.union([pageSchema, databaseSchema])),
+          totalCount: z.number(),
+        }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.search(input);
+        },
       }),
-      outputSchema: z.object({
-        results: z.array(z.union([pageSchema, databaseSchema])),
-        totalCount: z.number(),
-      }),
-      needsApproval: () => approvalFn("notion_search"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.search(input);
-      },
-    }),
+      () => approvalFn("notion_search"),
+    ),
 
-    notion_get_page: tool({
-      description: "Get a Notion page by ID, including its properties.",
-      inputSchema: z.object({
-        pageId: z.string().describe("The Notion page ID"),
+    notion_get_page: withToolApproval(
+      tool({
+        description: "Get a Notion page by ID, including its properties.",
+        inputSchema: z.object({
+          pageId: z.string().describe("The Notion page ID"),
+        }),
+        outputSchema: pageSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.getPage(input.pageId);
+        },
       }),
-      outputSchema: pageSchema,
-      needsApproval: () => approvalFn("notion_get_page"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.getPage(input.pageId);
-      },
-    }),
+      () => approvalFn("notion_get_page"),
+    ),
 
-    notion_create_page: tool({
-      description:
-        "Create a new Notion page. Specify either parentPageId (for a sub-page) or parentDatabaseId (for a database entry).",
-      inputSchema: z.object({
-        title: z.string().describe("Page title"),
-        parentPageId: z
-          .string()
-          .optional()
-          .describe("Parent page ID (for sub-page)"),
-        parentDatabaseId: z
-          .string()
-          .optional()
-          .describe("Parent database ID (for database entry)"),
-        children: z
-          .array(
-            z.object({
-              type: z
-                .string()
-                .describe(
-                  "Block type: paragraph, heading_1, heading_2, heading_3, bulleted_list_item, numbered_list_item, to_do, toggle, callout, quote, divider, code",
-                ),
-              content: z.string().describe("Text content of the block"),
-            }),
-          )
-          .optional()
-          .describe("Initial content blocks"),
+    notion_create_page: withToolApproval(
+      tool({
+        description:
+          "Create a new Notion page. Specify either parentPageId (for a sub-page) or parentDatabaseId (for a database entry).",
+        inputSchema: z.object({
+          title: z.string().describe("Page title"),
+          parentPageId: z
+            .string()
+            .optional()
+            .describe("Parent page ID (for sub-page)"),
+          parentDatabaseId: z
+            .string()
+            .optional()
+            .describe("Parent database ID (for database entry)"),
+          children: z
+            .array(
+              z.object({
+                type: z
+                  .string()
+                  .describe(
+                    "Block type: paragraph, heading_1, heading_2, heading_3, bulleted_list_item, numbered_list_item, to_do, toggle, callout, quote, divider, code",
+                  ),
+                content: z.string().describe("Text content of the block"),
+              }),
+            )
+            .optional()
+            .describe("Initial content blocks"),
+        }),
+        outputSchema: pageSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.createPage(input);
+        },
       }),
-      outputSchema: pageSchema,
-      needsApproval: () => approvalFn("notion_create_page"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.createPage(input);
-      },
-    }),
+      () => approvalFn("notion_create_page"),
+    ),
 
-    notion_update_page: tool({
-      description: "Update a Notion page's properties, icon, or cover image.",
-      inputSchema: z.object({
-        pageId: z.string().describe("The page ID to update"),
-        properties: z
-          .record(z.string(), z.unknown())
-          .optional()
-          .describe("Properties to update (Notion property format)"),
-        icon: z.string().optional().describe("Emoji icon for the page"),
-        cover: z.string().optional().describe("Cover image URL"),
-        archived: z.boolean().optional().describe("Set to true to archive"),
+    notion_update_page: withToolApproval(
+      tool({
+        description: "Update a Notion page's properties, icon, or cover image.",
+        inputSchema: z.object({
+          pageId: z.string().describe("The page ID to update"),
+          properties: z
+            .record(z.string(), z.unknown())
+            .optional()
+            .describe("Properties to update (Notion property format)"),
+          icon: z.string().optional().describe("Emoji icon for the page"),
+          cover: z.string().optional().describe("Cover image URL"),
+          archived: z.boolean().optional().describe("Set to true to archive"),
+        }),
+        outputSchema: pageSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          const { pageId, ...params } = input;
+          return svc.updatePage(pageId, params);
+        },
       }),
-      outputSchema: pageSchema,
-      needsApproval: () => approvalFn("notion_update_page"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        const { pageId, ...params } = input;
-        return svc.updatePage(pageId, params);
-      },
-    }),
+      () => approvalFn("notion_update_page"),
+    ),
 
-    notion_archive_page: tool({
-      description: "Archive (soft delete) a Notion page.",
-      inputSchema: z.object({
-        pageId: z.string().describe("The page ID to archive"),
+    notion_archive_page: withToolApproval(
+      tool({
+        description: "Archive (soft delete) a Notion page.",
+        inputSchema: z.object({
+          pageId: z.string().describe("The page ID to archive"),
+        }),
+        outputSchema: pageSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.archivePage(input.pageId);
+        },
       }),
-      outputSchema: pageSchema,
-      needsApproval: () => approvalFn("notion_archive_page"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.archivePage(input.pageId);
-      },
-    }),
+      () => approvalFn("notion_archive_page"),
+    ),
 
-    notion_list_databases: tool({
-      description: "List accessible Notion databases in the workspace.",
-      inputSchema: z.object({
-        maxResults: z.number().optional().describe("Max results (default 25)"),
+    notion_list_databases: withToolApproval(
+      tool({
+        description: "List accessible Notion databases in the workspace.",
+        inputSchema: z.object({
+          maxResults: z
+            .number()
+            .optional()
+            .describe("Max results (default 25)"),
+        }),
+        outputSchema: z.object({ databases: z.array(databaseSchema) }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          const databases = await svc.listDatabases(input);
+          return { databases };
+        },
       }),
-      outputSchema: z.object({ databases: z.array(databaseSchema) }),
-      needsApproval: () => approvalFn("notion_list_databases"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        const databases = await svc.listDatabases(input);
-        return { databases };
-      },
-    }),
+      () => approvalFn("notion_list_databases"),
+    ),
 
-    notion_query_database: tool({
-      description:
-        "Query a Notion database with optional filters and sorts. Returns pages (entries) from the database.",
-      inputSchema: z.object({
-        databaseId: z.string().describe("The database ID to query"),
-        filter: z
-          .record(z.string(), z.unknown())
-          .optional()
-          .describe("Notion filter object"),
-        sorts: z
-          .array(
-            z.object({
-              property: z.string(),
-              direction: z.enum(["ascending", "descending"]),
-            }),
-          )
-          .optional()
-          .describe("Sort criteria"),
-        maxResults: z.number().optional().describe("Max results (default 25)"),
+    notion_query_database: withToolApproval(
+      tool({
+        description:
+          "Query a Notion database with optional filters and sorts. Returns pages (entries) from the database.",
+        inputSchema: z.object({
+          databaseId: z.string().describe("The database ID to query"),
+          filter: z
+            .record(z.string(), z.unknown())
+            .optional()
+            .describe("Notion filter object"),
+          sorts: z
+            .array(
+              z.object({
+                property: z.string(),
+                direction: z.enum(["ascending", "descending"]),
+              }),
+            )
+            .optional()
+            .describe("Sort criteria"),
+          maxResults: z
+            .number()
+            .optional()
+            .describe("Max results (default 25)"),
+        }),
+        outputSchema: z.object({
+          entries: z.array(pageSchema),
+          hasMore: z.boolean(),
+        }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.queryDatabase(input);
+        },
       }),
-      outputSchema: z.object({
-        entries: z.array(pageSchema),
-        hasMore: z.boolean(),
-      }),
-      needsApproval: () => approvalFn("notion_query_database"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.queryDatabase(input);
-      },
-    }),
+      () => approvalFn("notion_query_database"),
+    ),
 
-    notion_create_database_entry: tool({
-      description: "Create a new entry (row) in a Notion database.",
-      inputSchema: z.object({
-        databaseId: z.string().describe("The database ID"),
-        properties: z
-          .record(z.string(), z.unknown())
-          .describe("Properties for the new entry (Notion property format)"),
-        children: z
-          .array(
-            z.object({
-              type: z.string().describe("Block type"),
-              content: z.string().describe("Text content"),
-            }),
-          )
-          .optional()
-          .describe("Page content blocks"),
+    notion_create_database_entry: withToolApproval(
+      tool({
+        description: "Create a new entry (row) in a Notion database.",
+        inputSchema: z.object({
+          databaseId: z.string().describe("The database ID"),
+          properties: z
+            .record(z.string(), z.unknown())
+            .describe("Properties for the new entry (Notion property format)"),
+          children: z
+            .array(
+              z.object({
+                type: z.string().describe("Block type"),
+                content: z.string().describe("Text content"),
+              }),
+            )
+            .optional()
+            .describe("Page content blocks"),
+        }),
+        outputSchema: pageSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.createDatabaseEntry(input);
+        },
       }),
-      outputSchema: pageSchema,
-      needsApproval: () => approvalFn("notion_create_database_entry"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.createDatabaseEntry(input);
-      },
-    }),
+      () => approvalFn("notion_create_database_entry"),
+    ),
 
-    notion_update_database_entry: tool({
-      description: "Update an existing database entry's properties.",
-      inputSchema: z.object({
-        pageId: z.string().describe("The entry (page) ID to update"),
-        properties: z
-          .record(z.string(), z.unknown())
-          .describe("Properties to update"),
+    notion_update_database_entry: withToolApproval(
+      tool({
+        description: "Update an existing database entry's properties.",
+        inputSchema: z.object({
+          pageId: z.string().describe("The entry (page) ID to update"),
+          properties: z
+            .record(z.string(), z.unknown())
+            .describe("Properties to update"),
+        }),
+        outputSchema: pageSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.updateDatabaseEntry(input.pageId, {
+            properties: input.properties,
+          });
+        },
       }),
-      outputSchema: pageSchema,
-      needsApproval: () => approvalFn("notion_update_database_entry"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.updateDatabaseEntry(input.pageId, {
-          properties: input.properties,
-        });
-      },
-    }),
+      () => approvalFn("notion_update_database_entry"),
+    ),
 
-    notion_get_blocks: tool({
-      description: "Get child blocks (content) of a Notion page or block.",
-      inputSchema: z.object({
-        blockId: z.string().describe("Page ID or block ID"),
-        maxResults: z
-          .number()
-          .optional()
-          .describe("Max blocks to return (default 50)"),
+    notion_get_blocks: withToolApproval(
+      tool({
+        description: "Get child blocks (content) of a Notion page or block.",
+        inputSchema: z.object({
+          blockId: z.string().describe("Page ID or block ID"),
+          maxResults: z
+            .number()
+            .optional()
+            .describe("Max blocks to return (default 50)"),
+        }),
+        outputSchema: z.object({ blocks: z.array(blockSchema) }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          const blocks = await svc.getBlocks(input);
+          return { blocks };
+        },
       }),
-      outputSchema: z.object({ blocks: z.array(blockSchema) }),
-      needsApproval: () => approvalFn("notion_get_blocks"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        const blocks = await svc.getBlocks(input);
-        return { blocks };
-      },
-    }),
+      () => approvalFn("notion_get_blocks"),
+    ),
 
-    notion_append_blocks: tool({
-      description: "Append new content blocks to a Notion page or block.",
-      inputSchema: z.object({
-        blockId: z.string().describe("Page ID or block ID to append to"),
-        children: z
-          .array(
-            z.object({
-              type: z
-                .string()
-                .describe(
-                  "Block type: paragraph, heading_1, heading_2, heading_3, bulleted_list_item, numbered_list_item, to_do, toggle, callout, quote, divider, code",
-                ),
-              content: z.string().describe("Text content of the block"),
-            }),
-          )
-          .describe("Blocks to append"),
+    notion_append_blocks: withToolApproval(
+      tool({
+        description: "Append new content blocks to a Notion page or block.",
+        inputSchema: z.object({
+          blockId: z.string().describe("Page ID or block ID to append to"),
+          children: z
+            .array(
+              z.object({
+                type: z
+                  .string()
+                  .describe(
+                    "Block type: paragraph, heading_1, heading_2, heading_3, bulleted_list_item, numbered_list_item, to_do, toggle, callout, quote, divider, code",
+                  ),
+                content: z.string().describe("Text content of the block"),
+              }),
+            )
+            .describe("Blocks to append"),
+        }),
+        outputSchema: z.object({ blocks: z.array(blockSchema) }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          const blocks = await svc.appendBlocks(input);
+          return { blocks };
+        },
       }),
-      outputSchema: z.object({ blocks: z.array(blockSchema) }),
-      needsApproval: () => approvalFn("notion_append_blocks"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        const blocks = await svc.appendBlocks(input);
-        return { blocks };
-      },
-    }),
+      () => approvalFn("notion_append_blocks"),
+    ),
 
-    notion_list_comments: tool({
-      description: "List comments on a Notion page or discussion thread.",
-      inputSchema: z.object({
-        blockId: z.string().describe("Page ID or block ID"),
-        maxResults: z.number().optional().describe("Max comments (default 50)"),
+    notion_list_comments: withToolApproval(
+      tool({
+        description: "List comments on a Notion page or discussion thread.",
+        inputSchema: z.object({
+          blockId: z.string().describe("Page ID or block ID"),
+          maxResults: z
+            .number()
+            .optional()
+            .describe("Max comments (default 50)"),
+        }),
+        outputSchema: z.object({ comments: z.array(commentSchema) }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          const comments = await svc.listComments(input);
+          return { comments };
+        },
       }),
-      outputSchema: z.object({ comments: z.array(commentSchema) }),
-      needsApproval: () => approvalFn("notion_list_comments"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        const comments = await svc.listComments(input);
-        return { comments };
-      },
-    }),
+      () => approvalFn("notion_list_comments"),
+    ),
 
-    notion_create_comment: tool({
-      description:
-        "Create a new comment on a Notion page or in a discussion thread.",
-      inputSchema: z.object({
-        pageId: z.string().describe("The page ID to comment on"),
-        richText: z.string().describe("Comment text"),
-        discussionId: z
-          .string()
-          .optional()
-          .describe("Discussion thread ID (for replies)"),
+    notion_create_comment: withToolApproval(
+      tool({
+        description:
+          "Create a new comment on a Notion page or in a discussion thread.",
+        inputSchema: z.object({
+          pageId: z.string().describe("The page ID to comment on"),
+          richText: z.string().describe("Comment text"),
+          discussionId: z
+            .string()
+            .optional()
+            .describe("Discussion thread ID (for replies)"),
+        }),
+        outputSchema: commentSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.createComment(input);
+        },
       }),
-      outputSchema: commentSchema,
-      needsApproval: () => approvalFn("notion_create_comment"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.createComment(input);
-      },
-    }),
+      () => approvalFn("notion_create_comment"),
+    ),
 
-    notion_list_users: tool({
-      description: "List workspace members in Notion.",
-      inputSchema: z.object({
-        maxResults: z.number().optional().describe("Max users (default 50)"),
+    notion_list_users: withToolApproval(
+      tool({
+        description: "List workspace members in Notion.",
+        inputSchema: z.object({
+          maxResults: z.number().optional().describe("Max users (default 50)"),
+        }),
+        outputSchema: z.object({ users: z.array(userSchema) }),
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          const users = await svc.listUsers(input);
+          return { users };
+        },
       }),
-      outputSchema: z.object({ users: z.array(userSchema) }),
-      needsApproval: () => approvalFn("notion_list_users"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        const users = await svc.listUsers(input);
-        return { users };
-      },
-    }),
+      () => approvalFn("notion_list_users"),
+    ),
 
-    notion_get_user: tool({
-      description: "Get a specific Notion user by ID.",
-      inputSchema: z.object({
-        userId: z.string().describe("The user ID"),
+    notion_get_user: withToolApproval(
+      tool({
+        description: "Get a specific Notion user by ID.",
+        inputSchema: z.object({
+          userId: z.string().describe("The user ID"),
+        }),
+        outputSchema: userSchema,
+        execute: async (input) => {
+          const svc = getNotionService(context);
+          return svc.getUser(input.userId);
+        },
       }),
-      outputSchema: userSchema,
-      needsApproval: () => approvalFn("notion_get_user"),
-      execute: async (input) => {
-        const svc = getNotionService(context);
-        return svc.getUser(input.userId);
-      },
-    }),
+      () => approvalFn("notion_get_user"),
+    ),
   };
 }

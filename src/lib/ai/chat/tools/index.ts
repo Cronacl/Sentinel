@@ -60,6 +60,7 @@ import {
   applyPatchOutputSchema,
   executeApplyPatch,
 } from "./apply-patch";
+import { withToolApproval } from "./approval";
 import {
   executeAskQuestion,
   askQuestionInputSchema,
@@ -369,106 +370,120 @@ function buildInspectionTools(
   const filesystemRoot = defaultDirectory ?? skillRoots[0];
 
   return {
-    list: tool({
-      description: listDescription,
-      inputSchema: listInputSchema,
-      needsApproval: () => toolApprovalPolicies.list,
-      outputSchema: listOutputSchema,
-      execute: async (input) =>
-        executeList({
-          defaultDirectory: filesystemRoot!,
-          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
-          input,
-          permissionMode,
-        }),
-    }),
-    glob: tool({
-      description: globDescription,
-      inputSchema: globInputSchema,
-      needsApproval: () => toolApprovalPolicies.glob,
-      outputSchema: globOutputSchema,
-      execute: async (input) =>
-        executeGlob({
-          defaultDirectory: filesystemRoot!,
-          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
-          input,
-          permissionMode,
-        }),
-    }),
-    read: tool({
-      description: readDescription,
-      inputSchema: readInputSchema,
-      needsApproval: () => toolApprovalPolicies.read,
-      outputSchema: readOutputSchema,
-      execute: async (input) =>
-        executeRead({
-          defaultDirectory: filesystemRoot!,
-          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
-          input,
-          permissionMode,
-        }),
-    }),
-    load_document: tool({
-      description: loadDocumentDescription,
-      inputSchema: loadDocumentInputSchema,
-      needsApproval: () => toolApprovalPolicies.load_document,
-      outputSchema: loadDocumentOutputSchema,
-      toModelOutput: ({ output }) => toLoadDocumentModelOutput(output),
-      execute: async (input) =>
-        executeLoadDocument({
-          defaultDirectory: filesystemRoot!,
-          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
-          input,
-          permissionMode,
-          sourceMessageId: options.sourceMessageId,
-          threadId: options.threadId,
-        }),
-    }),
-    grep: tool({
-      description: grepDescription,
-      inputSchema: grepInputSchema,
-      needsApproval: () => toolApprovalPolicies.grep,
-      outputSchema: grepOutputSchema,
-      execute: async (input) =>
-        executeGrep({
-          defaultDirectory: filesystemRoot!,
-          ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
-          input,
-          permissionMode,
-        }),
-    }),
+    list: withToolApproval(
+      tool({
+        description: listDescription,
+        inputSchema: listInputSchema,
+        outputSchema: listOutputSchema,
+        execute: async (input) =>
+          executeList({
+            defaultDirectory: filesystemRoot!,
+            ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.list,
+    ),
+    glob: withToolApproval(
+      tool({
+        description: globDescription,
+        inputSchema: globInputSchema,
+        outputSchema: globOutputSchema,
+        execute: async (input) =>
+          executeGlob({
+            defaultDirectory: filesystemRoot!,
+            ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.glob,
+    ),
+    read: withToolApproval(
+      tool({
+        description: readDescription,
+        inputSchema: readInputSchema,
+        outputSchema: readOutputSchema,
+        execute: async (input) =>
+          executeRead({
+            defaultDirectory: filesystemRoot!,
+            ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.read,
+    ),
+    load_document: withToolApproval(
+      tool({
+        description: loadDocumentDescription,
+        inputSchema: loadDocumentInputSchema,
+        outputSchema: loadDocumentOutputSchema,
+        toModelOutput: ({ output }) => toLoadDocumentModelOutput(output),
+        execute: async (input) =>
+          executeLoadDocument({
+            defaultDirectory: filesystemRoot!,
+            ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
+            input,
+            permissionMode,
+            sourceMessageId: options.sourceMessageId,
+            threadId: options.threadId,
+          }),
+      }),
+      () => toolApprovalPolicies.load_document,
+    ),
+    grep: withToolApproval(
+      tool({
+        description: grepDescription,
+        inputSchema: grepInputSchema,
+        outputSchema: grepOutputSchema,
+        execute: async (input) =>
+          executeGrep({
+            defaultDirectory: filesystemRoot!,
+            ...(skillRoots.length > 0 ? { extraAllowedRoots: skillRoots } : {}),
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.grep,
+    ),
     ...(includeExtended
       ? {
-          diff: tool({
-            description: diffDescription,
-            inputSchema: diffInputSchema,
-            needsApproval: () => toolApprovalPolicies.diff,
-            outputSchema: diffOutputSchema,
-            execute: async (input) =>
-              executeDiff({
-                defaultDirectory: filesystemRoot!,
-                ...(skillRoots.length > 0
-                  ? { extraAllowedRoots: skillRoots }
-                  : {}),
-                input,
-                permissionMode,
-              }),
-          }),
-          batch_read: tool({
-            description: batchReadDescription,
-            inputSchema: batchReadInputSchema,
-            needsApproval: () => toolApprovalPolicies.batch_read,
-            outputSchema: batchReadOutputSchema,
-            execute: async (input) =>
-              executeBatchRead({
-                defaultDirectory: filesystemRoot!,
-                ...(skillRoots.length > 0
-                  ? { extraAllowedRoots: skillRoots }
-                  : {}),
-                input,
-                permissionMode,
-              }),
-          }),
+          diff: withToolApproval(
+            tool({
+              description: diffDescription,
+              inputSchema: diffInputSchema,
+              outputSchema: diffOutputSchema,
+              execute: async (input) =>
+                executeDiff({
+                  defaultDirectory: filesystemRoot!,
+                  ...(skillRoots.length > 0
+                    ? { extraAllowedRoots: skillRoots }
+                    : {}),
+                  input,
+                  permissionMode,
+                }),
+            }),
+            () => toolApprovalPolicies.diff,
+          ),
+          batch_read: withToolApproval(
+            tool({
+              description: batchReadDescription,
+              inputSchema: batchReadInputSchema,
+              outputSchema: batchReadOutputSchema,
+              execute: async (input) =>
+                executeBatchRead({
+                  defaultDirectory: filesystemRoot!,
+                  ...(skillRoots.length > 0
+                    ? { extraAllowedRoots: skillRoots }
+                    : {}),
+                  input,
+                  permissionMode,
+                }),
+            }),
+            () => toolApprovalPolicies.batch_read,
+          ),
         }
       : {}),
   };
@@ -478,78 +493,90 @@ function buildMutationTools(options: ThreadAgentCallOptions) {
   const { defaultDirectory, permissionMode, toolApprovalPolicies } = options;
 
   return {
-    edit: tool({
-      description: editDescription,
-      inputSchema: editInputSchema,
-      needsApproval: () => toolApprovalPolicies.edit,
-      outputSchema: editOutputSchema,
-      execute: async (input) =>
-        executeEdit({
-          defaultDirectory: defaultDirectory!,
-          input,
-          permissionMode,
-        }),
-    }),
-    multiedit: tool({
-      description: multieditDescription,
-      inputSchema: multieditInputSchema,
-      needsApproval: () => toolApprovalPolicies.multiedit,
-      outputSchema: multieditOutputSchema,
-      execute: async (input) =>
-        executeMultiEdit({
-          defaultDirectory: defaultDirectory!,
-          input,
-          permissionMode,
-        }),
-    }),
-    create_file: tool({
-      description: createFileDescription,
-      inputSchema: createFileInputSchema,
-      needsApproval: () => toolApprovalPolicies.create_file,
-      outputSchema: createFileOutputSchema,
-      execute: async (input) =>
-        executeCreateFile({
-          defaultDirectory: defaultDirectory!,
-          input,
-          permissionMode,
-        }),
-    }),
-    delete_file: tool({
-      description: deleteFileDescription,
-      inputSchema: deleteFileInputSchema,
-      needsApproval: () => toolApprovalPolicies.delete_file,
-      outputSchema: deleteFileOutputSchema,
-      execute: async (input) =>
-        executeDeleteFile({
-          defaultDirectory: defaultDirectory!,
-          input,
-          permissionMode,
-        }),
-    }),
-    move_file: tool({
-      description: moveFileDescription,
-      inputSchema: moveFileInputSchema,
-      needsApproval: () => toolApprovalPolicies.move_file,
-      outputSchema: moveFileOutputSchema,
-      execute: async (input) =>
-        executeMoveFile({
-          defaultDirectory: defaultDirectory!,
-          input,
-          permissionMode,
-        }),
-    }),
-    apply_patch: tool({
-      description: applyPatchDescription,
-      inputSchema: applyPatchInputSchema,
-      needsApproval: () => toolApprovalPolicies.apply_patch,
-      outputSchema: applyPatchOutputSchema,
-      execute: async (input) =>
-        executeApplyPatch({
-          defaultDirectory: defaultDirectory!,
-          input,
-          permissionMode,
-        }),
-    }),
+    edit: withToolApproval(
+      tool({
+        description: editDescription,
+        inputSchema: editInputSchema,
+        outputSchema: editOutputSchema,
+        execute: async (input) =>
+          executeEdit({
+            defaultDirectory: defaultDirectory!,
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.edit,
+    ),
+    multiedit: withToolApproval(
+      tool({
+        description: multieditDescription,
+        inputSchema: multieditInputSchema,
+        outputSchema: multieditOutputSchema,
+        execute: async (input) =>
+          executeMultiEdit({
+            defaultDirectory: defaultDirectory!,
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.multiedit,
+    ),
+    create_file: withToolApproval(
+      tool({
+        description: createFileDescription,
+        inputSchema: createFileInputSchema,
+        outputSchema: createFileOutputSchema,
+        execute: async (input) =>
+          executeCreateFile({
+            defaultDirectory: defaultDirectory!,
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.create_file,
+    ),
+    delete_file: withToolApproval(
+      tool({
+        description: deleteFileDescription,
+        inputSchema: deleteFileInputSchema,
+        outputSchema: deleteFileOutputSchema,
+        execute: async (input) =>
+          executeDeleteFile({
+            defaultDirectory: defaultDirectory!,
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.delete_file,
+    ),
+    move_file: withToolApproval(
+      tool({
+        description: moveFileDescription,
+        inputSchema: moveFileInputSchema,
+        outputSchema: moveFileOutputSchema,
+        execute: async (input) =>
+          executeMoveFile({
+            defaultDirectory: defaultDirectory!,
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.move_file,
+    ),
+    apply_patch: withToolApproval(
+      tool({
+        description: applyPatchDescription,
+        inputSchema: applyPatchInputSchema,
+        outputSchema: applyPatchOutputSchema,
+        execute: async (input) =>
+          executeApplyPatch({
+            defaultDirectory: defaultDirectory!,
+            input,
+            permissionMode,
+          }),
+      }),
+      () => toolApprovalPolicies.apply_patch,
+    ),
   };
 }
 
@@ -571,167 +598,175 @@ function buildExecutionTools(options: ThreadAgentCallOptions) {
   return {
     ...(defaultDirectory
       ? {
-          diagnostics: tool({
-            description: diagnosticsDescription,
-            inputSchema: diagnosticsInputSchema,
-            needsApproval: () => toolApprovalPolicies.diagnostics,
-            outputSchema: diagnosticsOutputSchema,
-            execute: async (input) =>
-              executeDiagnostics({
-                defaultDirectory: defaultDirectory!,
-                input,
-                permissionMode,
-              }),
-          }),
-          git: tool({
-            description: gitDescription,
-            inputSchema: gitInputSchema,
-            needsApproval: () => toolApprovalPolicies.git,
-            outputSchema: gitOutputSchema,
-            execute: async (input) =>
-              executeGit({
-                defaultDirectory: defaultDirectory!,
-                input,
-                permissionMode,
-              }),
-          }),
+          diagnostics: withToolApproval(
+            tool({
+              description: diagnosticsDescription,
+              inputSchema: diagnosticsInputSchema,
+              outputSchema: diagnosticsOutputSchema,
+              execute: async (input) =>
+                executeDiagnostics({
+                  defaultDirectory: defaultDirectory!,
+                  input,
+                  permissionMode,
+                }),
+            }),
+            () => toolApprovalPolicies.diagnostics,
+          ),
+          git: withToolApproval(
+            tool({
+              description: gitDescription,
+              inputSchema: gitInputSchema,
+              outputSchema: gitOutputSchema,
+              execute: async (input) =>
+                executeGit({
+                  defaultDirectory: defaultDirectory!,
+                  input,
+                  permissionMode,
+                }),
+            }),
+            () => toolApprovalPolicies.git,
+          ),
         }
       : {}),
     ...(defaultDirectory
       ? {
-          run_task: tool({
-            description: runTaskDescription,
-            inputSchema: runTaskInputSchema,
-            needsApproval: () => toolApprovalPolicies.run_task,
-            outputSchema: runTaskOutputSchema,
-            toModelOutput: ({ output }) => ({
-              type: "json" as const,
-              value:
-                output.phase === "completed" ? output : { phase: "running" },
-            }),
-            execute: async function* (input, { abortSignal }) {
-              const abortShell = () => {
-                void disposeShellSession(threadId);
-              };
-              abortSignal?.addEventListener("abort", abortShell, {
-                once: true,
-              });
-              try {
-                for await (const event of streamRunTask({
-                  allowedRoot:
-                    permissionMode === "default"
-                      ? defaultDirectory!
-                      : undefined,
-                  defaultDirectory: defaultDirectory!,
-                  input,
-                  ...(preferredExecutionDirectory
-                    ? { projectDirectory: preferredExecutionDirectory }
-                    : {}),
-                  permissionMode,
-                  threadId,
-                })) {
-                  if (event.type === "error") throw event.error;
-                  if (event.output) yield event.output;
+          run_task: withToolApproval(
+            tool({
+              description: runTaskDescription,
+              inputSchema: runTaskInputSchema,
+              outputSchema: runTaskOutputSchema,
+              toModelOutput: ({ output }) => ({
+                type: "json" as const,
+                value:
+                  output.phase === "completed" ? output : { phase: "running" },
+              }),
+              execute: async function* (input, { abortSignal }) {
+                const abortShell = () => {
+                  void disposeShellSession(threadId);
+                };
+                abortSignal?.addEventListener("abort", abortShell, {
+                  once: true,
+                });
+                try {
+                  for await (const event of streamRunTask({
+                    allowedRoot:
+                      permissionMode === "default"
+                        ? defaultDirectory!
+                        : undefined,
+                    defaultDirectory: defaultDirectory!,
+                    input,
+                    ...(preferredExecutionDirectory
+                      ? { projectDirectory: preferredExecutionDirectory }
+                      : {}),
+                    permissionMode,
+                    threadId,
+                  })) {
+                    if (event.type === "error") throw event.error;
+                    if (event.output) yield event.output;
+                  }
+                } finally {
+                  abortSignal?.removeEventListener("abort", abortShell);
                 }
-              } finally {
-                abortSignal?.removeEventListener("abort", abortShell);
-              }
-            },
-          }),
+              },
+            }),
+            () => toolApprovalPolicies.run_task,
+          ),
         }
       : {}),
-    shell_command: tool({
-      description: shellCommandDescription,
-      inputSchema: shellCommandInputSchema,
-      needsApproval: () => toolApprovalPolicies.shell_command,
-      outputSchema: shellCommandOutputSchema,
-      toModelOutput: ({ output }) => ({
-        type: "json" as const,
-        value:
-          output.phase === "completed" || output.phase === "background"
-            ? output
-            : { phase: "running" },
-      }),
-      execute: async function* (input, { abortSignal }) {
-        const mode =
-          input.mode ??
-          (input.backgroundTaskId
-            ? "check_background"
-            : input.runInBackground
-              ? "start_background"
-              : "run");
-        const command = input.command ?? "";
+    shell_command: withToolApproval(
+      tool({
+        description: shellCommandDescription,
+        inputSchema: shellCommandInputSchema,
+        outputSchema: shellCommandOutputSchema,
+        toModelOutput: ({ output }) => ({
+          type: "json" as const,
+          value:
+            output.phase === "completed" || output.phase === "background"
+              ? output
+              : { phase: "running" },
+        }),
+        execute: async function* (input, { abortSignal }) {
+          const mode =
+            input.mode ??
+            (input.backgroundTaskId
+              ? "check_background"
+              : input.runInBackground
+                ? "start_background"
+                : "run");
+          const command = input.command ?? "";
 
-        if (
-          permissionMode === "default" &&
-          (mode === "run" || mode === "start_background")
-        ) {
-          assertShellCommandAllowed(command, [
-            ...(defaultDirectory ? [defaultDirectory] : []),
-            ...skillRoots,
-          ]);
-        }
-
-        if (mode === "check_background") {
-          yield await getBackgroundShellCommand({
-            backgroundTaskId: input.backgroundTaskId!,
-            threadId,
-            waitForCompletion: input.waitForCompletion,
-          });
-          return;
-        }
-
-        if (mode === "stop_background") {
-          yield await stopBackgroundShellCommand({
-            backgroundTaskId: input.backgroundTaskId!,
-            threadId,
-          });
-          return;
-        }
-
-        if (mode === "start_background") {
-          yield await startBackgroundShellCommand({
-            allowedRoots:
-              permissionMode === "default"
-                ? [
-                    ...(defaultDirectory ? [defaultDirectory] : []),
-                    ...skillRoots,
-                  ]
-                : undefined,
-            command,
-            defaultDirectory: shellDirectory!,
-            permissionMode,
-            threadId,
-          });
-          return;
-        }
-
-        const abortShell = () => {
-          void disposeShellSession(threadId);
-        };
-        abortSignal?.addEventListener("abort", abortShell, { once: true });
-        try {
-          for await (const event of streamShellCommand({
-            allowedRoots:
-              permissionMode === "default"
-                ? [
-                    ...(defaultDirectory ? [defaultDirectory] : []),
-                    ...skillRoots,
-                  ]
-                : undefined,
-            command,
-            defaultDirectory: shellDirectory!,
-            permissionMode,
-            threadId,
-          })) {
-            if (event.type === "error") throw event.error;
-            yield event.output;
+          if (
+            permissionMode === "default" &&
+            (mode === "run" || mode === "start_background")
+          ) {
+            assertShellCommandAllowed(command, [
+              ...(defaultDirectory ? [defaultDirectory] : []),
+              ...skillRoots,
+            ]);
           }
-        } finally {
-          abortSignal?.removeEventListener("abort", abortShell);
-        }
-      },
-    }),
+
+          if (mode === "check_background") {
+            yield await getBackgroundShellCommand({
+              backgroundTaskId: input.backgroundTaskId!,
+              threadId,
+              waitForCompletion: input.waitForCompletion,
+            });
+            return;
+          }
+
+          if (mode === "stop_background") {
+            yield await stopBackgroundShellCommand({
+              backgroundTaskId: input.backgroundTaskId!,
+              threadId,
+            });
+            return;
+          }
+
+          if (mode === "start_background") {
+            yield await startBackgroundShellCommand({
+              allowedRoots:
+                permissionMode === "default"
+                  ? [
+                      ...(defaultDirectory ? [defaultDirectory] : []),
+                      ...skillRoots,
+                    ]
+                  : undefined,
+              command,
+              defaultDirectory: shellDirectory!,
+              permissionMode,
+              threadId,
+            });
+            return;
+          }
+
+          const abortShell = () => {
+            void disposeShellSession(threadId);
+          };
+          abortSignal?.addEventListener("abort", abortShell, { once: true });
+          try {
+            for await (const event of streamShellCommand({
+              allowedRoots:
+                permissionMode === "default"
+                  ? [
+                      ...(defaultDirectory ? [defaultDirectory] : []),
+                      ...skillRoots,
+                    ]
+                  : undefined,
+              command,
+              defaultDirectory: shellDirectory!,
+              permissionMode,
+              threadId,
+            })) {
+              if (event.type === "error") throw event.error;
+              yield event.output;
+            }
+          } finally {
+            abortSignal?.removeEventListener("abort", abortShell);
+          }
+        },
+      }),
+      () => toolApprovalPolicies.shell_command,
+    ),
   };
 }
 
@@ -772,44 +807,50 @@ function buildMemoryTools(options: ThreadAgentCallOptions) {
   }
 
   return {
-    search_memory: tool({
-      description: searchMemoryDescription,
-      inputSchema: searchMemoryInputSchema,
-      needsApproval: () => toolApprovalPolicies.search_memory,
-      outputSchema: searchMemoryOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeSearchMemory({
-          abortSignal,
-          input,
-          runtime: { memoryRuntime, userId, workspaceId },
-        }),
-    }),
-    save_memory: tool({
-      description: saveMemoryDescription,
-      inputSchema: saveMemoryInputSchema,
-      needsApproval: () => toolApprovalPolicies.save_memory,
-      outputSchema: saveMemoryOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeSaveMemory({
-          abortSignal,
-          input,
-          runtime: {
-            memoryRuntime,
-            sourceMessageId,
-            threadId,
-            userId,
-            workspaceId,
-          },
-        }),
-    }),
-    forget_memory: tool({
-      description: forgetMemoryDescription,
-      inputSchema: forgetMemoryInputSchema,
-      needsApproval: () => toolApprovalPolicies.forget_memory,
-      outputSchema: forgetMemoryOutputSchema,
-      execute: async (input) =>
-        executeForgetMemory({ input, runtime: { userId } }),
-    }),
+    search_memory: withToolApproval(
+      tool({
+        description: searchMemoryDescription,
+        inputSchema: searchMemoryInputSchema,
+        outputSchema: searchMemoryOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeSearchMemory({
+            abortSignal,
+            input,
+            runtime: { memoryRuntime, userId, workspaceId },
+          }),
+      }),
+      () => toolApprovalPolicies.search_memory,
+    ),
+    save_memory: withToolApproval(
+      tool({
+        description: saveMemoryDescription,
+        inputSchema: saveMemoryInputSchema,
+        outputSchema: saveMemoryOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeSaveMemory({
+            abortSignal,
+            input,
+            runtime: {
+              memoryRuntime,
+              sourceMessageId,
+              threadId,
+              userId,
+              workspaceId,
+            },
+          }),
+      }),
+      () => toolApprovalPolicies.save_memory,
+    ),
+    forget_memory: withToolApproval(
+      tool({
+        description: forgetMemoryDescription,
+        inputSchema: forgetMemoryInputSchema,
+        outputSchema: forgetMemoryOutputSchema,
+        execute: async (input) =>
+          executeForgetMemory({ input, runtime: { userId } }),
+      }),
+      () => toolApprovalPolicies.forget_memory,
+    ),
   };
 }
 
@@ -827,107 +868,115 @@ function buildWebTools(options: ThreadAgentCallOptions) {
   } = options;
 
   return {
-    websearch: tool({
-      description: websearchDescription,
-      inputSchema: webSearchInputSchema,
-      needsApproval: () => toolApprovalPolicies.websearch,
-      outputSchema: webSearchOutputSchema,
-      toModelOutput: ({ output }) => ({
-        type: "json" as const,
-        value: {
-          digest: output.digest,
-          livecrawl: output.livecrawl,
-          provider: output.provider,
-          query: output.query,
-          resolvedSearchType: output.resolvedSearchType,
-          resultCount: output.resultCount,
-          results: output.results.map((r) => ({
-            author: r.author,
-            publishedDate: r.publishedDate,
-            summary: r.summary,
-            title: r.title,
-            url: r.url,
-          })),
-          searchType: output.searchType,
-        },
-      }),
-      execute: async (input, { abortSignal }) =>
-        executeWebSearch({
-          abortSignal,
-          input,
-          runtime: { providers: searchProviders, settings: searchSettings },
+    websearch: withToolApproval(
+      tool({
+        description: websearchDescription,
+        inputSchema: webSearchInputSchema,
+        outputSchema: webSearchOutputSchema,
+        toModelOutput: ({ output }) => ({
+          type: "json" as const,
+          value: {
+            digest: output.digest,
+            livecrawl: output.livecrawl,
+            provider: output.provider,
+            query: output.query,
+            resolvedSearchType: output.resolvedSearchType,
+            resultCount: output.resultCount,
+            results: output.results.map((r) => ({
+              author: r.author,
+              publishedDate: r.publishedDate,
+              summary: r.summary,
+              title: r.title,
+              url: r.url,
+            })),
+            searchType: output.searchType,
+          },
         }),
-    }),
-    webfetch: tool({
-      description: webfetchDescription,
-      inputSchema: webFetchInputSchema,
-      needsApproval: () => toolApprovalPolicies.webfetch,
-      outputSchema: webFetchOutputSchema,
-      toModelOutput: ({ output }) => ({
-        type: "json" as const,
-        value: {
-          ...output,
-          results: output.results.map((r) =>
-            r.status === "success" && r.isImage
-              ? {
-                  ...r,
-                  imageDataUrl:
-                    "[omitted from model output; image preview available in the UI]",
-                }
-              : r,
-          ),
-        },
+        execute: async (input, { abortSignal }) =>
+          executeWebSearch({
+            abortSignal,
+            input,
+            runtime: { providers: searchProviders, settings: searchSettings },
+          }),
       }),
-      execute: async (input, { abortSignal }) =>
-        executeWebFetch({ abortSignal, input, settings: webFetchSettings }),
-    }),
+      () => toolApprovalPolicies.websearch,
+    ),
+    webfetch: withToolApproval(
+      tool({
+        description: webfetchDescription,
+        inputSchema: webFetchInputSchema,
+        outputSchema: webFetchOutputSchema,
+        toModelOutput: ({ output }) => ({
+          type: "json" as const,
+          value: {
+            ...output,
+            results: output.results.map((r) =>
+              r.status === "success" && r.isImage
+                ? {
+                    ...r,
+                    imageDataUrl:
+                      "[omitted from model output; image preview available in the UI]",
+                  }
+                : r,
+            ),
+          },
+        }),
+        execute: async (input, { abortSignal }) =>
+          executeWebFetch({ abortSignal, input, settings: webFetchSettings }),
+      }),
+      () => toolApprovalPolicies.webfetch,
+    ),
     ...(Object.keys(imageGenerationRuntime.providers).length > 0
       ? {
-          generate_image: tool({
-            description: generateImageDescription,
-            inputSchema: generateImageInputSchema,
-            needsApproval: () => toolApprovalPolicies.generate_image,
-            outputSchema: generateImageOutputSchema,
-            toModelOutput: ({ output }) => ({
-              type: "json" as const,
-              value: toGenerateImageModelOutput(output),
-            }),
-            execute: async (input, { abortSignal }) =>
-              executeGenerateImage({
-                abortSignal,
-                input,
-                runtime: {
-                  imageGeneration: imageGenerationRuntime,
-                  sourceMessageId,
-                  threadId,
-                },
+          generate_image: withToolApproval(
+            tool({
+              description: generateImageDescription,
+              inputSchema: generateImageInputSchema,
+              outputSchema: generateImageOutputSchema,
+              toModelOutput: ({ output }) => ({
+                type: "json" as const,
+                value: toGenerateImageModelOutput(output),
               }),
-          }),
+              execute: async (input, { abortSignal }) =>
+                executeGenerateImage({
+                  abortSignal,
+                  input,
+                  runtime: {
+                    imageGeneration: imageGenerationRuntime,
+                    sourceMessageId,
+                    threadId,
+                  },
+                }),
+            }),
+            () => toolApprovalPolicies.generate_image,
+          ),
         }
       : {}),
     ...(Object.keys(videoGenerationRuntime.providers).length > 0
       ? {
-          generate_video: tool({
-            description: generateVideoDescription,
-            inputSchema: generateVideoInputSchema,
-            needsApproval: () => toolApprovalPolicies.generate_video,
-            outputSchema: generateVideoOutputSchema,
-            toModelOutput: ({ output }) => ({
-              type: "json" as const,
-              value: toGenerateVideoModelOutput(output),
-            }),
-            execute: async (input, { abortSignal }) =>
-              executeGenerateVideo({
-                abortSignal,
-                input,
-                runtime: {
-                  sourceMessageId,
-                  threadId,
-                  userId,
-                  videoGeneration: videoGenerationRuntime,
-                },
+          generate_video: withToolApproval(
+            tool({
+              description: generateVideoDescription,
+              inputSchema: generateVideoInputSchema,
+              outputSchema: generateVideoOutputSchema,
+              toModelOutput: ({ output }) => ({
+                type: "json" as const,
+                value: toGenerateVideoModelOutput(output),
               }),
-          }),
+              execute: async (input, { abortSignal }) =>
+                executeGenerateVideo({
+                  abortSignal,
+                  input,
+                  runtime: {
+                    sourceMessageId,
+                    threadId,
+                    userId,
+                    videoGeneration: videoGenerationRuntime,
+                  },
+                }),
+            }),
+            () => toolApprovalPolicies.generate_video,
+          ),
         }
       : {}),
   };
@@ -937,163 +986,187 @@ function buildBrowserTools(options: ThreadAgentCallOptions) {
   const { threadId, toolApprovalPolicies, userId } = options;
 
   return {
-    browser_tabs: tool({
-      description: browserTabsDescription,
-      inputSchema: browserTabsInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_tabs,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "tabs" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_open: tool({
-      description: browserOpenDescription,
-      inputSchema: browserOpenInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_open,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "open" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_navigate: tool({
-      description: browserNavigateDescription,
-      inputSchema: browserNavigateInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_navigate,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "navigate" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_back: tool({
-      description: browserBackDescription,
-      inputSchema: browserTabActionInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_back,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "back" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_forward: tool({
-      description: browserForwardDescription,
-      inputSchema: browserTabActionInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_forward,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "forward" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_reload: tool({
-      description: browserReloadDescription,
-      inputSchema: browserTabActionInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_reload,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "reload" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_snapshot: tool({
-      description: browserSnapshotDescription,
-      inputSchema: browserTabActionInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_snapshot,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "snapshot" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_screenshot: tool({
-      description: browserScreenshotDescription,
-      inputSchema: browserScreenshotInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_screenshot,
-      outputSchema: browserToolOutputSchema,
-      toModelOutput: ({ output }) => browserToolModelOutput(output),
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "screenshot" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_click: tool({
-      description: browserClickDescription,
-      inputSchema: browserClickInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_click,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "click" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_fill: tool({
-      description: browserFillDescription,
-      inputSchema: browserFillInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_fill,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "fill" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_press: tool({
-      description: browserPressDescription,
-      inputSchema: browserPressInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_press,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "press" },
-          threadId,
-          userId,
-        }),
-    }),
-    browser_console_logs: tool({
-      description: browserConsoleLogsDescription,
-      inputSchema: browserConsoleLogsInputSchema,
-      needsApproval: () => toolApprovalPolicies.browser_console_logs,
-      outputSchema: browserToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeBrowserTool({
-          abortSignal,
-          command: { ...input, type: "console_logs" },
-          threadId,
-          userId,
-        }),
-    }),
+    browser_tabs: withToolApproval(
+      tool({
+        description: browserTabsDescription,
+        inputSchema: browserTabsInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "tabs" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_tabs,
+    ),
+    browser_open: withToolApproval(
+      tool({
+        description: browserOpenDescription,
+        inputSchema: browserOpenInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "open" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_open,
+    ),
+    browser_navigate: withToolApproval(
+      tool({
+        description: browserNavigateDescription,
+        inputSchema: browserNavigateInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "navigate" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_navigate,
+    ),
+    browser_back: withToolApproval(
+      tool({
+        description: browserBackDescription,
+        inputSchema: browserTabActionInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "back" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_back,
+    ),
+    browser_forward: withToolApproval(
+      tool({
+        description: browserForwardDescription,
+        inputSchema: browserTabActionInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "forward" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_forward,
+    ),
+    browser_reload: withToolApproval(
+      tool({
+        description: browserReloadDescription,
+        inputSchema: browserTabActionInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "reload" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_reload,
+    ),
+    browser_snapshot: withToolApproval(
+      tool({
+        description: browserSnapshotDescription,
+        inputSchema: browserTabActionInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "snapshot" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_snapshot,
+    ),
+    browser_screenshot: withToolApproval(
+      tool({
+        description: browserScreenshotDescription,
+        inputSchema: browserScreenshotInputSchema,
+        outputSchema: browserToolOutputSchema,
+        toModelOutput: ({ output }) => browserToolModelOutput(output),
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "screenshot" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_screenshot,
+    ),
+    browser_click: withToolApproval(
+      tool({
+        description: browserClickDescription,
+        inputSchema: browserClickInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "click" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_click,
+    ),
+    browser_fill: withToolApproval(
+      tool({
+        description: browserFillDescription,
+        inputSchema: browserFillInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "fill" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_fill,
+    ),
+    browser_press: withToolApproval(
+      tool({
+        description: browserPressDescription,
+        inputSchema: browserPressInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "press" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_press,
+    ),
+    browser_console_logs: withToolApproval(
+      tool({
+        description: browserConsoleLogsDescription,
+        inputSchema: browserConsoleLogsInputSchema,
+        outputSchema: browserToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeBrowserTool({
+            abortSignal,
+            command: { ...input, type: "console_logs" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.browser_console_logs,
+    ),
   };
 }
 
@@ -1101,126 +1174,144 @@ function buildComputerTools(options: ThreadAgentCallOptions) {
   const { threadId, toolApprovalPolicies, userId } = options;
 
   return {
-    computer_status: tool({
-      description: computerStatusDescription,
-      inputSchema: computerStatusInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_status,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "status" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_screenshot: tool({
-      description: computerScreenshotDescription,
-      inputSchema: computerScreenshotInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_screenshot,
-      outputSchema: computerToolOutputSchema,
-      toModelOutput: ({ output }) => computerToolModelOutput(output),
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "screenshot" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_action: tool({
-      description: computerActionDescription,
-      inputSchema: computerActionInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_action,
-      outputSchema: computerToolOutputSchema,
-      toModelOutput: ({ output }) => computerToolModelOutput(output),
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "action" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_apps: tool({
-      description: computerAppsDescription,
-      inputSchema: computerAppsInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_apps,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "apps" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_app: tool({
-      description: computerAppDescription,
-      inputSchema: computerAppInputSchema,
-      needsApproval: (input) =>
+    computer_status: withToolApproval(
+      tool({
+        description: computerStatusDescription,
+        inputSchema: computerStatusInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "status" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_status,
+    ),
+    computer_screenshot: withToolApproval(
+      tool({
+        description: computerScreenshotDescription,
+        inputSchema: computerScreenshotInputSchema,
+        outputSchema: computerToolOutputSchema,
+        toModelOutput: ({ output }) => computerToolModelOutput(output),
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "screenshot" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_screenshot,
+    ),
+    computer_action: withToolApproval(
+      tool({
+        description: computerActionDescription,
+        inputSchema: computerActionInputSchema,
+        outputSchema: computerToolOutputSchema,
+        toModelOutput: ({ output }) => computerToolModelOutput(output),
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "action" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_action,
+    ),
+    computer_apps: withToolApproval(
+      tool({
+        description: computerAppsDescription,
+        inputSchema: computerAppsInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "apps" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_apps,
+    ),
+    computer_app: withToolApproval(
+      tool({
+        description: computerAppDescription,
+        inputSchema: computerAppInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "app" },
+            threadId,
+            userId,
+          }),
+      }),
+      (input) =>
         input.mode === "focus" ? false : toolApprovalPolicies.computer_app,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "app" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_clipboard: tool({
-      description: computerClipboardDescription,
-      inputSchema: computerClipboardInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_clipboard,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "clipboard" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_ax_tree: tool({
-      description: computerAxTreeDescription,
-      inputSchema: computerAxTreeInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_ax_tree,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "ax_tree" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_ax_find: tool({
-      description: computerAxFindDescription,
-      inputSchema: computerAxFindInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_ax_find,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "ax_find" },
-          threadId,
-          userId,
-        }),
-    }),
-    computer_ax_action: tool({
-      description: computerAxActionDescription,
-      inputSchema: computerAxActionInputSchema,
-      needsApproval: () => toolApprovalPolicies.computer_ax_action,
-      outputSchema: computerToolOutputSchema,
-      execute: async (input, { abortSignal }) =>
-        executeComputerTool({
-          abortSignal,
-          command: { ...input, type: "ax_action" },
-          threadId,
-          userId,
-        }),
-    }),
+    ),
+    computer_clipboard: withToolApproval(
+      tool({
+        description: computerClipboardDescription,
+        inputSchema: computerClipboardInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "clipboard" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_clipboard,
+    ),
+    computer_ax_tree: withToolApproval(
+      tool({
+        description: computerAxTreeDescription,
+        inputSchema: computerAxTreeInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "ax_tree" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_ax_tree,
+    ),
+    computer_ax_find: withToolApproval(
+      tool({
+        description: computerAxFindDescription,
+        inputSchema: computerAxFindInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "ax_find" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_ax_find,
+    ),
+    computer_ax_action: withToolApproval(
+      tool({
+        description: computerAxActionDescription,
+        inputSchema: computerAxActionInputSchema,
+        outputSchema: computerToolOutputSchema,
+        execute: async (input, { abortSignal }) =>
+          executeComputerTool({
+            abortSignal,
+            command: { ...input, type: "ax_action" },
+            threadId,
+            userId,
+          }),
+      }),
+      () => toolApprovalPolicies.computer_ax_action,
+    ),
   };
 }
 

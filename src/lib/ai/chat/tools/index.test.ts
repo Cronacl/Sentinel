@@ -1,5 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 
+import { toolCallNeedsApproval } from "./approval";
+
 mock.module("server-only", () => ({}));
 
 const { getDefaultToolApprovalPolicies } = await import("./policy");
@@ -107,16 +109,16 @@ describe("buildTools computer tools", () => {
     const tools = buildTools(createOptions()) as any;
 
     expect(
-      await tools.computer_app.needsApproval(
-        { appName: "Craft", mode: "focus" },
-        {} as any,
-      ),
+      await toolCallNeedsApproval(tools.computer_app, {
+        appName: "Craft",
+        mode: "focus",
+      }),
     ).toBe(false);
     expect(
-      await tools.computer_app.needsApproval(
-        { appName: "Craft", mode: "open" },
-        {} as any,
-      ),
+      await toolCallNeedsApproval(tools.computer_app, {
+        appName: "Craft",
+        mode: "open",
+      }),
     ).toBe(true);
   });
 });

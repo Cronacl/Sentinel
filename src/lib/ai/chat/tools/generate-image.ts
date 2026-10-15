@@ -356,6 +356,9 @@ async function executeTarget({
       ...(input.size ? { size: input.size as `${number}x${number}` } : {}),
     });
 
+    // Per-call metadata: the merged `providerMetadata` and `responses` on
+    // the result are deprecated in AI SDK 7.
+    const { calls } = result;
     return {
       images: result.images.map((image) => ({
         dataUrl: toDataUrl(image.base64, image.mediaType),
@@ -364,10 +367,11 @@ async function executeTarget({
       modelId: entry.modelId,
       provider: entry.provider,
       providerMetadataSummary: summarizeProviderMetadata(
-        result.providerMetadata,
+        calls.length > 1
+          ? calls.map((call) => call.providerMetadata ?? null)
+          : calls[0]?.providerMetadata,
       ),
-      responseModelId:
-        result.responses[result.responses.length - 1]?.modelId ?? null,
+      responseModelId: calls.at(-1)?.response.modelId ?? null,
       status: "success" as const,
       warnings: result.warnings.map(stringifyWarning).filter(Boolean),
     };
