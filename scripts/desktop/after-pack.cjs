@@ -12,6 +12,51 @@ const {
  * @typedef {{ arch: number | string; platform: string }} PackageTarget
  */
 
+// fs.cp rewrites relative symlinks into absolute paths on the build machine
+// unless verbatimSymlinks is set, and codesign rejects any link that leaves
+// the bundle ("invalid destination for symbolic link in bundle"). Package
+// .bin directories are CLI shims the app never runs, so they are left out.
+const COPY_OPTIONS = {
+  /** @param {string} source */
+  filter: (source) => path.basename(source) !== ".bin",
+  recursive: true,
+  verbatimSymlinks: true,
+};
+
+/**
+ * Symlinks under `rootPath` that are absolute, dangling or resolve outside it.
+ * @param {string} rootPath
+ * @returns {Promise<string[]>}
+ */
+async function findEscapingSymlinks(rootPath) {
+  const root = await fs.realpath(rootPath);
+  /** @type {string[]} */
+  const issues = [];
+
+  /** @param {string} directory */
+  async function walk(directory) {
+    for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+      const entryPath = path.join(directory, entry.name);
+      if (entry.isSymbolicLink()) {
+        const linkTarget = await fs.readlink(entryPath);
+        const resolved = await fs.realpath(entryPath).catch(() => null);
+        if (
+          path.isAbsolute(linkTarget) ||
+          !resolved ||
+          (resolved !== root && !resolved.startsWith(root + path.sep))
+        ) {
+          issues.push(`${path.relative(root, entryPath)} -> ${linkTarget}`);
+        }
+      } else if (entry.isDirectory()) {
+        await walk(entryPath);
+      }
+    }
+  }
+
+  await walk(root);
+  return issues;
+}
+
 /**
  * @param {string} targetPath
  */
@@ -130,7 +175,7 @@ async function copyPackageWithDependencies(
 
       await fs.rm(targetPackagePath, { force: true, recursive: true });
       await fs.mkdir(path.dirname(targetPackagePath), { recursive: true });
-      await fs.cp(sourcePackagePath, targetPackagePath, { recursive: true });
+      await fs.cp(sourcePackagePath, targetPackagePath, COPY_OPTIONS);
     }
 
     const packageJson = JSON.parse(
@@ -345,15 +390,15 @@ async function afterPack(context) {
   await fs.mkdir(path.dirname(targetServerNodeModulesPath), {
     recursive: true,
   });
-  await fs.cp(sourceServerNodeModulesPath, targetServerNodeModulesPath, {
-    recursive: true,
-  });
+  await fs.cp(
+    sourceServerNodeModulesPath,
+    targetServerNodeModulesPath,
+    COPY_OPTIONS,
+  );
 
   await fs.rm(targetShellNodePtyPath, { force: true, recursive: true });
   await fs.mkdir(targetShellNodeModulesPath, { recursive: true });
-  await fs.cp(sourceShellNodePtyPath, targetShellNodePtyPath, {
-    recursive: true,
-  });
+  await fs.cp(sourceShellNodePtyPath, targetShellNodePtyPath, COPY_OPTIONS);
   await pruneNodePtyForPlatform({
     nodePtyPath: targetShellNodePtyPath,
     platform: context.electronPlatformName,
@@ -379,9 +424,18 @@ async function afterPack(context) {
     nodeModulesPath: targetServerNodeModulesPath,
     target,
   });
+
+  // Fail here with the offending links instead of at codesign --verify.
+  const escapingSymlinks = await findEscapingSymlinks(resourcesPath);
+  if (escapingSymlinks.length > 0) {
+    throw new Error(
+      `[desktop] packaged resources contain symlinks that leave the app:\n${escapingSymlinks.join("\n")}`,
+    );
+  }
 }
 
 module.exports = afterPack;
 module.exports.copyPackageWithDependencies = copyPackageWithDependencies;
 module.exports.copyPackagesWithDependencies = copyPackagesWithDependencies;
+module.exports.findEscapingSymlinks = findEscapingSymlinks;
 module.exports.prunePackagedServerPackages = prunePackagedServerPackages;
