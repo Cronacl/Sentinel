@@ -130,6 +130,12 @@ Engine state is kept in the Sentinel state folder: the folder that holds `SENTIN
 - `engines/model-manifest.json`: the last fetched manifest
 - `tools/`: agents Sentinel installed itself (Antigravity, ACP Registry agents)
 
+## MCP servers
+
+Your enabled MCP servers from Settings → MCP Servers are passed to every engine except Pi, which has no MCP client. Each engine gets them in its own format: ACP `mcpServers` for Cursor, Grok Build, Antigravity and registry agents; `config.mcp_servers` on Codex threads; `mcpServers` for Claude and Copilot; and an `mcp` block merged into `OPENCODE_CONFIG_CONTENT` (OpenCode 1.x) or added at runtime (OpenCode 2.x). Header and env values go only to the agent process.
+
+A change applies on the next turn: Codex reloads the thread, and OpenCode 1.x starts a new server for the instance.
+
 ## Related pages
 
 - [Engines by agent](../engines-and-runtime/agents.md)
