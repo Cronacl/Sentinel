@@ -106,7 +106,9 @@ jobs:
               dist/*.blockmap
               dist/latest-mac.yml
             platform: mac
-            runner: macos-latest
+            # Pinned: macos-latest moved to macOS 26, whose openssl rejects
+            # the signing certificate that macOS 15 accepted for v0.0.66.
+            runner: macos-15
             script: build:desktop:mac:arm64
           - arch: x64
             artifact_name: release-windows
@@ -171,14 +173,29 @@ jobs:
             "$CERT_PATH" \
             "$APPLE_SIGNING_CERT_BASE64_SECRET"
 
-          if ! openssl pkcs12 -in "$CERT_PATH" -nokeys -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" >/dev/null 2>&1; then
+          # Prefer Homebrew's OpenSSL 3 over the system LibreSSL, and retry
+          # with -legacy for certificates exported with RC2/3DES.
+          OPENSSL=openssl
+          for candidate in /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl; do
+            if [ -x "$candidate" ]; then
+              OPENSSL="$candidate"
+              break
+            fi
+          done
+          echo "Using $("$OPENSSL" version)"
+          read_p12() {
+            "$OPENSSL" pkcs12 -in "$CERT_PATH" -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" "$@" 2>"$RUNNER_TEMP/openssl.err" ||
+              "$OPENSSL" pkcs12 -legacy -in "$CERT_PATH" -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" "$@" 2>>"$RUNNER_TEMP/openssl.err"
+          }
+
+          if ! read_p12 -nokeys >/dev/null; then
             echo "APPLE_SIGNING_CERT_BASE64 or APPLE_SIGNING_CERT_PASSWORD is invalid." >&2
+            sed 's/^/openssl: /' "$RUNNER_TEMP/openssl.err" >&2
             exit 1
           fi
 
           CERT_SUBJECT="$(
-            openssl pkcs12 -in "$CERT_PATH" -clcerts -nokeys -passin "pass:$APPLE_SIGNING_CERT_PASSWORD_SECRET" 2>/dev/null \
-              | openssl x509 -noout -subject 2>/dev/null
+            read_p12 -clcerts -nokeys | "$OPENSSL" x509 -noout -subject 2>/dev/null
           )"
 
           case "$CERT_SUBJECT" in
