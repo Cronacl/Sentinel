@@ -200,6 +200,110 @@ describe("Grok errors", () => {
   });
 });
 
+describe("Grok completion failures", () => {
+  it("turns rate_limit and error completions into the turn's failure", () => {
+    const limited = grok.grokCompletionFailure("rate_limit", null);
+    expect(limited && grok.grokPromptErrorMessage(limited)).toBe(
+      "Grok usage limit reached. Try again later.",
+    );
+    expect(
+      grok.grokCompletionFailure("error", " model overloaded ")?.message,
+    ).toBe("Grok ended the turn with an error: model overloaded");
+    expect(grok.grokCompletionFailure("error", { raw: 1 })?.message).toBe(
+      "Grok ended the turn with an error.",
+    );
+    expect(
+      grok.grokCompletionFailure("error", "x".repeat(900))?.message.length,
+    ).toBeLessThan(600);
+    expect(grok.grokCompletionFailure("end_turn", null)).toBeNull();
+    expect(grok.grokCompletionFailure(null, null)).toBeNull();
+  });
+});
+
+describe("Grok plan file", () => {
+  const env = { GROK_HOME: "/opt/grok-home", HOME: "/home/dev" };
+
+  it("matches only Grok's session plan file", () => {
+    expect(
+      grok.isGrokPlanPath("/home/dev/.grok/sessions/-ws/s1/plan.md", env),
+    ).toBe(true);
+    expect(
+      grok.isGrokPlanPath("/opt/grok-home/sessions/-ws/s1/plan.md", env),
+    ).toBe(true);
+    expect(
+      grok.isGrokPlanPath("/Users/someone/.grok/sessions/-ws/s1/plan.md", {}),
+    ).toBe(true);
+    expect(grok.isGrokPlanPath("/home/dev/project/docs/plan.md", env)).toBe(
+      false,
+    );
+    expect(
+      grok.isGrokPlanPath("/home/dev/project/.grok/sessions/x/plan.md", env),
+    ).toBe(false);
+    expect(
+      grok.isGrokPlanPath("/home/dev/.grok/sessions/../../etc/plan.md", env),
+    ).toBe(false);
+    expect(grok.isGrokPlanPath("/home/dev/.grok/sessions/plan.md", env)).toBe(
+      false,
+    );
+  });
+
+  it("reads the plan from a raw write, else a diff, never a workspace plan.md", () => {
+    const planPath = "/home/dev/.grok/sessions/-ws/s1/plan.md";
+    expect(
+      grok.readGrokPlanWrite(
+        { rawInput: { content: "# Raw plan", file_path: planPath } },
+        env,
+      ),
+    ).toBe("# Raw plan");
+    expect(
+      grok.readGrokPlanWrite(
+        { content: [{ newText: "# Diff plan", path: planPath, type: "diff" }] },
+        env,
+      ),
+    ).toBe("# Diff plan");
+    expect(
+      grok.readGrokPlanWrite(
+        {
+          content: [
+            {
+              newText: "# Docs",
+              path: "/home/dev/ws/docs/plan.md",
+              type: "diff",
+            },
+          ],
+          rawInput: { content: "# Docs", path: "/home/dev/ws/docs/plan.md" },
+        },
+        env,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("Grok background tasks", () => {
+  it("reads the task id and command from the snapshot, the update, then the tool call", () => {
+    expect(
+      grok.readGrokTask({
+        update: {
+          command: "sleep 8",
+          task_id: "t1",
+          task_snapshot: { status: "completed" },
+        },
+      }),
+    ).toMatchObject({ command: "sleep 8", taskId: "t1" });
+    expect(
+      grok.readGrokTask({
+        update: { task_snapshot: { command: "ls", task_id: "t2" } },
+      }),
+    ).toMatchObject({ command: "ls", taskId: "t2" });
+    expect(
+      grok.readGrokTask({
+        update: { command: "make", tool_call_id: "call-3" },
+      }),
+    ).toMatchObject({ command: "make", taskId: "call-3" });
+    expect(grok.readGrokTask({ update: { command: "x" } })).toBeNull();
+  });
+});
+
 describe("Grok questions", () => {
   const params = {
     method: "x.ai/ask_user_question",
@@ -257,6 +361,19 @@ describe("Grok questions", () => {
       answers: { "Extras?": ["Other"], "Which approach?": ["Fast"] },
       outcome: "accepted",
     });
+  });
+
+  it("keys answers by Grok's question verbatim and shows it trimmed", () => {
+    const questions = grok.readGrokQuestions({
+      questions: [{ options: [{ label: "Yes" }], question: "  Proceed?\n" }],
+    });
+    expect(questions[0]?.question).toBe("Proceed?");
+    expect(
+      grok.toGrokAnswers(questions, {
+        additionalContext: null,
+        answers: [{ questionId: "question-1", selectedOptionIds: ["Yes"] }],
+      }).answers,
+    ).toEqual({ "  Proceed?\n": ["Yes"] });
   });
 });
 

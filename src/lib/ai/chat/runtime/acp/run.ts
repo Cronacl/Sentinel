@@ -104,6 +104,7 @@ import {
   type AcpRunControl,
 } from "./control";
 import { MISSED_TURNS_HEADING, planAcpHistory } from "./history";
+import { acpProcessHolds } from "./holds";
 import {
   createRunHandlers,
   extContext,
@@ -332,11 +333,35 @@ async function finishRun(
   activeAcpRunControls.delete(control.runId);
   control.detach?.();
   control.detach = null;
+  attachIdleHandlers(control);
   const terminals = control.terminals;
   control.terminals = null;
   void terminals?.disposeAll();
   control.lease?.release();
   control.lease = null;
+}
+
+/**
+ * Between turns only the descriptor's idle notifications are handled (a
+ * background task that finishes after the turn releases its hold); the
+ * next turn's handlers replace these.
+ */
+function attachIdleHandlers(control: AcpRunControl) {
+  const process = control.process;
+  const handlers = control.descriptor.idleNotifications;
+  if (!process?.isAlive() || !handlers) {
+    return;
+  }
+  const context = {
+    ...acpProcessHolds(process, control.poolKey),
+    log: (event: string, data?: Record<string, unknown>) =>
+      log.debug(event, { ...data, threadId: control.threadId }),
+  };
+  process.attach({
+    onNotification(method, params) {
+      handlers[method]?.(params, context);
+    },
+  });
 }
 
 /** The process died or broke: drop it so the next turn starts a fresh one. */
@@ -646,13 +671,16 @@ async function runPrompt(
     });
     // A descriptor may end the turn before the response (xAI's completion
     // notifications); the request left in flight is then ignored.
-    const early = new Promise<AcpPromptResult>((resolve) => {
-      control.completeTurn = ({ stopReason }) =>
-        resolve({
-          raw: null,
-          stopReason: readStopReason({ stopReason }),
-          usage: null,
-        });
+    // A failed completion rejects like the request would have.
+    const early = new Promise<AcpPromptResult>((resolve, reject) => {
+      control.completeTurn = (input) =>
+        "error" in input
+          ? reject(input.error)
+          : resolve({
+              raw: null,
+              stopReason: readStopReason({ stopReason: input.stopReason }),
+              usage: null,
+            });
     });
     response.catch(() => undefined);
     const result = await Promise.race([response, early]).finally(() => {
@@ -1022,6 +1050,17 @@ export async function stopAcpThreadRun(
   }
   // ACP requires answering what the agent still waits on as cancelled.
   cancelPendingInteractions(control);
+
+  if (descriptor.stopStrategy === "kill") {
+    // The agent's background work dies with its process group; the next
+    // turn starts a fresh process that loads the session.
+    await evictProcess(control);
+    await finishRun(control, {
+      errorMessage: "Generation stopped.",
+      status: "cancelled",
+    });
+    return new Response(null, { status: 204 });
+  }
 
   const settled = control.promptPromise
     ? await waitWithTimeout(

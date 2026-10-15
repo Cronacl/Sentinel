@@ -20,6 +20,7 @@ import { setupAcpRunHarness, toolParts } from "../acp/__tests__/run-harness";
 
 const h = await setupAcpRunHarness();
 const grok = await import("@/lib/ai/chat/engines/acp/agents/grok");
+const { acpProcessHoldCount } = await import("../acp/holds");
 const { grokProfile } =
   await import("../../../../../../scripts/fixtures/agents/acp/profiles");
 
@@ -294,6 +295,251 @@ describe("Grok errors, stop and launch", () => {
     expect(h.agentRequests(instance.logPath, "initialize")).toHaveLength(2);
     // The second agent loads the session the first one created.
     expect(h.agentRequests(instance.logPath, "session/load")).toHaveLength(1);
+  });
+});
+
+/** A user turn that settles only through prompt_complete. */
+function hangingCompletion(params: Record<string, unknown>): Scenario {
+  return {
+    ...grokProfile(),
+    prompts: [
+      {
+        steps: [
+          {
+            notificationMeta: { promptId: "{{promptId}}" },
+            text: "Partial.",
+            type: "text",
+          },
+          {
+            method: "_x.ai/session/prompt_complete",
+            params: { sessionId: "{{sessionId}}", ...params },
+            type: "extNotification",
+          },
+          { type: "hang" },
+        ],
+      },
+    ],
+  };
+}
+
+const backgrounded = (taskId: string) => ({
+  method: "_x.ai/task_backgrounded",
+  params: {
+    sessionId: "{{sessionId}}",
+    update: {
+      sessionUpdate: "task_backgrounded",
+      task_snapshot: { command: "sleep 30", task_id: taskId },
+    },
+  },
+  type: "extNotification" as const,
+});
+
+const taskCompleted = (taskId: string) => ({
+  method: "_x.ai/task_completed",
+  params: {
+    sessionId: "{{sessionId}}",
+    update: {
+      sessionUpdate: "task_completed",
+      task_snapshot: { status: "completed", task_id: taskId },
+    },
+  },
+  type: "extNotification" as const,
+});
+
+function liveProcess() {
+  const pool = h.getAcpProcessPool();
+  const [key] = pool.keys();
+  return key ? pool.peek(key) : null;
+}
+
+describe("Grok completion failures", () => {
+  it("fails the turn on a rate_limit completion that wins the race", async () => {
+    await run(
+      hangingCompletion({ promptId: "{{promptId}}", stopReason: "rate_limit" }),
+      "go",
+    );
+    const message = await h.waitFor(h.finished, "finish");
+
+    expect(message.metadata?.status).toBe("error");
+    expect(message.metadata?.errorMessage).toBe(
+      "Grok usage limit reached. Try again later.",
+    );
+  });
+
+  it("fails the turn on an error completion with Grok's text", async () => {
+    await run(
+      hangingCompletion({
+        agentResult: "upstream overloaded",
+        promptId: "{{promptId}}",
+        stopReason: "error",
+      }),
+      "go",
+    );
+    const message = await h.waitFor(h.finished, "finish");
+
+    expect(message.metadata?.status).toBe("error");
+    expect(message.metadata?.errorMessage).toBe(
+      "Grok ended the turn with an error: upstream overloaded",
+    );
+  });
+
+  it("settles on a prompt_complete without a prompt id for the run's session", async () => {
+    await run(hangingCompletion({ stopReason: "end_turn" }), "go");
+    const message = await h.waitFor(h.finished, "finish");
+
+    expect(message.metadata?.status).toBe("completed");
+    expect(textOf(message)).toBe("Partial.");
+  });
+
+  it("ignores a prompt_complete of another session", async () => {
+    const scenario = hangingCompletion({
+      sessionId: "other-session",
+      stopReason: "end_turn",
+    });
+    const instance = await run(scenario, "go");
+    await h.waitFor(
+      () => h.agentRequests(instance.logPath, "session/prompt").length > 0,
+      "prompt",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(h.finished()).toBeNull();
+    await h.stopAcpThreadRun(
+      descriptor,
+      h.request(""),
+      h.store.thread as never,
+    );
+    expect((await h.waitFor(h.finished, "stop")).metadata?.status).toBe(
+      "cancelled",
+    );
+  });
+});
+
+describe("Grok session replay and background holds", () => {
+  it("ignores xAI frames a session/load replays", async () => {
+    const profile = grokProfile();
+    const scenario: Scenario = {
+      ...profile,
+      session: {
+        ...profile.session,
+        load: {
+          replayExt: [
+            {
+              method: "_x.ai/session/update",
+              params: {
+                sessionId: "{{sessionId}}",
+                update: {
+                  child_session_id: "child-replayed",
+                  output: "old output",
+                  sessionUpdate: "subagent_finished",
+                  status: "completed",
+                },
+              },
+            },
+            {
+              method: backgrounded("replayed-task").method,
+              params: backgrounded("replayed-task").params,
+            },
+          ],
+        },
+      },
+    };
+    const instance = h.instanceFor(scenario);
+    await run(scenario, "one", {}, instance);
+    await h.waitFor(h.finished, "first");
+
+    // A mode change respawns the agent, which loads (replays) the session.
+    h.settings.permissionMode = "full";
+    await run(scenario, "two", {}, instance);
+    await h.waitFor(
+      () =>
+        h.store.thread?.status === "idle" &&
+        h.agentRequests(instance.logPath, "session/prompt").length === 2
+          ? true
+          : null,
+      "second",
+    );
+    expect(h.agentRequests(instance.logPath, "session/load")).toHaveLength(1);
+    const parts = JSON.stringify(toolParts(h.assistant()));
+    expect(parts).not.toContain("child-replayed");
+    expect(parts).not.toContain("replayed-task");
+    const process = liveProcess();
+    expect(process && acpProcessHoldCount(process)).toBe(0);
+  });
+
+  it("keeps the agent pinned while a background task runs past the turn", async () => {
+    const profile = grokProfile();
+    const scenario: Scenario = {
+      ...profile,
+      prompts: [
+        {
+          meta: { promptId: "{{promptId}}" },
+          steps: [
+            backgrounded("bg-1"),
+            {
+              notificationMeta: { promptId: "{{promptId}}" },
+              text: "Started.",
+              type: "text",
+            },
+          ],
+        },
+      ],
+    };
+    await run(scenario, "go");
+    const message = await h.waitFor(h.finished, "finish");
+
+    expect(message.metadata?.status).toBe("completed");
+    const process = liveProcess();
+    expect(process && acpProcessHoldCount(process)).toBe(1);
+  });
+
+  it("releases the pin when the task finishes after the turn", async () => {
+    const profile = grokProfile();
+    const scenario: Scenario = {
+      ...profile,
+      prompts: [
+        {
+          afterResponse: [{ ms: 100, type: "delay" }, taskCompleted("bg-2")],
+          meta: { promptId: "{{promptId}}" },
+          steps: [backgrounded("bg-2")],
+        },
+      ],
+    };
+    await run(scenario, "go");
+    await h.waitFor(h.finished, "finish");
+
+    const process = liveProcess();
+    expect(process).not.toBeNull();
+    await h.waitFor(
+      () => (acpProcessHoldCount(process!) === 0 ? true : null),
+      "release",
+    );
+  });
+
+  it("kills the agent on Stop so its background tasks die too", async () => {
+    const scenario: Scenario = {
+      ...grokProfile(),
+      // The prompt never answers, the cancel included: Stop must not wait
+      // the grace period for it.
+      prompts: [{ steps: [backgrounded("bg-3"), { type: "hang" }] }],
+    };
+    const instance = await run(scenario, "long");
+    await h.waitFor(
+      () => h.agentRequests(instance.logPath, "session/prompt").length > 0,
+      "prompt",
+    );
+    const process = liveProcess();
+    const started = Date.now();
+    await h.stopAcpThreadRun(
+      descriptor,
+      h.request(""),
+      h.store.thread as never,
+    );
+    const message = await h.waitFor(h.finished, "finish");
+
+    expect(message.metadata?.status).toBe("cancelled");
+    expect(Date.now() - started).toBeLessThan(900);
+    expect(process?.isAlive()).toBe(false);
+    expect(h.getAcpProcessPool().keys()).toEqual([]);
   });
 });
 

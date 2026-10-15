@@ -67,10 +67,15 @@ import {
 //   `x.ai/session/prompt_complete` and a `turn_completed` session
 //   notification for the same prompt id (released builds use `_x.ai/`
 //   names, source builds `x.ai/`); `task-completed-*` prompt ids are
-//   background wake turns and never end a user turn;
+//   background wake turns and never end a user turn; a completion with
+//   stopReason "rate_limit" or "error" fails the turn (it wins the race
+//   against the failed response, so it carries the failure);
+// - xAI frames replayed by session/load, or of another session, are ignored;
 // - `x.ai/exit_plan_mode` becomes a plan card and `x.ai/ask_user_question`
 //   a question card; background tasks and subagents get their own cards;
-// - error -32003 is the account's rate limit.
+// - error -32003 is the account's rate limit;
+// - background tasks pin the pool entry until they finish, and Stop kills
+//   the process group so they die with the turn.
 
 export const GROK_DEFAULT_MODEL_ID = "grok-build";
 export const GROK_API_KEY_ENV = "XAI_API_KEY";
@@ -82,6 +87,7 @@ const RESOLUTION_TTL_MS = 15_000;
 const FALLBACK_SHELLS = ["/bin/zsh", "/bin/bash", "/usr/bin/fish"];
 const BACKGROUND_PROMPT_PREFIXES = ["task-completed-", "subagent-completed-"];
 const ALLOW_EDITS_SESSION_OPTION_ID = "allow-edits-session";
+const AGENT_RESULT_MAX_CHARS = 500;
 const EMPTY_PLAN =
   "# No plan written yet\n\n(Grok left plan mode without writing a plan.)";
 
@@ -275,27 +281,87 @@ function stopReasonOf(value: unknown) {
   );
 }
 
+/**
+ * A completion that reports a failure (t3code xAiPromptFailure): Grok sends
+ * it before the failed session/prompt response, and the completion wins the
+ * race, so it must fail the turn itself.
+ */
+export function grokCompletionFailure(
+  stopReason: string | null,
+  agentResult: unknown,
+): Error | null {
+  if (stopReason === "rate_limit") {
+    // Named by grokPromptErrorMessage, like the -32003 response would be.
+    return Object.assign(new Error(""), { code: GROK_RATE_LIMIT_CODE });
+  }
+  if (stopReason === "error") {
+    const detail = typeof agentResult === "string" ? agentResult.trim() : "";
+    return Object.assign(
+      new Error(
+        detail
+          ? `Grok ended the turn with an error: ${
+              detail.length > AGENT_RESULT_MAX_CHARS
+                ? `${detail.slice(0, AGENT_RESULT_MAX_CHARS)}…`
+                : detail
+            }`
+          : "Grok ended the turn with an error.",
+      ),
+      { code: -32603 },
+    );
+  }
+  return null;
+}
+
+/**
+ * xAI frames worth acting on: live (a session/load replays stored ones) and
+ * of the run's session (when they name one).
+ */
+function isLiveFrame(params: unknown, context: AcpExtContext) {
+  if (context.replaying) {
+    return false;
+  }
+  const sessionId = readNonEmptyString(params, "sessionId");
+  return !sessionId || !context.sessionId || sessionId === context.sessionId;
+}
+
 /** Settles the user turn when `promptId` is the one Sentinel sent. */
 function completeIfCurrent(
   context: AcpExtContext,
   promptId: string | null,
-  stopReason: string | null,
+  completion: { agentResult: unknown; stopReason: string | null },
 ) {
   if (
     promptId &&
     !isGrokBackgroundPromptId(promptId) &&
     promptId === context.promptId
   ) {
-    context.completeTurn({ stopReason });
+    const error = grokCompletionFailure(
+      completion.stopReason,
+      completion.agentResult,
+    );
+    context.completeTurn(
+      error ? { error } : { stopReason: completion.stopReason },
+    );
   }
 }
 
 function onPromptComplete(params: unknown, context: AcpExtContext) {
-  completeIfCurrent(
-    context,
-    readNonEmptyString(params, "promptId"),
-    stopReasonOf(params),
-  );
+  if (!isLiveFrame(params, context)) {
+    return;
+  }
+  // Without a prompt id it is the run's own prompt: one prompt runs per
+  // session at a time (t3code resolveXAiPromptCompletionFallback). Never
+  // without a session id, which could be anyone's turn.
+  const promptId =
+    readNonEmptyString(params, "promptId") ??
+    (context.sessionId &&
+    readNonEmptyString(params, "sessionId") === context.sessionId
+      ? context.promptId
+      : null);
+  completeIfCurrent(context, promptId, {
+    agentResult: asRecord(params)?.agentResult,
+    stopReason: stopReasonOf(params),
+  });
 }
 
 function showSubagentFinished(update: unknown, context: AcpExtContext) {
@@ -326,11 +392,16 @@ function showSubagentFinished(update: unknown, context: AcpExtContext) {
 function handleXaiSessionUpdate(update: unknown, context: AcpExtContext) {
   switch (readString(update, "sessionUpdate")) {
     case "turn_completed":
+      // Always with a prompt id: a turn_completed never settles by session.
       completeIfCurrent(
         context,
         readNonEmptyString(update, "prompt_id") ??
           readNonEmptyString(update, "promptId"),
-        stopReasonOf(update),
+        {
+          agentResult:
+            asRecord(update)?.agent_result ?? asRecord(update)?.agentResult,
+          stopReason: stopReasonOf(update),
+        },
       );
       return true;
     case "subagent_finished":
@@ -342,7 +413,9 @@ function handleXaiSessionUpdate(update: unknown, context: AcpExtContext) {
 }
 
 function onSessionNotification(params: unknown, context: AcpExtContext) {
-  handleXaiSessionUpdate(readRecord(params, "update"), context);
+  if (isLiveFrame(params, context)) {
+    handleXaiSessionUpdate(readRecord(params, "update"), context);
+  }
 }
 
 function taskStatus(snapshot: unknown, completed: boolean) {
@@ -361,34 +434,91 @@ function taskStatus(snapshot: unknown, completed: boolean) {
   return completed ? ("completed" as const) : ("in_progress" as const);
 }
 
+/**
+ * A task lifecycle frame (t3code xAiBackgroundTaskLifecycleMutation): the
+ * snapshot's fields first, then the update's, the tool call id last.
+ */
+export function readGrokTask(params: unknown) {
+  const update = readRecord(params, "update") ?? asRecord(params);
+  const snapshot =
+    readRecord(update, "task_snapshot") ?? readRecord(update, "task");
+  const field = (...keys: string[]) => {
+    for (const source of [snapshot, update]) {
+      for (const key of keys) {
+        const value = readNonEmptyString(source, key);
+        if (value) {
+          return value;
+        }
+      }
+    }
+    return null;
+  };
+  const taskId =
+    field("task_id", "taskId") ??
+    readNonEmptyString(update, "tool_call_id") ??
+    readNonEmptyString(update, "toolCallId");
+  return taskId
+    ? {
+        command: field("command"),
+        output: field("output"),
+        snapshot: snapshot ?? update,
+        taskId,
+      }
+    : null;
+}
+
+const taskHoldId = (taskId: string) => `grok-task:${taskId}`;
+
 /** x.ai/task_backgrounded and x.ai/task_completed: a background command. */
 function onBackgroundTask(completed: boolean): AcpExtNotificationHandler {
   return (params, context) => {
-    const update = readRecord(params, "update") ?? asRecord(params);
-    const snapshot =
-      readRecord(update, "task_snapshot") ??
-      readRecord(update, "task") ??
-      update;
-    const taskId =
-      readNonEmptyString(snapshot, "task_id") ??
-      readNonEmptyString(snapshot, "taskId");
-    if (!taskId) {
+    if (!isLiveFrame(params, context)) {
       return;
     }
-    const command = readNonEmptyString(snapshot, "command");
-    const output = readNonEmptyString(snapshot, "output");
+    const task = readGrokTask(params);
+    if (!task) {
+      return;
+    }
+    const { command, output, taskId } = task;
+    // An idle reap would kill the task: the pool entry stays until it ends.
+    if (completed) {
+      context.releaseProcess(taskHoldId(taskId));
+    } else {
+      context.holdProcess(taskHoldId(taskId));
+    }
     context.mirror.upsertTool({
       ...(output ? { content: { text: output } } : {}),
       id: `grok-task:${taskId}`,
       input: { ...(command ? { command } : {}), runInBackground: true },
       kind: "execute",
       meta: { background: true, taskId },
-      status: taskStatus(snapshot, completed),
+      status: taskStatus(task.snapshot, completed),
       title: command
         ? `Background: ${command.split("\n")[0]!.slice(0, 200)}`
         : "Background task",
     });
     context.update();
+  };
+}
+
+/** A task frame between turns: only its hold changes. */
+function onIdleBackgroundTask(
+  completed: boolean,
+): NonNullable<AcpAgentDescriptor["idleNotifications"]>[string] {
+  return (params, context) => {
+    const task = readGrokTask(params);
+    if (!task) {
+      return;
+    }
+    context.log("grok_idle_background_task", {
+      completed,
+      taskId: task.taskId,
+    });
+    if (completed) {
+      context.releaseProcess(taskHoldId(task.taskId));
+    } else {
+      context.holdProcess(taskHoldId(task.taskId));
+    }
   };
 }
 
@@ -410,18 +540,89 @@ function runState(context: Pick<AcpExtContext, "mirror">) {
   return state;
 }
 
-function sniffPlanFile(update: unknown, context: AcpExtContext) {
+function normalizeFsPath(value: string) {
+  return value.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+const CANONICAL_GROK_SESSION_PLAN =
+  /^(?:\/home\/[^/]+|\/Users\/[^/]+|[a-zA-Z]:\/Users\/[^/]+)\/\.grok\/sessions\/(?:[^/]+\/)+plan\.md$/;
+
+/**
+ * Grok's session plan file, `<home>/.grok/sessions/<cwd>/<id>/plan.md` or
+ * `$GROK_HOME/sessions/…/plan.md` (t3code isGrokPlanMarkdownPath). A
+ * workspace file named plan.md (docs/plan.md, a repo-local .grok/) is not.
+ */
+export function isGrokPlanPath(
+  filePath: string | null | undefined,
+  env: Record<string, string | undefined>,
+) {
+  if (typeof filePath !== "string") {
+    return false;
+  }
+  const normalized = normalizeFsPath(filePath);
+  const win32 = process.platform === "win32";
+  const haystack = win32 ? normalized.toLowerCase() : normalized;
+  if (!haystack.endsWith("/plan.md") || normalized.split("/").includes("..")) {
+    return false;
+  }
+  const prefixes = new Set<string>();
+  for (const home of [os.homedir(), "~", env.HOME, env.USERPROFILE]) {
+    const root = home ? normalizeFsPath(home) : "";
+    if (root) prefixes.add(`${root}/.grok/sessions/`);
+  }
+  const grokHome = env.GROK_HOME ? normalizeFsPath(env.GROK_HOME) : "";
+  if (grokHome) {
+    prefixes.add(`${grokHome}/sessions/`);
+    prefixes.add(`${grokHome}/.grok/sessions/`);
+  }
+  for (const prefix of prefixes) {
+    const needle = win32 ? prefix.toLowerCase() : prefix;
+    if (!haystack.startsWith(needle)) {
+      continue;
+    }
+    // <prefix><encoded-cwd>/<session-id>/plan.md: never the prefix's own.
+    const rest = haystack.slice(needle.length);
+    if (rest !== "plan.md") {
+      return true;
+    }
+  }
+  return new RegExp(CANONICAL_GROK_SESSION_PLAN.source, win32 ? "i" : "").test(
+    haystack,
+  );
+}
+
+/**
+ * The plan text a tool call writes to Grok's plan file (t3code
+ * extractGrokPlanMarkdownFromToolCallData): a raw write, else a diff.
+ */
+export function readGrokPlanWrite(
+  update: unknown,
+  env: Record<string, string | undefined>,
+) {
+  const rawInput = readRecord(update, "rawInput");
+  const rawPath =
+    readString(rawInput, "file_path") ?? readString(rawInput, "path");
+  const rawContent = readString(rawInput, "content");
+  if (rawContent !== null && isGrokPlanPath(rawPath, env)) {
+    return rawContent;
+  }
   for (const entry of readArray(update, "content") ?? []) {
-    const filePath = readString(entry, "path");
     const text = readString(entry, "newText");
     if (
       readString(entry, "type") === "diff" &&
-      filePath &&
-      text &&
-      path.basename(filePath).toLowerCase() === "plan.md"
+      text !== null &&
+      isGrokPlanPath(readString(entry, "path"), env)
     ) {
-      runState(context).planFile = text;
+      return text;
     }
+  }
+  return null;
+}
+
+function sniffPlanFile(update: unknown, context: AcpExtContext) {
+  const text = readGrokPlanWrite(update, context.env);
+  if (text?.trim()) {
+    runState(context).planFile = text;
   }
 }
 
@@ -519,13 +720,14 @@ export function captureGrokPlan(params: unknown, context: AcpExtContext) {
   };
 }
 
+/** `text`: Grok's question verbatim, the key its answers go back under. */
 type GrokQuestion = ExternalQuestion & { text: string };
 
 export function readGrokQuestions(params: unknown): GrokQuestion[] {
   return (readArray(unwrap(params), "questions") ?? []).flatMap(
     (raw, index) => {
-      const text = readNonEmptyString(raw, "question")?.trim();
-      if (!text) {
+      const text = readString(raw, "question");
+      if (!text?.trim()) {
         return [];
       }
       return [
@@ -540,7 +742,7 @@ export function readGrokQuestions(params: unknown): GrokQuestion[] {
               ? [{ id: label, label, ...(description ? { description } : {}) }]
               : [];
           }),
-          question: text,
+          question: text.trim(),
           text,
         },
       ];
@@ -697,6 +899,10 @@ export const grokAcpAgent: AcpAgentDescriptor = {
     ),
     ...both(xai("ask_user_question"), answerGrokQuestions),
   },
+  idleNotifications: {
+    ...both(xai("task_backgrounded"), onIdleBackgroundTask(false)),
+    ...both(xai("task_completed"), onIdleBackgroundTask(true)),
+  },
   fallbackModels: [
     { id: GROK_DEFAULT_MODEL_ID, isDefault: true, name: "Grok Build" },
   ],
@@ -723,5 +929,6 @@ export const grokAcpAgent: AcpAgentDescriptor = {
   promptMeta: ({ promptId }) => ({ promptId, requestId: randomUUID() }),
   resolveBinary: resolveGrokBinary,
   session: { prefer: "load" },
+  stopStrategy: "kill",
   toolPrefix: "grok_",
 };

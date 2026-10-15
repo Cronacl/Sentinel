@@ -882,6 +882,12 @@ const app = acp
           applyTemplate(update, sessionVars(state)),
         );
       }
+      for (const ext of load.replayExt ?? []) {
+        await client.notify<unknown>(
+          ext.method,
+          applyTemplate(ext.params ?? {}, sessionVars(state)),
+        );
+      }
       return sessionPayload(state) as acp.LoadSessionResponse;
     }),
   )

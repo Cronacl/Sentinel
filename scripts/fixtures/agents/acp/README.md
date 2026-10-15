@@ -191,7 +191,7 @@ With `requireAuth`, `session/new|load|resume|fork` fail with the ACP auth-requir
 
 - `session/new` and `session/fork` hand out `ids` in order, then `mock-session-<n>`. Responses carry `modes`, `configOptions`, the legacy unstable `models` state and `meta` (as `_meta`).
 - `afterNew` updates are sent right after the `session/new` response has been written (the mock taps its own outgoing frames, so they can never overtake it).
-- `session/load` replays `load.replay` through `session/update` **before** it responds (`replayDelayMs` between updates). `knownSessionIds` makes other ids fail with `unknownSessionError` (default `-32002`); `error` fails every load. `resume` works the same without a replay.
+- `session/load` replays `load.replay` through `session/update` **before** it responds (`replayDelayMs` between updates), then sends `load.replayExt` extension notifications (`{method, params}`, like Grok's stored `_x.ai/session/update`). `knownSessionIds` makes other ids fail with `unknownSessionError` (default `-32002`); `error` fails every load. `resume` works the same without a replay.
 - `session/list` returns `list` or the sessions this process created; `session/close` cancels a running turn; `session/delete` forgets the session.
 - `session/set_mode` validates the mode id; `session/set_config_option` validates select values (grouped options are flattened) and returns the new options. `configOptionsAfterSet["<configId>=<value>"]` replaces the whole list (Cursor's per-model effort list). The `emit*` flags send the matching update after the response.
 - `session/set_model` (unstable, not in the 1.7 method tables) is registered as an extension method and validates against `models`.

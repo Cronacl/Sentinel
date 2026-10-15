@@ -218,7 +218,12 @@ describe("Cursor wire shapes", () => {
       log: () => {},
       mirror,
       completeTurn: () => {},
+      env: {},
+      holdProcess: () => {},
       promptId: "prompt-1",
+      releaseProcess: () => {},
+      replaying: false,
+      sessionId: "session-1",
       update: mock(() => {}),
     };
   }

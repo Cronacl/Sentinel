@@ -61,11 +61,33 @@ export type AcpExtContext = {
   update(): void;
   /** The running user turn's prompt id (what `promptMeta` was given). */
   readonly promptId: string;
+  /** The run's session (null until session/new|load answered). */
+  readonly sessionId: string | null;
+  /** A session/load is replaying stored history (not this turn's work). */
+  readonly replaying: boolean;
+  /** The instance environment the agent runs with. */
+  readonly env: Record<string, string | undefined>;
   /**
    * Ends the user turn now, as if session/prompt had answered with
-   * `stopReason` (xAI's completion notifications race the response).
+   * `stopReason`, or had failed with `error` (xAI's completion
+   * notifications race the response, so they carry the failure too).
    */
-  completeTurn(input: { stopReason: string | null }): void;
+  completeTurn(input: { stopReason: string | null } | { error: unknown }): void;
+} & AcpProcessHolds;
+
+/**
+ * Keeps the agent process from being reaped while work it runs on its own
+ * (Grok's background tasks) is outstanding; each hold ends on release, on
+ * the process exit, or after a hard cap.
+ */
+export type AcpProcessHolds = {
+  holdProcess(holdId: string): void;
+  releaseProcess(holdId: string): void;
+};
+
+/** What a notification that arrives between turns can do. */
+export type AcpIdleContext = AcpProcessHolds & {
+  log(event: string, data?: Record<string, unknown>): void;
 };
 
 export type AcpExtRequestHandler = (
@@ -198,8 +220,22 @@ export interface AcpAgentDescriptor {
   /** The message a failed session/prompt ends the turn with (null: its own). */
   promptErrorMessage?(error: unknown): string | null;
 
+  /**
+   * Vendor notifications handled while no turn runs (handlers are detached
+   * between turns), such as a background task finishing after the turn.
+   */
+  readonly idleNotifications?: Readonly<
+    Record<string, (params: unknown, context: AcpIdleContext) => void>
+  >;
+
   /** How long Stop waits for the prompt to end after session/cancel (default 5 s). */
   readonly cancelGraceMs?: number;
+  /**
+   * cancel: session/cancel, then kill only after `cancelGraceMs`; kill:
+   * session/cancel, then end the process at once so the agent's background
+   * work dies too (the next turn loads the session again).
+   */
+  readonly stopStrategy?: "cancel" | "kill";
   onStdoutNoise?(line: string): void;
   onStderrLine?(line: string): void;
 }

@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { AcpAgentProcess } from "@/lib/ai/chat/engines/acp/connection";
-import type { AcpAgentDescriptor } from "@/lib/ai/chat/engines/acp/descriptor";
+import type {
+  AcpAgentDescriptor,
+  AcpExtContext,
+} from "@/lib/ai/chat/engines/acp/descriptor";
 import type { ClientTerminals } from "@/lib/ai/chat/engines/acp/client-terminal";
 import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -52,7 +55,7 @@ export type AcpRunControl = ExternalRunControl & {
   allowTitleUpdate: boolean;
   cancelRequested: boolean;
   /** Ends the running prompt early (set while session/prompt is in flight). */
-  completeTurn: ((input: { stopReason: string | null }) => void) | null;
+  completeTurn: AcpExtContext["completeTurn"] | null;
   descriptor: AcpAgentDescriptor;
   detach: (() => void) | null;
   emitter: MirrorEmitter;

@@ -146,6 +146,8 @@ export type AcpMockSessionConfig = {
   load?: {
     /** Raw updates replayed through `session/update` before the response. */
     replay?: JsonObject[];
+    /** Extension notifications sent after `replay`, before the response (Grok's stored `_x.ai/session/update`). */
+    replayExt?: Array<{ method: string; params?: JsonObject }>;
     replayDelayMs?: number;
     /** When set, loading any other id fails with `unknownSessionError`. */
     knownSessionIds?: string[];

@@ -61,6 +61,7 @@ import {
   type AcpRunControl,
   type InteractionAnswer,
 } from "./control";
+import { acpProcessHolds } from "./holds";
 
 // What the agent asks the client while a turn runs: tool permissions,
 // questions (vendor extensions and form elicitations), sign-in links, file
@@ -543,7 +544,11 @@ async function handleElicitation(control: AcpRunControl, params: unknown) {
 /** The extension context vendor handlers get. */
 export function extContext(control: AcpRunControl): AcpExtContext {
   return {
+    ...(control.process
+      ? acpProcessHolds(control.process, control.poolKey)
+      : { holdProcess: () => undefined, releaseProcess: () => undefined }),
     askUser: (input) => askUser(control, input),
+    env: control.instance.env,
     interactive: control.interactive,
     log: (event, data) =>
       log.debug(event, {
@@ -553,6 +558,8 @@ export function extContext(control: AcpRunControl): AcpExtContext {
       }),
     mirror: control.mirror,
     promptId: control.runId,
+    replaying: control.replaying,
+    sessionId: control.sessionId,
     completeTurn: (input) => control.completeTurn?.(input),
     update: () => control.emitter.schedule(),
   };
