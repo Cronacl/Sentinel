@@ -2,6 +2,7 @@ import "server-only";
 
 import { pathToFileURL } from "node:url";
 
+import type { AcpPromptAttachmentPolicy } from "@/lib/ai/chat/engines/acp/descriptor";
 import type { AcpAgentCapabilityFlags } from "@/lib/ai/chat/engines/acp/schema";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
 import { readUploadedMediaUrl } from "@/lib/uploaded-media";
@@ -11,10 +12,13 @@ import { readUploadedMediaUrl } from "@/lib/uploaded-media";
 // yet), then each attachment — an image block when the agent takes images,
 // an embedded resource for text files when it takes embedded context, and
 // otherwise a resource_link to the file Sentinel already stored on disk.
+// A descriptor's attachment policy adds audio blocks, PDFs as links, and
+// byte limits: a file over its limit (or the prompt's total) goes as a link
+// instead of being embedded.
 
 export type AcpContentBlock =
   | { text: string; type: "text" }
-  | { data: string; mimeType: string; type: "image" }
+  | { data: string; mimeType: string; type: "audio" | "image" }
   | {
       mimeType?: string;
       name: string;
@@ -68,16 +72,38 @@ function looksTextual(mediaType: string, data: Buffer) {
   return TEXT_MEDIA_TYPE.test(mediaType) && !data.subarray(0, 4096).includes(0);
 }
 
+function baseMediaType(mediaType: string) {
+  return (mediaType.split(";", 1)[0] ?? "").trim().toLowerCase();
+}
+
 export async function buildAcpPromptBlocks(input: {
   capabilities: Pick<
     AcpAgentCapabilityFlags,
     "embeddedContext" | "imagePrompts"
-  >;
+  > &
+    Partial<Pick<AcpAgentCapabilityFlags, "audioPrompts">>;
   forceImagePrompts?: boolean;
   load?: AttachmentLoader;
   message: ThreadUIMessage | null;
+  /** Called with the stored path of every attachment (client fs reads). */
+  onAttachmentPath?: (path: string) => void;
+  policy?: AcpPromptAttachmentPolicy;
   text: string;
 }): Promise<AcpContentBlock[]> {
+  const policy = input.policy ?? {};
+  let nativeBytes = 0;
+  /** Whether `bytes` more fit the limit and the prompt's total. */
+  const fits = (bytes: number, limit: number | undefined) => {
+    if (limit != null && bytes > limit) return false;
+    if (
+      policy.maxTotalBytes != null &&
+      nativeBytes + bytes > policy.maxTotalBytes
+    ) {
+      return false;
+    }
+    nativeBytes += bytes;
+    return true;
+  };
   const blocks: AcpContentBlock[] = [];
   if (input.text.trim()) {
     blocks.push({ text: input.text, type: "text" });
@@ -96,10 +122,21 @@ export async function buildAcpPromptBlocks(input: {
       notes.push(`Attachment ${name} could not be read.`);
       continue;
     }
+    if (loaded.path) {
+      input.onAttachmentPath?.(loaded.path);
+    }
     const uri = loaded.path ? pathToFileURL(loaded.path).toString() : null;
+    const mediaType = baseMediaType(part.mediaType);
+    const size = loaded.data.byteLength;
 
     if (part.mediaType.startsWith("image/")) {
-      if (input.capabilities.imagePrompts || input.forceImagePrompts) {
+      const supported =
+        !policy.imageMimeTypes || policy.imageMimeTypes.includes(mediaType);
+      if (
+        (input.capabilities.imagePrompts || input.forceImagePrompts) &&
+        supported &&
+        fits(size, policy.maxImageBytes)
+      ) {
         blocks.push({
           data: loaded.data.toString("base64"),
           mimeType: part.mediaType,
@@ -107,9 +144,25 @@ export async function buildAcpPromptBlocks(input: {
         });
         continue;
       }
+    } else if (part.mediaType.startsWith("audio/")) {
+      if (
+        policy.audio &&
+        input.capabilities.audioPrompts &&
+        fits(size, policy.maxAudioBytes)
+      ) {
+        blocks.push({
+          data: loaded.data.toString("base64"),
+          mimeType: mediaType,
+          type: "audio",
+        });
+        continue;
+      }
+    } else if (policy.pdfAsLink && mediaType === "application/pdf") {
+      // Falls through to the resource_link below.
     } else if (
       input.capabilities.embeddedContext &&
-      looksTextual(part.mediaType, loaded.data)
+      looksTextual(part.mediaType, loaded.data) &&
+      fits(size, policy.maxTextBytes)
     ) {
       blocks.push({
         resource: {

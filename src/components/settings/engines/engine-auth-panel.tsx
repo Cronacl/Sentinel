@@ -141,6 +141,81 @@ function CredentialsForm({
   );
 }
 
+/** A sign-in page, and (sign-ins on another computer) its pasted redirect. */
+function BrowserStep({
+  cancelButton,
+  interaction,
+  isPending,
+  message,
+  onRespond,
+}: {
+  cancelButton: ReactNode;
+  interaction: Extract<EngineAuthInteraction, { type: "browser" }>;
+  isPending: boolean;
+  message: string | null;
+  onRespond: (response: EngineAuthResponse) => void;
+}) {
+  const [callbackUrl, setCallbackUrl] = useState("");
+  const pasted = callbackUrl.trim();
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <FlowMessage>{message}</FlowMessage>
+      <div className="flex items-center justify-end gap-1.5">
+        <CopyButton text={interaction.url} title="Copy sign-in link" />
+        {cancelButton}
+        <Button
+          className={ACTION_BUTTON}
+          onPress={() => openSignInPage(interaction.url)}
+          size="sm"
+        >
+          Open sign-in page
+        </Button>
+      </div>
+      {interaction.acceptsCallback ? (
+        <form
+          className="flex items-end gap-1.5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (pasted) {
+              onRespond({
+                action: "accept",
+                callbackUrl: pasted,
+                type: "browser",
+              });
+            }
+          }}
+        >
+          <TextField
+            className="min-w-0 flex-1"
+            name="callbackUrl"
+            onChange={setCallbackUrl}
+            value={callbackUrl}
+          >
+            <Label className="text-[11px]">Redirect address</Label>
+            <Input
+              autoComplete="off"
+              placeholder="http://127.0.0.1:…"
+              spellCheck={false}
+              variant="secondary"
+            />
+          </TextField>
+          <Button
+            className={ACTION_BUTTON}
+            isDisabled={!pasted}
+            isPending={isPending}
+            size="sm"
+            type="submit"
+            variant="secondary"
+          >
+            Send
+          </Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
 /** The running flow's current step (exported for tests). */
 export function EngineAuthFlowStep({
   embedTerminal,
@@ -192,20 +267,14 @@ export function EngineAuthFlowStep({
   switch (interaction.type) {
     case "browser":
       return (
-        <div className="mt-2 space-y-1.5">
-          <FlowMessage>{state.message}</FlowMessage>
-          <div className="flex items-center justify-end gap-1.5">
-            <CopyButton text={interaction.url} title="Copy sign-in link" />
-            {cancelButton}
-            <Button
-              className={ACTION_BUTTON}
-              onPress={() => openSignInPage(interaction.url)}
-              size="sm"
-            >
-              Open sign-in page
-            </Button>
-          </div>
-        </div>
+        <BrowserStep
+          cancelButton={cancelButton}
+          interaction={interaction}
+          isPending={isResponding}
+          key={interaction.id}
+          message={state.message}
+          onRespond={onRespond}
+        />
       );
 
     case "device-code":

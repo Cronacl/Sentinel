@@ -144,6 +144,14 @@ type PendingInteraction =
     }
   | {
       id: string;
+      interaction: EngineAuthInteraction;
+      kind: "browser";
+      message: string;
+      onCallback(callbackUrl: string): Promise<void>;
+      reject(error: unknown): void;
+    }
+  | {
+      id: string;
       kind: "terminal";
       reject(error: unknown): void;
       resolve(result: { exitCode: number | null }): void;
@@ -575,16 +583,38 @@ export function createEngineAuthFlowStore(
         }
       },
 
-      showBrowser(url) {
+      showBrowser(url, options) {
         assertActive(record);
         if (!isSafeAuthUrl(url)) {
           throw new EngineAuthError("The sign-in page address is not valid.");
         }
-        wait(
-          record,
-          { id: nextInteractionId(record), type: "browser", url },
-          "Open the sign-in page to continue.",
-        );
+        const id = nextInteractionId(record);
+        const onCallback = options?.onCallback;
+        if (!onCallback) {
+          wait(
+            record,
+            { id, type: "browser", url },
+            "Open the sign-in page to continue.",
+          );
+          return;
+        }
+        const interaction: EngineAuthInteraction = {
+          acceptsCallback: true,
+          id,
+          type: "browser",
+          url,
+        };
+        const message =
+          "Open the sign-in page. If Sentinel runs on another computer, paste the address the page sent you to.";
+        record.pending = {
+          id,
+          interaction,
+          kind: "browser",
+          message,
+          onCallback,
+          reject: () => {},
+        };
+        wait(record, interaction, message);
       },
 
       showDeviceCode({ url, userCode }) {
@@ -834,6 +864,32 @@ export function createEngineAuthFlowStore(
           phase: "verifying",
         });
         pending.resolve(values);
+      } else if (
+        pending.kind === "browser" &&
+        response.type === "browser" &&
+        response.callbackUrl
+      ) {
+        // The redirect carries a one-time code: never shown back.
+        record.secrets.add(response.callbackUrl);
+        record.pending = null;
+        update(record, {
+          interaction: null,
+          message: "Finishing the sign-in.",
+          phase: "verifying",
+        });
+        try {
+          await pending.onCallback(response.callbackUrl);
+        } catch (error) {
+          const message =
+            error instanceof EngineAuthError
+              ? error.message
+              : "That address could not be used. Paste it again.";
+          if (!record.done && isCurrent(record)) {
+            record.pending = pending;
+            wait(record, pending.interaction, redact(record, message));
+          }
+          throw new EngineAuthFlowError("invalid", redact(record, message));
+        }
       } else if (pending.kind === "terminal" && response.type === "terminal") {
         revokeTicket(record);
         record.pending = null;

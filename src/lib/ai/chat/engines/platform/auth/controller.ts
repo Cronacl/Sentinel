@@ -82,8 +82,16 @@ export type EngineAuthFlowContext = {
   /** Stores values as sensitive (encrypted) instance variables. */
   saveInstanceSecrets(values: Record<string, string>): Promise<void>;
   setMessage(message: string): void;
-  /** Shows a sign-in page to open. */
-  showBrowser(url: string): void;
+  /**
+   * Shows a sign-in page to open. With `onCallback`, the user can also
+   * paste the address the page redirected to (a sign-in on another
+   * computer): the store passes it to `onCallback`, which validates and
+   * delivers it, or throws EngineAuthError to have the user paste again.
+   */
+  showBrowser(
+    url: string,
+    options?: { onCallback?(callbackUrl: string): Promise<void> },
+  ): void;
   /** Shows a device code to enter on a sign-in page. */
   showDeviceCode(input: { url: string; userCode: string }): void;
 };

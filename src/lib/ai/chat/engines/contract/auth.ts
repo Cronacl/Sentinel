@@ -126,6 +126,12 @@ export const engineAuthResponseSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     action: z.enum(["accept", "decline"]),
+    /** The redirect address pasted back (interactions with acceptsCallback). */
+    callbackUrl: z
+      .string()
+      .min(1)
+      .max(MAX_ENGINE_AUTH_CREDENTIAL_LENGTH)
+      .optional(),
     type: z.literal("browser"),
   }),
   z.object({

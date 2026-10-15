@@ -97,7 +97,7 @@ const homeConfigSchema = baseInstanceConfigSchema;
 
 const binaryConfigSchema = baseInstanceConfigSchema.omit({ homePath: true });
 
-const antigravityConfigSchema = z.looseObject({
+const antigravityConfigSchema = baseInstanceConfigSchema.extend({
   authMethodId: z.string().trim().min(1).optional(),
   gcpLocation: z.string().trim().min(1).optional(),
   gcpProject: z.string().trim().min(1).optional(),
@@ -357,18 +357,30 @@ export const DRIVER_CATALOG = {
     transport: "acp",
   },
   antigravity: {
-    capabilities: { ...EXTERNAL_CAPABILITIES, supportsPlanMode: "acp-mode" },
+    capabilities: {
+      ...EXTERNAL_CAPABILITIES,
+      // The session mode carries the permission mode (yolo, auto_edit,
+      // default); Antigravity has no plan mode of its own to drive.
+      permissionModes: ["default", "accept_edits", "full"],
+      reportsSlashCommands: true,
+      supportsImages: true,
+      supportsMcpInjection: true,
+      supportsPlanMode: false,
+      supportsUserInput: true,
+    },
     config: antigravityConfigSchema,
     defaultInstance: true,
-    description: "Use Google Antigravity through its ACP agent.",
+    description:
+      "Use Google Antigravity through its ACP server, installed by Sentinel.",
+    docsUrl: "https://antigravity.google",
     homeEnvVar: "GEMINI_HOME",
     kind: "antigravity",
     label: "Antigravity",
-    legacyEnvPathKeys: [],
+    legacyEnvPathKeys: ["SENTINEL_ANTIGRAVITY_PATH"],
     multiInstance: true,
     runtime: "external",
     stability: "experimental",
-    status: "planned",
+    status: "available",
     toolPrefix: "antigravity_",
     transport: "acp",
   },

@@ -128,6 +128,23 @@ describe("EngineAuthFlowStep", () => {
     expect(markup).toContain("Open sign-in page");
   });
 
+  it("offers a redirect field only for sign-ins that take one back", () => {
+    const page = {
+      id: "flow-1:4",
+      type: "browser",
+      url: "https://accounts.google.com/o/oauth2/v2/auth?x=1",
+    } satisfies EngineAuthInteraction;
+    const plain = render(waiting(page, "Open the sign-in page."));
+    expect(plain).toContain("Open sign-in page");
+    expect(plain).not.toContain("Redirect address");
+
+    const withCallback = render(
+      waiting({ ...page, acceptsCallback: true }, "Open the sign-in page."),
+    );
+    expect(withCallback).toContain("Redirect address");
+    expect(withCallback).toContain("Send");
+  });
+
   it("shows progress while verifying", () => {
     const markup = render({
       ...waiting(terminal, "Checking the sign-in…"),

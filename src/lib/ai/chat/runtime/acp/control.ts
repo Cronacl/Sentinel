@@ -49,6 +49,8 @@ export type AcpRunGrants = {
 };
 
 export type AcpRunControl = ExternalRunControl & {
+  /** Stored files of the turn's attachments, readable through client fs. */
+  attachmentPaths?: string[];
   /** Aborts setup requests (initialize, auth, session) on Stop. */
   abort: AbortController;
   /** The thread was created by this turn: the agent may title it. */

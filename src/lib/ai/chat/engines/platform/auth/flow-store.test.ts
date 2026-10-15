@@ -624,3 +624,80 @@ describe("sign-out", () => {
     });
   });
 });
+
+describe("browser flows with a pasted redirect", () => {
+  it("passes the pasted address to the driver, asks again when it is refused, and never echoes it", async () => {
+    const { events, store } = setup();
+    const pasted = [];
+    let finish = () => {};
+    const done = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const input = startInput(async (_instance, _methodId, context) => {
+      context.showBrowser("https://accounts.google.com/o/oauth2/v2/auth?x=1", {
+        async onCallback(callbackUrl) {
+          pasted.push(callbackUrl);
+          if (!callbackUrl.includes("code=")) {
+            throw new EngineAuthError("That is not the redirect address.");
+          }
+          finish();
+        },
+      });
+      await done;
+    });
+
+    const waiting = await store.start(input);
+    expect(waiting.interaction).toMatchObject({
+      acceptsCallback: true,
+      type: "browser",
+    });
+    const respond = (callbackUrl) =>
+      store.respond({
+        flowId: waiting.flowId,
+        instanceId: "claude",
+        interactionId: waiting.interaction.id,
+        response: { action: "accept", callbackUrl, type: "browser" },
+        userId: "user-1",
+      });
+
+    await expect(respond("http://127.0.0.1:4567/?state=s")).rejects.toThrow(
+      EngineAuthFlowError,
+    );
+    expect(store.get("user-1", "claude")).toMatchObject({
+      interaction: { acceptsCallback: true },
+      message: "That is not the redirect address.",
+      phase: "waiting",
+    });
+
+    const callback = "http://127.0.0.1:4567/?state=s&code=one-time-code-1";
+    const finished = await respond(callback);
+    expect(finished.phase).toBe("succeeded");
+    expect(pasted).toEqual(["http://127.0.0.1:4567/?state=s", callback]);
+    expect(
+      JSON.stringify([events, store.get("user-1", "claude")]),
+    ).not.toContain("one-time-code-1");
+  });
+
+  it("rejects a pasted address for a browser step that takes none", async () => {
+    const { store } = setup();
+    const waiting = await store.start(
+      startInput(async (_instance, _methodId, context) => {
+        context.showBrowser("https://auth.example.com/authorize?x=1");
+        await new Promise(() => {});
+      }),
+    );
+    await expect(
+      store.respond({
+        flowId: waiting.flowId,
+        instanceId: "claude",
+        interactionId: waiting.interaction.id,
+        response: {
+          action: "accept",
+          callbackUrl: "http://127.0.0.1:1/?code=x",
+          type: "browser",
+        },
+        userId: "user-1",
+      }),
+    ).rejects.toThrow(EngineAuthFlowError);
+  });
+});

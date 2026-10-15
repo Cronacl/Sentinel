@@ -12,7 +12,11 @@ import {
 } from "@/lib/runtime/process/pool";
 
 import { AcpAgentProcess, type AcpProcessOptions } from "./connection";
-import type { AcpAgentDescriptor, AcpResolvedBinary } from "./descriptor";
+import type {
+  AcpAgentDescriptor,
+  AcpLaunchPurpose,
+  AcpResolvedBinary,
+} from "./descriptor";
 
 // Starting agent processes, and the pool that keeps one per (instance,
 // thread) alive between turns (design §1.4, §2.3). A thread's process is
@@ -50,6 +54,30 @@ export function buildAcpLaunch(
   };
 }
 
+/** The descriptor's own launch (prepareLaunch), else buildAcpLaunch. */
+export async function resolveAcpLaunch(
+  descriptor: Pick<
+    AcpAgentDescriptor,
+    "launchArgs" | "launchArgsFor" | "prepareLaunch"
+  >,
+  instance: ResolvedEngineInstance,
+  binary: AcpResolvedBinary,
+  cwd: string,
+  purpose: AcpLaunchPurpose,
+  options: { permissionMode?: PermissionMode } = {},
+): Promise<AcpLaunch> {
+  return descriptor.prepareLaunch
+    ? await descriptor.prepareLaunch({ binary, cwd, instance, purpose })
+    : buildAcpLaunch(descriptor, instance, binary, cwd, options);
+}
+
+const LAUNCH_KEY = "acp.launch";
+
+/** The launch a process was started with (set by startAcpProcess). */
+export function getAcpProcessLaunch(process: AcpAgentProcess) {
+  return (process.state.get(LAUNCH_KEY) as AcpLaunch | undefined) ?? null;
+}
+
 /** What makes a running process unsuitable for a turn when it changes. */
 export function acpLaunchFingerprint(launch: AcpLaunch) {
   const env = Object.entries(launch.env)
@@ -68,16 +96,27 @@ export function startAcpProcess(
     "instanceId" | "register" | "spawn" | "timers"
   > = {},
 ) {
-  return AcpAgentProcess.start({
+  // Lines only arrive after the process exists: the handlers get it.
+  let started: AcpAgentProcess | null = null;
+  const withProcess = (
+    handler: ((line: string, process: AcpAgentProcess) => void) | undefined,
+  ) =>
+    handler
+      ? (line: string) => {
+          if (started) handler.call(descriptor, line, started);
+        }
+      : undefined;
+  started = AcpAgentProcess.start({
     ...options,
     args: launch.args,
     command: launch.command,
     cwd: launch.cwd,
     env: launch.env,
     label: descriptor.processLabel,
+    normalizeInbound: descriptor.normalizeInbound?.bind(descriptor),
     notificationMethods: Object.keys(descriptor.extNotifications ?? {}),
-    onStderrLine: descriptor.onStderrLine,
-    onStdoutNoise: descriptor.onStdoutNoise,
+    onStderrLine: withProcess(descriptor.onStderrLine),
+    onStdoutNoise: withProcess(descriptor.onStdoutNoise),
     // Vendor methods some agents send as requests and others as
     // notifications are served both ways.
     requestMethods: [
@@ -85,6 +124,8 @@ export function startAcpProcess(
       ...Object.keys(descriptor.extNotifications ?? {}),
     ],
   });
+  started.state.set(LAUNCH_KEY, launch);
+  return started;
 }
 
 export function acpPoolKey(instanceId: string, threadId: string) {

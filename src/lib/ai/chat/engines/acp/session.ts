@@ -114,7 +114,13 @@ export async function initializeAcpAgent(
   );
   const version = (raw as { protocolVersion?: unknown } | null)
     ?.protocolVersion;
-  if (version !== process.methods.protocolVersion) {
+  if (
+    version !== process.methods.protocolVersion &&
+    !(
+      typeof version === "number" &&
+      input.descriptor.acceptedProtocolVersions?.includes(version)
+    )
+  ) {
     throw new AcpProtocolError(
       `${input.descriptor.processLabel} answered ACP protocol version ${String(
         version,
@@ -126,7 +132,7 @@ export async function initializeAcpAgent(
     agentInfo: readAgentInfo(raw),
     authMethods: readAuthMethods(raw),
     capabilities: readAgentCapabilities(raw),
-    protocolVersion: version,
+    protocolVersion: version as number,
     raw,
   };
   process.initializeResult = raw;
@@ -223,19 +229,25 @@ async function authenticate(
   options: AcpAuthOptions,
 ) {
   options.onAuthenticating?.(method);
+  const timeoutMs = descriptor.auth.timeoutMs ?? ACP_AUTHENTICATE_TIMEOUT_MS;
   try {
-    await process.request(
-      process.methods.authenticate,
-      { methodId: method.id },
-      {
+    if (descriptor.auth.authenticate) {
+      await descriptor.auth.authenticate(process, method, {
         signal: options.signal,
-        timeoutMs: descriptor.auth.timeoutMs ?? ACP_AUTHENTICATE_TIMEOUT_MS,
-      },
-    );
+        timeoutMs,
+      });
+    } else {
+      await process.request(
+        process.methods.authenticate,
+        { methodId: method.id },
+        { signal: options.signal, timeoutMs },
+      );
+    }
   } catch (error) {
     if (
       error instanceof AcpProcessExitedError ||
-      error instanceof AcpRequestCancelledError
+      error instanceof AcpRequestCancelledError ||
+      error instanceof AcpAuthRequiredError
     ) {
       throw error;
     }
@@ -383,9 +395,13 @@ export async function openAcpSession(
   const guarded = <T>(operation: () => Promise<T>) =>
     withLazyAuth(process, input.descriptor, input.init, input.auth, operation);
 
+  // A headless method (Grok's API key) or a descriptor's own authenticate
+  // never waits on a browser, so they also run for unattended runs.
   if (
     input.descriptor.auth.strategy === "eager" &&
-    (input.auth.interactive || input.descriptor.auth.headless === true)
+    (input.auth.interactive ||
+      input.descriptor.auth.headless === true ||
+      input.descriptor.auth.authenticate)
   ) {
     const method = authMethodFor(input.descriptor, input.init, input.auth.env);
     if (method?.kind === "agent") {
@@ -581,6 +597,28 @@ async function setMode(
   if (session.modes) {
     session.modes.currentModeId = modeId;
   }
+}
+
+/**
+ * Puts the session in the descriptor's mode for a permission mode
+ * (Antigravity: yolo, auto_edit, default) when it is not there yet and the
+ * session lists it (or lists no modes at all).
+ */
+export async function applyAcpSessionMode(
+  process: AcpAgentProcess,
+  session: AcpLiveSession,
+  modeId: string | null,
+  signal?: AbortSignal,
+) {
+  if (!modeId || currentModeId(session) === modeId) {
+    return false;
+  }
+  const available = session.modes?.availableModes;
+  if (available && !available.some((mode) => mode.id === modeId)) {
+    return false;
+  }
+  await setMode(process, session, modeId, signal);
+  return true;
 }
 
 /**

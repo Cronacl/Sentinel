@@ -447,6 +447,7 @@ function fsPolicy(control: AcpRunControl): ClientFsPolicy {
         kind: "edit",
         title: `Write ${path}`,
       }),
+    readRoots: control.attachmentPaths ?? [],
     roots: [control.workspaceRoot],
   };
 }
@@ -599,8 +600,15 @@ export function createRunHandlers(
 
     async onRequest(method, params) {
       switch (method) {
-        case methods.requestPermission:
-          return await handlePermissionRequest(control, params);
+        case methods.requestPermission: {
+          const own = descriptor.handlePermissionRequest?.(
+            params,
+            extContext(control),
+          );
+          return own
+            ? await own
+            : await handlePermissionRequest(control, params);
+        }
         case methods.elicitationCreate:
           return await handleElicitation(control, params);
         case methods.fsReadTextFile:

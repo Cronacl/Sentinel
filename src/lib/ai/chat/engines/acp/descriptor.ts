@@ -3,7 +3,10 @@ import type {
   EngineInstallSource,
   ResolvedEngineInstance,
 } from "@/lib/ai/chat/engines/contract";
-import type { ExternalAssistantMirror } from "@/lib/ai/chat/runtime/external/mirror";
+import type {
+  ExternalAssistantMirror,
+  ExternalToolKind,
+} from "@/lib/ai/chat/runtime/external/mirror";
 import type {
   PermissionDisposition,
   PermissionDispositionInput,
@@ -12,10 +15,13 @@ import type {
   ExternalQuestion,
   ExternalQuestionResponse,
 } from "@/lib/ai/chat/runtime/external/user-input";
+import type { ReasoningEffort } from "@/lib/ai/providers/models";
 import type { PermissionMode } from "@/server/db/enums";
+import type * as acp from "@agentclientprotocol/sdk";
 
 import type { AcpAgentProcess } from "./connection";
-import type { AcpCatalogModel } from "./config-options";
+import type { AcpCatalogModel, AcpConfigOptionInfo } from "./config-options";
+import type { AcpLaunch } from "./launch";
 import type {
   AcpAuthMethodInfo,
   AcpPermissionOptionInfo,
@@ -95,6 +101,37 @@ export type AcpExtRequestHandler = (
   context: AcpExtContext,
 ) => Promise<unknown>;
 
+/** Where a descriptor's process is launched for. */
+export type AcpLaunchPurpose = "auth" | "probe" | "session";
+
+/** Per-attachment byte limits for native prompt content (larger files go as links). */
+export type AcpPromptAttachmentPolicy = {
+  /** Send audio blocks (when the agent advertises audio prompts). */
+  readonly audio?: boolean;
+  /** Image MIME types sent as image blocks (default: every image/*). */
+  readonly imageMimeTypes?: readonly string[];
+  readonly maxAudioBytes?: number;
+  readonly maxImageBytes?: number;
+  readonly maxTextBytes?: number;
+  /** All native (image, audio, embedded) attachments of one prompt. */
+  readonly maxTotalBytes?: number;
+  /** PDFs as resource_link blocks to the stored file. */
+  readonly pdfAsLink?: boolean;
+};
+
+/** A status the descriptor reads without spawning its agent (probe.mode "static"). */
+export type AcpStaticProbe = {
+  auth: {
+    method: string | null;
+    status: "authenticated" | "unauthenticated" | "unknown";
+  };
+  /** The agent takes image prompts. */
+  imagePrompts: boolean;
+  message?: string;
+  /** The session can be continued natively (load or resume). */
+  resumable: boolean;
+};
+
 export type AcpExtNotificationHandler = (
   params: unknown,
   context: AcpExtContext,
@@ -126,6 +163,23 @@ export interface AcpAgentDescriptor {
   launchArgsFor?(input: { permissionMode: PermissionMode }): readonly string[];
   /** Forget cached binary resolutions. */
   invalidate?(): void;
+  /**
+   * Builds the process launch instead of buildAcpLaunch (Antigravity: a
+   * curated environment and a private profile prepared first).
+   */
+  prepareLaunch?(input: {
+    binary: AcpResolvedBinary;
+    cwd: string;
+    instance: ResolvedEngineInstance;
+    purpose: AcpLaunchPurpose;
+  }): Promise<AcpLaunch>;
+  /**
+   * Protocol versions accepted in the initialize answer besides the one
+   * Sentinel speaks (Antigravity answers 2 with a v1-shaped body).
+   */
+  readonly acceptedProtocolVersions?: readonly number[];
+  /** Rewrites every inbound frame before it is routed (null drops it). */
+  normalizeInbound?(message: acp.AnyMessage): acp.AnyMessage | null;
 
   /** `clientCapabilities._meta` (Cursor: parameterizedModelPicker). */
   readonly clientCapabilitiesMeta?: JsonRecord;
@@ -141,6 +195,8 @@ export interface AcpAgentDescriptor {
   readonly cancelMeta?: JsonRecord;
   /** Send images even when promptCapabilities.image is false. */
   readonly forceImagePrompts?: boolean;
+  /** Limits and extra kinds for native attachments (default: no limits, no audio). */
+  readonly promptAttachments?: AcpPromptAttachmentPolicy;
 
   readonly auth: {
     /**
@@ -165,6 +221,16 @@ export interface AcpAgentDescriptor {
     readonly timeoutMs?: number;
     /** How to sign in outside Sentinel, for error messages. */
     loginHint?(binaryPath: string | null): string;
+    /**
+     * Runs `authenticate` itself (Antigravity: fails fast when the agent
+     * starts a browser sign-in inside a chat run). Throws
+     * AcpAuthRequiredError when the user has to sign in elsewhere.
+     */
+    authenticate?(
+      process: AcpAgentProcess,
+      method: AcpAuthMethodInfo,
+      options: { signal?: AbortSignal; timeoutMs: number },
+    ): Promise<void>;
   };
   readonly session: { readonly prefer: "load" | "resume" };
   /**
@@ -174,6 +240,30 @@ export interface AcpAgentDescriptor {
    */
   readonly planMode: "hidden" | "native" | "preamble";
   readonly permissionModes: readonly PermissionMode[];
+  /**
+   * The agent's session mode for a permission mode, set with
+   * session/set_mode before each prompt (Antigravity: full → yolo). Null
+   * leaves the mode alone.
+   */
+  permissionModeId?(mode: PermissionMode): string | null;
+  /**
+   * Rewrites the turn's model selection before it is applied (aliases that
+   * must never reach the agent, effort encoded in model ids).
+   */
+  resolveModelSelection?(
+    selection: { effort: ReasoningEffort | null; modelId: string | null },
+    session: { configOptions: readonly AcpConfigOptionInfo[] },
+  ): { effort: ReasoningEffort | null; modelId: string | null };
+  /**
+   * Answers a session/request_permission itself (Antigravity's native
+   * questions share the method); null leaves it to the approval flow.
+   */
+  handlePermissionRequest?(
+    params: unknown,
+    context: AcpExtContext,
+  ): Promise<unknown> | null;
+  /** The tool kind of a tool_call(_update) when the wire kind misleads (subagents). */
+  toolKind?(update: JsonRecord): ExternalToolKind | null;
   /**
    * Settles one permission request instead of the shared policy
    * (runtime/external/permissions.ts); null leaves it to the policy.
@@ -192,6 +282,15 @@ export interface AcpAgentDescriptor {
   readonly probe: {
     /** Bound for one full probe (spawn, initialize, model list). */
     readonly timeoutMs: number;
+    /**
+     * static: never spawn the agent; `readStatic` tells the status from
+     * what is on disk (Antigravity unpacks ~1 GB per launch).
+     */
+    readonly mode?: "spawn" | "static";
+    readStatic?(
+      instance: ResolvedEngineInstance,
+      binary: AcpResolvedBinary,
+    ): Promise<AcpStaticProbe>;
     /**
      * Models without a session (Cursor: cursor/list_available_models).
      * Throws the agent's auth error when signed out. Null: unknown.
@@ -236,6 +335,7 @@ export interface AcpAgentDescriptor {
    * work dies too (the next turn loads the session again).
    */
   readonly stopStrategy?: "cancel" | "kill";
-  onStdoutNoise?(line: string): void;
-  onStderrLine?(line: string): void;
+  /** Non-JSON stdout lines, with the process that wrote them. */
+  onStdoutNoise?(line: string, process: AcpAgentProcess): void;
+  onStderrLine?(line: string, process: AcpAgentProcess): void;
 }

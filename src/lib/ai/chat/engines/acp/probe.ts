@@ -18,9 +18,9 @@ import {
   type AcpCatalog,
 } from "./catalog-cache";
 import { toAcpEngineModels, type AcpCatalogModel } from "./config-options";
-import type { AcpAgentDescriptor } from "./descriptor";
+import type { AcpAgentDescriptor, AcpResolvedBinary } from "./descriptor";
 import { getErrorMessage, isAuthRequiredError } from "./errors";
-import { buildAcpLaunch, startAcpProcess } from "./launch";
+import { resolveAcpLaunch, startAcpProcess } from "./launch";
 import { initializeAcpAgent, type AcpInitializeInfo } from "./session";
 
 // Status for ACP agents, per the driver contract's probe depths (design
@@ -89,6 +89,52 @@ function capabilityOverrides(init: AcpInitializeInfo) {
   };
 }
 
+/**
+ * probe.mode "static": the status from what is on disk, never a spawn.
+ * Models and commands come from the catalog runs learned, else the
+ * descriptor's fallback models.
+ */
+async function probeStatically(
+  descriptor: AcpAgentDescriptor,
+  instance: ResolvedEngineInstance,
+  binary: AcpResolvedBinary,
+  install: EngineProbeResult["install"],
+  catalog: AcpCatalog | null,
+): Promise<EngineProbeResult> {
+  try {
+    const status = await descriptor.probe.readStatic!(instance, binary);
+    const models =
+      catalog && catalog.models.length > 0
+        ? catalog.models
+        : [...(descriptor.fallbackModels ?? [])];
+    const result: EngineProbeResult = {
+      auth: { ...UNKNOWN_AUTH, ...status.auth },
+      capabilityOverrides: {
+        supportsImages: status.imagePrompts,
+        supportsResume: status.resumable ? "native" : "replay",
+      },
+      defaultModelId: models.find((model) => model.isDefault)?.id ?? null,
+      install,
+      ...(status.message ? { message: status.message } : {}),
+      models: toAcpEngineModels(models, { imageInput: status.imagePrompts }),
+      status: status.auth.status === "authenticated" ? "ready" : "warning",
+    };
+    return withCatalog(
+      result,
+      catalog ? { ...catalog, models } : null,
+      status.imagePrompts,
+    );
+  } catch (error) {
+    return {
+      auth: UNKNOWN_AUTH,
+      install,
+      message: `${descriptor.label} status could not be read: ${getErrorMessage(error)}`,
+      models: [],
+      status: "error",
+    };
+  }
+}
+
 export async function probeAcpAgent(
   descriptor: AcpAgentDescriptor,
   instance: ResolvedEngineInstance,
@@ -126,6 +172,16 @@ export async function probeAcpAgent(
   const previousImages =
     options.previous?.capabilityOverrides?.supportsImages ?? false;
 
+  if (descriptor.probe.mode === "static" && descriptor.probe.readStatic) {
+    return await probeStatically(
+      descriptor,
+      instance,
+      binary,
+      install,
+      catalog,
+    );
+  }
+
   if (options.depth === "cheap") {
     const carried = carryForwardLegacyProbe(options.previous, install);
     if (carried) {
@@ -145,11 +201,21 @@ export async function probeAcpAgent(
 
   const cwd = path.join(instance.stateDir, "probe-cwd");
   await mkdir(cwd, { mode: 0o700, recursive: true }).catch(() => undefined);
-  const process = (deps.start ?? startAcpProcess)(
-    descriptor,
-    buildAcpLaunch(descriptor, instance, binary, cwd),
-    { instanceId: instance.id },
-  );
+  let launch;
+  try {
+    launch = await resolveAcpLaunch(descriptor, instance, binary, cwd, "probe");
+  } catch (error) {
+    return {
+      auth: UNKNOWN_AUTH,
+      install,
+      message: `${descriptor.processLabel} could not be prepared: ${getErrorMessage(error)}`,
+      models: toAcpEngineModels(catalog?.models ?? []),
+      status: "error",
+    };
+  }
+  const process = (deps.start ?? startAcpProcess)(descriptor, launch, {
+    instanceId: instance.id,
+  });
   const stop = () => void process.dispose();
   options.signal.addEventListener("abort", stop, { once: true });
 

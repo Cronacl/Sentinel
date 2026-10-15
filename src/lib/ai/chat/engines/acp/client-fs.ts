@@ -40,6 +40,8 @@ export type ClientFsPolicy = ClientFsDeps & {
   }): Promise<boolean>;
   /** Absolute directories the agent may use. */
   roots: readonly string[];
+  /** Absolute files or directories the agent may only read (the turn's attachments). */
+  readRoots?: readonly string[];
 };
 
 function isInside(root: string, target: string) {
@@ -111,7 +113,10 @@ export async function readClientTextFile(
   params: unknown,
   policy: ClientFsPolicy,
 ) {
-  const target = await resolveAllowedPath(readString(params, "path"), policy);
+  const target = await resolveAllowedPath(readString(params, "path"), {
+    realpath: policy.realpath,
+    roots: [...policy.roots, ...(policy.readRoots ?? [])],
+  });
   let content: string;
   try {
     content = await (policy.readFile ?? nodeReadFile)(target, "utf8");

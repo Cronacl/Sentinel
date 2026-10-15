@@ -22,9 +22,10 @@ import {
 import {
   acpLaunchFingerprint,
   acpPoolKey,
-  buildAcpLaunch,
   getAcpProcessPool,
+  resolveAcpLaunch,
   startAcpProcess,
+  type AcpLaunch,
 } from "@/lib/ai/chat/engines/acp/launch";
 import {
   buildAcpMcpServers,
@@ -37,6 +38,7 @@ import {
 import {
   applyAcpModelSelection,
   applyAcpPlanMode,
+  applyAcpSessionMode,
   cancelAcpSession,
   forgetLiveSession,
   getLiveSession,
@@ -236,6 +238,16 @@ function handleSessionUpdate(
   const effects = applyAcpUpdate(control.mirror, envelope.update, {
     replaying: control.replaying,
   });
+  if (
+    (kind === "tool_call" || kind === "tool_call_update") &&
+    control.descriptor.toolKind
+  ) {
+    const toolKind = control.descriptor.toolKind(envelope.update);
+    const toolCallId = envelope.update.toolCallId;
+    if (toolKind && typeof toolCallId === "string" && toolCallId) {
+      control.mirror.upsertTool({ id: toolCallId, kind: toolKind });
+    }
+  }
   const session = control.process ? getLiveSession(control.process) : null;
 
   for (const effect of effects) {
@@ -378,10 +390,7 @@ async function evictProcess(control: AcpRunControl) {
     .catch(() => undefined);
 }
 
-async function acquireProcess(
-  control: AcpRunControl,
-  launch: ReturnType<typeof buildAcpLaunch>,
-) {
+async function acquireProcess(control: AcpRunControl, launch: AcpLaunch) {
   const pool = getAcpProcessPool();
   const fingerprint = acpLaunchFingerprint(launch);
   const create = async () =>
@@ -490,11 +499,12 @@ async function startTurn(
     );
   }
   const binary = resolution.binary;
-  const launch = buildAcpLaunch(
+  const launch = await resolveAcpLaunch(
     descriptor,
     instance,
     binary,
     control.workspaceRoot,
+    "session",
     { permissionMode: control.permissionMode },
   );
   control.lease = await acquireProcess(control, launch);
@@ -564,14 +574,15 @@ async function startTurn(
 
   // The model, effort and mode are best effort: a value the agent refuses
   // leaves the turn on the agent's current setting instead of failing it.
+  const requested = {
+    effort: input.request.reasoningEffort ?? null,
+    modelId: input.request.modelId ?? null,
+  };
   try {
     await applyAcpModelSelection(
       process,
       session,
-      {
-        effort: input.request.reasoningEffort ?? null,
-        modelId: input.request.modelId ?? null,
-      },
+      descriptor.resolveModelSelection?.(requested, session) ?? requested,
       signal,
     );
   } catch (error) {
@@ -597,6 +608,24 @@ async function startTurn(
       modeId: input.state?.modeId ?? null,
       usePreamble: control.threadMode === "plan",
     };
+  }
+  const permissionModeId =
+    descriptor.permissionModeId?.(control.permissionMode) ?? null;
+  if (permissionModeId) {
+    try {
+      if (
+        await applyAcpSessionMode(process, session, permissionModeId, signal)
+      ) {
+        plan = { ...plan, modeId: permissionModeId };
+      }
+    } catch (error) {
+      rethrowIfFatal(control, error);
+      addSetupNotice(
+        control,
+        "permission-mode",
+        `${descriptor.label} kept its current permission mode: ${getErrorMessage(error)}`,
+      );
+    }
   }
   learnCatalog(control, session);
 
@@ -639,10 +668,14 @@ async function startTurn(
       parts: [{ text: "", type: "text" }],
       role: "user",
     } satisfies ThreadUIMessage);
+  const attachmentPaths: string[] = [];
+  control.attachmentPaths = attachmentPaths;
   const prompt = await buildAcpPromptBlocks({
     capabilities: init.capabilities,
     forceImagePrompts: descriptor.forceImagePrompts,
     message: input.message,
+    onAttachmentPath: (path) => attachmentPaths.push(path),
+    policy: descriptor.promptAttachments,
     text: buildExternalRuntimePromptText({
       ...(sendsMissedTurns ? { historyHeading: MISSED_TURNS_HEADING } : {}),
       includeHistory: historyMessages.length > 0,
