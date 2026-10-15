@@ -105,10 +105,7 @@ const threadSwitchHandoffInputSchema = threadSwitchInspectInputSchema.extend({
 });
 
 type RepoBranchResumeStatus =
-  | "blocked_dirty"
-  | "matched"
-  | "missing_branch"
-  | "needs_checkout";
+  "blocked_dirty" | "matched" | "missing_branch" | "needs_checkout";
 type RepoWorktreeStatus = "creating" | "error" | "missing" | "none" | "ready";
 
 const PULL_REQUEST_STATUS_TTL_MS = 15_000;

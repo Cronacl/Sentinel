@@ -1,6 +1,5 @@
 import "server-only";
 
-import { OAuth2Client } from "google-auth-library";
 import { gmail_v1, google } from "googleapis";
 
 export type ParsedEmail = {
@@ -151,7 +150,7 @@ export class GmailService {
   private gmail: gmail_v1.Gmail;
 
   constructor(accessToken: string) {
-    const auth = new OAuth2Client();
+    const auth = new google.auth.OAuth2();
     auth.setCredentials({ access_token: accessToken });
     this.gmail = google.gmail({ version: "v1", auth });
   }
@@ -404,12 +403,7 @@ export class GmailService {
   async bulkModify(
     messageIds: string[],
     action:
-      | "archive"
-      | "trash"
-      | "star"
-      | "unstar"
-      | "mark_read"
-      | "mark_unread",
+      "archive" | "trash" | "star" | "unstar" | "mark_read" | "mark_unread",
   ): Promise<{ modifiedCount: number }> {
     const perform = (id: string): Promise<void> => {
       switch (action) {

@@ -1,6 +1,5 @@
 import "server-only";
 
-import { OAuth2Client } from "google-auth-library";
 import { drive_v3, google } from "googleapis";
 import { Readable } from "node:stream";
 
@@ -84,7 +83,7 @@ export class GoogleDriveService {
   private drive: drive_v3.Drive;
 
   constructor(accessToken: string) {
-    const auth = new OAuth2Client();
+    const auth = new google.auth.OAuth2();
     auth.setCredentials({ access_token: accessToken });
     this.drive = google.drive({ version: "v3", auth });
   }

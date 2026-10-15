@@ -15,7 +15,7 @@ That includes the obvious things like messages and mode, but a lot of the produc
 | Workspace state          | Workspace link, working directory, project root                                  |
 | Queue and approval state | Queued follow-ups, pending approvals, status transitions                         |
 | Repo state               | Active branch, project mode, worktree path, checkpoint pointers, linked PR state |
-| Engine-specific state    | Codex thread ID and sandbox policy, Claude session ID and permission mode        |
+| Engine-specific state    | Engine instance, Codex thread ID and sandbox policy, Claude or ACP session ID    |
 
 That is why reopening a thread can feel like resuming work instead of opening a saved transcript.
 
@@ -30,6 +30,12 @@ That shared layer covers the title, archived state, workspace link, messages, pl
 | Shared thread state | Title, workspace link, messages, mode, repo state, queue, run status                         |
 | Codex-only state    | Codex thread ID, approval policy, sandbox mode, reasoning effort, runtime model, CLI version |
 | Claude-only state   | Claude session ID, permission mode, runtime model, working directory                         |
+| Copilot state       | Copilot session ID, runtime model, reasoning effort, working directory                       |
+| OpenCode state      | OpenCode session ID, server generation (1.x or 2.x), agent and variant, last synced message  |
+| Pi state            | Pi session file, runtime model, thinking level, last synced message                          |
+| ACP state           | Session ID, agent and version, mode, model and config choices, last synced message           |
+
+Cursor, Grok Build, and Antigravity threads use the ACP state. Every engine's state also records the engine instance it ran on, so a thread stays on its instance.
 
 So the thread is carrying both the shared product state and the engine-specific session state.
 
@@ -88,3 +94,4 @@ contextCompactionUpdatedAt: integer("context_compaction_updated_at", {
 
 - [`schema.ts`](../../../src/server/db/schema.ts)
 - [`types.ts`](../../../src/lib/ai/chat/engines/types.ts)
+- [`state/registry.ts`](../../../src/lib/ai/chat/engines/state/registry.ts)

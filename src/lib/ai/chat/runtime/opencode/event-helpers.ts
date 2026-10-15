@@ -188,3 +188,9 @@ export function resolveOpenCodePromptResponse(input: {
       : {}),
   };
 }
+
+// Moved next to the 1.x event decoder; kept here for existing imports.
+export {
+  resolveOpenCodeSessionError,
+  type OpenCodeSessionErrorOutcome,
+} from "@/lib/ai/chat/engines/opencode-sdk/v1/events";

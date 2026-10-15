@@ -41,9 +41,11 @@ Some parts are solid. Some parts are rough. Things will change.
 Release builds are published on GitHub Releases:
 
 - [Download the latest release](https://github.com/Cronacl/Sentinel/releases)
-- macOS builds are available as DMGs
-- Windows builds are available as NSIS installers
-- Linux builds are available as AppImages, DEBs, and RPMs
+- macOS builds are available as DMGs and need macOS 13 (Ventura) or later
+- Windows builds are available as NSIS installers for 64-bit Windows 10 or later
+- Linux builds are available as AppImages, DEBs, and RPMs for x64 and arm64 and need glibc 2.34 and libstdc++ from GCC 11 or newer (for example Ubuntu 22.04, Debian 12, Fedora 35, or RHEL 9)
+
+Electron 44 dropped support for macOS 12, 32-bit Windows, and 32-bit ARM Linux, so Sentinel no longer ships for them. Copies already installed on macOS 12 keep working, but the in-app updater no longer offers them new versions.
 
 If you want the current development version, run it locally from source.
 
@@ -71,17 +73,32 @@ The short version is simple: workspace, thread, chat or plan, edit, run, diff, c
 | Threads           | Chat mode, plan mode, queued follow-ups, checkpoints, long-running work |
 | Repo workflow     | Diffs, branches, worktrees, commits, push, PR flow                      |
 | Built-in tools    | Terminal, browser, attachments, voice input, approvals                  |
-| AI setup          | Multiple engines, provider support, model selection, reasoning controls |
+| AI setup          | Ten engines with instances, providers, model selection, reasoning       |
 | Long-term context | Memory, context compaction, recurring automations                       |
 | Extensibility     | Skills, MCP servers, integrations                                       |
 
 ## What The Runtime Looks Like
 
-Sentinel supports three engines: `sentinel`, `codex`, and `claude`.
-
 `sentinel` is the built-in harness. It handles the app side of the run so the thread can keep its state over time.
 
-`codex` and `claude` are local runtimes carried inside the Sentinel shell. The runtime changes, but the thread still lives in Sentinel with the same workspace, repo panels, approvals, settings, and history around it.
+The other engines are coding agents installed on your machine, carried inside the Sentinel shell. The runtime changes, but the thread still lives in Sentinel with the same workspace, repo panels, approvals, settings, and history around it.
+
+| Engine        | What it runs                                                                             |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| `sentinel`    | Sentinel's own engine, on the providers you connect                                      |
+| `claude`      | Claude Code, through the Claude Agent SDK                                                |
+| `codex`       | The Codex CLI, through its app server                                                    |
+| `copilot`     | GitHub Copilot, with the runtime bundled in Sentinel                                     |
+| `cursor`      | Cursor Agent, over ACP                                                                   |
+| `opencode`    | OpenCode 1.x or 2.x, through its local server                                            |
+| `grok`        | Grok Build, over ACP (experimental)                                                      |
+| `antigravity` | Google Antigravity's ACP server, installed by Sentinel (experimental)                    |
+| `pi`          | The Pi coding agent, over RPC (experimental)                                             |
+| `acp`         | Agents from the ACP Registry, such as Devin, Gemini CLI, and Mistral Vibe (experimental) |
+
+Settings → Engines installs and updates each agent, signs it in, shows its plan usage where the agent reports it, and lets you add more than one instance of an engine, each with its own binary, environment, and (for Claude, Codex, Copilot, and Grok) its own home directory. Permission modes and plan mode depend on the engine. See [Engines by agent](./docs/product/engines-and-runtime/agents.md).
+
+Sentinel refreshes its engine manifest (model metadata and supported CLI versions) and checks for newer CLI releases once an hour. Both can be turned off in Settings → Engines, or with `SENTINEL_DISABLE_REMOTE_MANIFEST` and `SENTINEL_DISABLE_ENGINE_UPDATE_CHECKS`.
 
 The thread is carrying more than messages. It can also carry the current engine, model, working directory, queued follow-ups, repo checkpoint state, and runtime-linked session state.
 
@@ -108,7 +125,9 @@ Skills, MCP servers, and integrations sit around the same flow. They are separat
 
 ## Providers
 
-Sentinel supports OpenAI, Anthropic, Google AI Studio, Google Vertex AI, xAI, Azure OpenAI, Amazon Bedrock, Groq, Cohere, Moonshot AI, Mistral, Ollama, OpenRouter, and Vercel AI Gateway.
+The `sentinel` engine runs on the AI SDK (version 7) and supports OpenAI, Anthropic, Google AI Studio, Google Vertex AI, xAI, Azure OpenAI, Amazon Bedrock, Groq, Cohere, Moonshot AI, Mistral AI, DeepSeek, Ollama, OpenRouter, and Vercel AI Gateway.
+
+Image and video generation also supports Black Forest Labs, Kling AI, ByteDance, Fal, and Replicate.
 
 ## Integrations
 
@@ -136,11 +155,11 @@ This is a desktop app first. A lot of the useful parts depend on running close t
 
 ### Prerequisites
 
-- [Bun](https://bun.sh)
-- Node.js
-- Platform build tools for native dependencies when prebuilt binaries are not available:
+- [Bun](https://bun.sh) 1.4.2 or later
+- Node.js 24 LTS, 24.14 or later (see `.nvmrc`)
+- On Linux, build tools for `node-pty`, which has no prebuilt Linux binary: `build-essential`, `python3`, `make`, and `g++`
+- On macOS and Windows, build tools only if the native repair step asks for them:
   - macOS: Xcode Command Line Tools
-  - Linux: `build-essential`, `python3`, `make`, and `g++`
   - Windows: Visual Studio Build Tools with Desktop development with C++
 
 ### Run locally
@@ -155,19 +174,23 @@ The app runs at `http://localhost:3232`.
 
 `ENCRYPTION_KEY` can be left empty in `.env`. Sentinel will generate one on first desktop launch.
 
-Sentinel repairs native Node dependencies at startup. Most machines use prebuilt binaries. If a runtime, OS, or CPU combination has no matching prebuild, the startup script builds the native dependency locally and prints the platform package to install when build tools are missing.
+Electron no longer downloads its binary during `bun install`. `bun run dev:desktop` and the desktop build commands fetch it on first use; run `bun run electron:install` to download it ahead of time.
+
+Sentinel checks its native Node dependencies at startup. `better-sqlite3` loads the N-API prebuild bundled for your OS and CPU and is never compiled locally; on Linux that prebuild needs glibc 2.34 and libstdc++ from GCC 11 or newer. `node-pty` uses its prebuilt binary on macOS and Windows; on Linux, `bun install` compiles it. If the `node-pty` binary does not load, the startup script rebuilds it locally and prints the platform package to install when build tools are missing.
 
 On Linux, Sentinel disables Electron's Chromium process sandbox by default for compatibility with systems where user namespaces or the setuid sandbox are unavailable. Linux packages also launch with `--no-sandbox` from their desktop entries. Set `SENTINEL_LINUX_SANDBOX=true` when launching the executable directly to force the Chromium sandbox back on.
 
 ### Environment variables
 
-| Variable                 | Required | Description                                                                                     |
-| ------------------------ | -------- | ----------------------------------------------------------------------------------------------- |
-| `ENCRYPTION_KEY`         | No       | Generated on first launch if omitted                                                            |
-| `SENTINEL_DB_PATH`       | No       | Custom path for the local SQLite database                                                       |
-| `SENTINEL_STATE_PATH`    | No       | Custom path for app state                                                                       |
-| `SENTINEL_APP_URL`       | No       | Override the default app URL                                                                    |
-| `SENTINEL_LINUX_SANDBOX` | No       | Set to `true` to force Electron's Chromium sandbox when launching the Linux executable directly |
+| Variable                                | Required | Description                                                                                     |
+| --------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `ENCRYPTION_KEY`                        | No       | Generated on first launch if omitted                                                            |
+| `SENTINEL_DB_PATH`                      | No       | Custom path for the local SQLite database                                                       |
+| `SENTINEL_STATE_PATH`                   | No       | Custom path for app state                                                                       |
+| `SENTINEL_APP_URL`                      | No       | Override the default app URL                                                                    |
+| `SENTINEL_LINUX_SANDBOX`                | No       | Set to `true` to force Electron's Chromium sandbox when launching the Linux executable directly |
+| `SENTINEL_DISABLE_REMOTE_MANIFEST`      | No       | Turn off the hourly engine manifest refresh and use the bundled copy                            |
+| `SENTINEL_DISABLE_ENGINE_UPDATE_CHECKS` | No       | Turn off the hourly lookups for newer engine CLI releases                                       |
 
 ## Build
 

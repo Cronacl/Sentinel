@@ -8,8 +8,8 @@ import { createByteDance } from "@ai-sdk/bytedance";
 import { createCohere } from "@ai-sdk/cohere";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createFal } from "@ai-sdk/fal";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createVertex } from "@ai-sdk/google-vertex";
+import { createGoogle } from "@ai-sdk/google";
+import { createGoogleVertex } from "@ai-sdk/google-vertex";
 import { createGroq } from "@ai-sdk/groq";
 import { createKlingAI } from "@ai-sdk/klingai";
 import { createMistral } from "@ai-sdk/mistral";
@@ -17,7 +17,11 @@ import { createMoonshotAI } from "@ai-sdk/moonshotai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createReplicate } from "@ai-sdk/replicate";
 import { createXai } from "@ai-sdk/xai";
-import { createGateway } from "ai";
+import {
+  createGateway,
+  defaultSettingsMiddleware,
+  wrapLanguageModel,
+} from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 
 import type { AIProvider } from "@/server/db/enums";
@@ -59,6 +63,44 @@ type OllamaConfig = {
   baseURL: string;
 };
 
+function createOllamaProvider(config: OllamaConfig) {
+  return createOpenAI({
+    apiKey: "ollama",
+    baseURL: config.baseURL || "http://localhost:11434/v1",
+  });
+}
+
+export function createProviderLanguageModel(
+  provider: AIProvider,
+  config: Record<string, unknown>,
+  modelId: string,
+) {
+  // Ollama serves the OpenAI Chat Completions API, while languageModel() on
+  // an OpenAI provider targets the Responses API.
+  if (provider === "ollama") {
+    return createOllamaProvider(config as OllamaConfig).chat(modelId);
+  }
+
+  const languageModel = createProviderInstance(provider, config).languageModel(
+    modelId,
+  );
+
+  // @ai-sdk/xai 5 only has the Responses API, which stores prompts and
+  // responses on xAI's servers for later retrieval unless `store` is false
+  // (and errors for Zero Data Retention teams). The Chat Completions path
+  // Sentinel used before stored nothing, and Sentinel never reads them back.
+  if (provider === "xai") {
+    return wrapLanguageModel({
+      middleware: defaultSettingsMiddleware({
+        settings: { providerOptions: { xai: { store: false } } },
+      }),
+      model: languageModel,
+    });
+  }
+
+  return languageModel;
+}
+
 export function createProviderInstance(
   provider: AIProvider,
   config: Record<string, unknown>,
@@ -80,14 +122,14 @@ export function createProviderInstance(
     }
     case "google": {
       const c = config as ApiKeyConfig;
-      return createGoogleGenerativeAI({
+      return createGoogle({
         apiKey: c.apiKey,
         ...(c.baseURL && { baseURL: c.baseURL }),
       });
     }
     case "google_vertex": {
       const c = config as VertexConfig;
-      return createVertex({
+      return createGoogleVertex({
         location: c.location,
         project: c.project,
         googleAuthOptions: c.googleAuthOptions,
@@ -187,11 +229,7 @@ export function createProviderInstance(
       });
     }
     case "ollama": {
-      const c = config as OllamaConfig;
-      return createOpenAI({
-        apiKey: "ollama",
-        baseURL: c.baseURL || "http://localhost:11434/v1",
-      });
+      return createOllamaProvider(config as OllamaConfig);
     }
     case "openrouter": {
       const c = config as ApiKeyConfig;

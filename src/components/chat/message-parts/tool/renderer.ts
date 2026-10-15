@@ -3,10 +3,7 @@ import type { ComponentType } from "react";
 import type { ToolPart as ToolPartType } from "../types";
 
 export type ApprovalDecision =
-  | "accept"
-  | "acceptForSession"
-  | "cancel"
-  | "decline";
+  "accept" | "acceptForSession" | "cancel" | "decline";
 
 export type RendererProps = {
   onApprove?: (approvalId: string, response?: string) => void;

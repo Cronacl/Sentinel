@@ -3,6 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   filterSkillsForEngine,
   getHarnessSlashCommands,
+  withoutSkillCommands,
   getSkillSuggestionTitle,
 } from "./use-composer-editor";
 
@@ -63,6 +64,14 @@ describe("filterSkillsForEngine", () => {
       scope: "workspace",
       sourceKind: "opencode",
       target: "opencode",
+    },
+    {
+      description: "Pi primary",
+      directory: "/tmp/pi/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "pi",
+      target: "pi",
     },
     {
       description: "Another sentinel skill",
@@ -223,6 +232,18 @@ describe("filterSkillsForEngine", () => {
       }),
     ]);
   });
+
+  it("offers Pi its own skills, then the shared agents ones", () => {
+    expect(filterSkillsForEngine(skills, "pi")).toEqual([
+      expect.objectContaining({ sourceKind: "pi", target: "pi" }),
+    ]);
+    expect(
+      filterSkillsForEngine(
+        skills.filter((skill) => skill.target !== "pi"),
+        "pi",
+      ),
+    ).toEqual([expect.objectContaining({ sourceKind: "agents" })]);
+  });
 });
 
 describe("getSkillSuggestionTitle", () => {
@@ -233,6 +254,7 @@ describe("getSkillSuggestionTitle", () => {
     expect(getSkillSuggestionTitle("codex")).toBe("Showing Codex skills");
     expect(getSkillSuggestionTitle("cursor")).toBe("Showing Cursor skills");
     expect(getSkillSuggestionTitle("opencode")).toBe("Showing OpenCode skills");
+    expect(getSkillSuggestionTitle("pi")).toBe("Showing Pi skills");
   });
 });
 
@@ -254,5 +276,19 @@ describe("getHarnessSlashCommands", () => {
 
   it("does not add provider commands for Sentinel", () => {
     expect(getHarnessSlashCommands("sentinel")).toEqual([]);
+  });
+});
+
+describe("withoutSkillCommands", () => {
+  it("drops commands a listed skill already offers", () => {
+    expect(
+      withoutSkillCommands(
+        [
+          { command: "review", description: "Review", mode: "insert" },
+          { command: "compact", description: "Compact", mode: "insert" },
+        ],
+        new Set(["review"]),
+      ).map((command) => command.command),
+    ).toEqual(["compact"]);
   });
 });

@@ -15,6 +15,7 @@ import type {
   ThreadSessionSnapshot,
   ThreadStreamEvent,
 } from "@/lib/ai/chat/session/types";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
 import type { RepoThreadState } from "@/lib/ai/chat/engines/types";
 import type { ThreadToolApprovalResponse } from "@/lib/ai/chat/types";
 import type { SentinelComposerToolTag } from "@/lib/ai/chat/tools/selection/tags";
@@ -49,12 +50,12 @@ type SendThreadMessageInput = {
   composerContext?: ComposerContext;
   draftRepoState?: Partial<RepoThreadState>;
   engine: ChatEngine;
+  /** The instance of `engine` a new thread binds to (default: the engine). */
+  engineInstanceId?: string;
   files?: FileUIPart[];
   modelId: string;
-  openCode?: {
-    agent?: string | null;
-    variant?: string | null;
-  };
+  /** The model's option selections (agent, variant, …). */
+  modelOptions?: EngineOptionSelection[] | null;
   reasoningEffort?: ReasoningEffort | null;
   text: string;
   threadMode?: ThreadMode;
@@ -74,11 +75,7 @@ type AnswerPlanQuestionsInput = {
 type ToolApprovalResponseInput = ThreadToolApprovalResponse;
 
 type ThreadConnectionState =
-  | "connected"
-  | "connecting"
-  | "disconnected"
-  | "error"
-  | "idle";
+  "connected" | "connecting" | "disconnected" | "error" | "idle";
 
 type ClientTimingPhase =
   | "first_meaningful_assistant_update"
@@ -112,6 +109,33 @@ export function isCommittedThreadActionError(
 
 export function shouldSurfaceThreadActionError(error: unknown) {
   return !isCommittedThreadActionError(error);
+}
+
+/**
+ * The engine fields of a turn request. The instance is only sent when it is
+ * not the engine's default, so default-instance requests stay unchanged.
+ */
+export function buildThreadEngineRequestFields(
+  input: Pick<
+    SendThreadMessageInput,
+    | "engine"
+    | "engineInstanceId"
+    | "modelId"
+    | "modelOptions"
+    | "reasoningEffort"
+  >,
+) {
+  return {
+    engine: input.engine,
+    ...(input.engineInstanceId && input.engineInstanceId !== input.engine
+      ? { engineInstanceId: input.engineInstanceId }
+      : {}),
+    modelId: input.modelId,
+    ...(input.modelOptions?.length ? { modelOptions: input.modelOptions } : {}),
+    ...(input.reasoningEffort
+      ? { reasoningEffort: input.reasoningEffort }
+      : {}),
+  };
 }
 
 type ThreadSessionState = {
@@ -1544,9 +1568,10 @@ export function useThreadChat({
       composerContext,
       draftRepoState,
       engine,
+      engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -1568,12 +1593,15 @@ export function useThreadChat({
         return await runAction(
           {
             ...(draftRepoState ? { draftRepoState } : {}),
-            engine,
+            ...buildThreadEngineRequestFields({
+              engine,
+              engineInstanceId,
+              modelId,
+              modelOptions,
+              reasoningEffort,
+            }),
             id: threadId,
             message,
-            modelId,
-            ...(openCode ? { openCode } : {}),
-            ...(reasoningEffort ? { reasoningEffort } : {}),
             ...(threadMode ? { threadMode } : {}),
             ...(toolTags?.length ? { toolTags } : {}),
             trigger: "submit-user-message",
@@ -1596,9 +1624,10 @@ export function useThreadChat({
     async ({
       composerContext,
       engine,
+      engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       targetMessageId,
       text,
@@ -1619,13 +1648,16 @@ export function useThreadChat({
       try {
         await runAction(
           {
-            engine,
+            ...buildThreadEngineRequestFields({
+              engine,
+              engineInstanceId,
+              modelId,
+              modelOptions,
+              reasoningEffort,
+            }),
             id: threadId,
             message,
             messageId: targetMessageId,
-            modelId,
-            ...(openCode ? { openCode } : {}),
-            ...(reasoningEffort ? { reasoningEffort } : {}),
             trigger: "edit-user-message",
             workspaceId: workspaceIdRef.current,
           },
@@ -1647,9 +1679,10 @@ export function useThreadChat({
       composerContext,
       draftRepoState,
       engine,
+      engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -1669,12 +1702,15 @@ export function useThreadChat({
       try {
         await runAction({
           ...(draftRepoState ? { draftRepoState } : {}),
-          engine,
+          ...buildThreadEngineRequestFields({
+            engine,
+            engineInstanceId,
+            modelId,
+            modelOptions,
+            reasoningEffort,
+          }),
           id: threadId,
           message,
-          modelId,
-          ...(openCode ? { openCode } : {}),
-          ...(reasoningEffort ? { reasoningEffort } : {}),
           ...(threadMode ? { threadMode } : {}),
           ...(toolTags?.length ? { toolTags } : {}),
           trigger: "queue-follow-up",
@@ -1693,9 +1729,10 @@ export function useThreadChat({
       composerContext,
       draftRepoState,
       engine,
+      engineInstanceId,
       files,
       modelId,
-      openCode,
+      modelOptions,
       reasoningEffort,
       text,
       threadMode,
@@ -1715,12 +1752,15 @@ export function useThreadChat({
       try {
         await runAction({
           ...(draftRepoState ? { draftRepoState } : {}),
-          engine,
+          ...buildThreadEngineRequestFields({
+            engine,
+            engineInstanceId,
+            modelId,
+            modelOptions,
+            reasoningEffort,
+          }),
           id: threadId,
           message,
-          modelId,
-          ...(openCode ? { openCode } : {}),
-          ...(reasoningEffort ? { reasoningEffort } : {}),
           ...(threadMode ? { threadMode } : {}),
           ...(toolTags?.length ? { toolTags } : {}),
           trigger: "steer-follow-up",

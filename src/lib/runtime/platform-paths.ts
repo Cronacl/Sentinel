@@ -47,6 +47,16 @@ function getWindowsExecutableCandidateEntries(env: EnvLike, homePath: string) {
     localAppData ? path.win32.join(localAppData, "fnm") : null,
     env.NVM_SYMLINK?.trim(),
     env.NVM_HOME?.trim(),
+    // OpenCode's install script under Git Bash uses $HOME/.opencode/bin; its
+    // other documented Windows installs go through Scoop or Chocolatey shims.
+    path.win32.join(homePath, ".opencode", "bin"),
+    path.win32.join(
+      env.SCOOP?.trim() || path.win32.join(homePath, "scoop"),
+      "shims",
+    ),
+    env.ChocolateyInstall?.trim()
+      ? path.win32.join(env.ChocolateyInstall.trim(), "bin")
+      : null,
     programFiles ? path.win32.join(programFiles, "nodejs") : null,
     programFilesX86 ? path.win32.join(programFilesX86, "nodejs") : null,
     localAppData
@@ -69,16 +79,21 @@ function getWindowsExecutableCandidateEntries(env: EnvLike, homePath: string) {
 }
 
 function getPosixExecutableCandidateEntries(homePath: string) {
+  const join = path.posix.join;
+
   return uniqueEntries([
-    path.join(homePath, ".bun", "bin"),
-    path.join(homePath, ".local", "bin"),
-    path.join(homePath, "bin"),
-    path.join(homePath, ".volta", "bin"),
-    path.join(homePath, ".asdf", "shims"),
-    path.join(homePath, ".nodenv", "shims"),
-    path.join(homePath, ".nvm", "current", "bin"),
-    path.join(homePath, ".fnm", "current", "bin"),
-    path.join(homePath, "Library", "pnpm"),
+    join(homePath, ".bun", "bin"),
+    join(homePath, ".local", "bin"),
+    join(homePath, "bin"),
+    join(homePath, ".volta", "bin"),
+    join(homePath, ".asdf", "shims"),
+    join(homePath, ".nodenv", "shims"),
+    join(homePath, ".nvm", "current", "bin"),
+    join(homePath, ".fnm", "current", "bin"),
+    join(homePath, "Library", "pnpm"),
+    // OpenCode's official install script (opencode.ai/install) always installs
+    // to ~/.opencode/bin and only edits shell rc files to put it on PATH.
+    join(homePath, ".opencode", "bin"),
     "/opt/homebrew/bin",
     "/usr/local/bin",
     "/opt/local/bin",
@@ -106,13 +121,13 @@ export function buildPreferredExecutablePathValue(
 
   const entries = uniqueEntries([
     ...(pathValue ?? "")
-      .split(path.delimiter)
+      .split(pathModule.delimiter)
       .map((entry) => entry.trim())
       .filter(Boolean),
     ...preferredEntries.map((entry) => pathModule.normalize(entry)),
   ]);
 
-  return entries.join(path.delimiter);
+  return entries.join(pathModule.delimiter);
 }
 
 async function listSubdirectories(rootPath: string) {
@@ -120,7 +135,7 @@ async function listSubdirectories(rootPath: string) {
     const entries = await readdir(rootPath, { withFileTypes: true });
     return entries
       .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(rootPath, entry.name));
+      .map((entry) => path.posix.join(rootPath, entry.name));
   } catch {
     return [];
   }
@@ -146,27 +161,28 @@ export async function buildManagedExecutablePathValue(
     ]);
 
     return buildPreferredExecutablePathValue(
-      [pathValue, ...managedEntries].filter(Boolean).join(path.delimiter),
+      [pathValue, ...managedEntries].filter(Boolean).join(path.win32.delimiter),
       { env, platform },
     );
   }
 
+  const join = path.posix.join;
   const managedEntries = [
     ...(
-      await listSubdirectories(path.join(homePath, ".nvm", "versions", "node"))
-    ).map((directory) => path.join(directory, "bin")),
-    ...(
-      await listSubdirectories(path.join(homePath, ".fnm", "node-versions"))
-    ).map((directory) => path.join(directory, "installation", "bin")),
+      await listSubdirectories(join(homePath, ".nvm", "versions", "node"))
+    ).map((directory) => join(directory, "bin")),
+    ...(await listSubdirectories(join(homePath, ".fnm", "node-versions"))).map(
+      (directory) => join(directory, "installation", "bin"),
+    ),
     ...(
       await listSubdirectories(
-        path.join(homePath, ".local", "share", "fnm", "node-versions"),
+        join(homePath, ".local", "share", "fnm", "node-versions"),
       )
-    ).map((directory) => path.join(directory, "installation", "bin")),
+    ).map((directory) => join(directory, "installation", "bin")),
   ];
 
   return buildPreferredExecutablePathValue(
-    [pathValue, ...managedEntries].filter(Boolean).join(path.delimiter),
+    [pathValue, ...managedEntries].filter(Boolean).join(path.posix.delimiter),
     { env, platform },
   );
 }

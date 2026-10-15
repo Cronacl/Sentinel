@@ -4,6 +4,7 @@ import {
   deriveVoiceInputAvailability,
   normalizeVoiceInputSettings,
   resolveVoiceInputModelId,
+  TRANSCRIPTION_PROVIDER_CATALOG,
 } from "./transcription";
 
 describe("voice transcription availability", () => {
@@ -19,7 +20,7 @@ describe("voice transcription availability", () => {
     });
 
     expect(result.isAvailable).toBe(true);
-    expect(result.resolvedModelId).toBe("whisper-1");
+    expect(result.resolvedModelId).toBe("gpt-transcribe");
     expect(result.unavailableReason).toBeNull();
   });
 
@@ -69,6 +70,31 @@ describe("voice transcription availability", () => {
     expect(result.isAvailable).toBe(false);
     expect(result.unavailableReason).toBe(
       "Enter a transcription deployment or model ID.",
+    );
+  });
+});
+
+describe("transcription model catalog", () => {
+  it("defaults OpenAI to gpt-transcribe and keeps explicit older choices", () => {
+    expect(TRANSCRIPTION_PROVIDER_CATALOG.openai.defaultModelId).toBe(
+      "gpt-transcribe",
+    );
+    expect(
+      TRANSCRIPTION_PROVIDER_CATALOG.openai.modelOptions.map(
+        (option) => option.id,
+      ),
+    ).toContain("whisper-1");
+    expect(
+      resolveVoiceInputModelId(
+        normalizeVoiceInputSettings({
+          voiceInputEnabled: true,
+          voiceInputModelId: "whisper-1",
+          voiceInputProvider: "openai",
+        }),
+      ),
+    ).toBe("whisper-1");
+    expect(TRANSCRIPTION_PROVIDER_CATALOG.groq.defaultModelId).toBe(
+      "whisper-large-v3-turbo",
     );
   });
 });

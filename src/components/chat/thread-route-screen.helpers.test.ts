@@ -23,9 +23,12 @@ function createThreadDetails(): ThreadDetails {
       activeRunId: null,
       archivedAt: null,
       chatEngine: "sentinel",
+      chatEngineInstanceId: "sentinel",
       chatModelId: "gpt-5.4",
+      chatModelOptions: null,
       chatReasoningEffort: "medium",
       createdAt: new Date("2026-04-21T10:00:00Z"),
+      permissionModeOverride: null,
       hasCodexThread: false,
       id: "thread-1",
       linkedPullRequest: null,
@@ -104,7 +107,7 @@ function createHandoffState(
       path: "/repo/.worktrees/thread-1",
     },
     draftProjectMode: "worktree",
-    openCodeSelection: {
+    optionSelection: {
       agent: "builder",
       variant: "max",
     },
@@ -179,6 +182,21 @@ describe("resolveThreadRouteData", () => {
         status: "streaming",
         title: "Ship it",
       },
+    });
+  });
+
+  it("takes the engine instance from a live snapshot that is ahead", () => {
+    const baseThread = createThreadDetails();
+    const liveSnapshot = {
+      ...createLiveSnapshot(),
+      chatEngineInstanceId: "cursor-work",
+    };
+
+    expect(
+      resolveThreadRouteData(baseThread, liveSnapshot)?.thread,
+    ).toMatchObject({
+      chatEngine: "cursor",
+      chatEngineInstanceId: "cursor-work",
     });
   });
 });

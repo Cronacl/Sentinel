@@ -80,13 +80,11 @@ export function AppWarmupCoordinator() {
     void utils.appearance.get.prefetch();
     void utils.auth.me.prefetch();
     void utils.security.get.prefetch();
-    void utils.engines.list.prefetch();
+    // One query for every engine instance and its models; snapshots return
+    // at once (probes continue in the background and arrive as events).
+    void utils.engines.composerCatalog.prefetch();
+    void utils.engines.snapshots.prefetch();
     void utils.engines.models.prefetch({ engine: "sentinel" });
-    void utils.engines.models.prefetch({ engine: "codex" });
-    void utils.engines.models.prefetch({ engine: "claude" });
-    void utils.engines.models.prefetch({ engine: "copilot" });
-    void utils.engines.models.prefetch({ engine: "cursor" });
-    void utils.engines.models.prefetch({ engine: "opencode" });
     void utils.scratchpad.getCurrent.prefetch();
     void utils.automations.list.prefetch();
     void preflightMicrophonePermissionOnStartup().catch(() => {});
@@ -113,7 +111,7 @@ export function AppWarmupCoordinator() {
       () => {
         void utils.skills.list.prefetch();
         void utils.skills.registry.prefetch();
-        void utils.engines.list.prefetch();
+        void utils.engines.composerCatalog.prefetch();
       },
       () => {
         void utils.appearance.get.prefetch();
@@ -137,7 +135,7 @@ export function AppWarmupCoordinator() {
       },
       () => {
         void utils.models.list.prefetch();
-        void utils.engines.list.prefetch();
+        void utils.engines.snapshots.prefetch();
       },
       () => {
         void utils.personalization.get.prefetch();

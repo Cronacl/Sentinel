@@ -23,10 +23,7 @@ export type DesktopArchitecture = string;
 export type DesktopPlatform = "darwin" | "linux" | "win32";
 export type DesktopPermissionName = "microphone";
 export type DesktopPermissionState =
-  | "denied"
-  | "granted"
-  | "prompt"
-  | "unsupported";
+  "denied" | "granted" | "prompt" | "unsupported";
 export type DesktopUpdateStatus =
   | "idle"
   | "checking"
@@ -65,6 +62,24 @@ export type DesktopTerminalSession = {
   sessionId: string;
 };
 
+/**
+ * A terminal that runs one command instead of a shell. Only commands a
+ * server-side sign-in flow vended run: Electron main redeems `ticket` with
+ * the server and refuses the request unless command, args, cwd and env are
+ * exactly what the server has on record for it.
+ */
+export type DesktopTerminalCommandInput = {
+  args: string[];
+  cols?: number;
+  command: string;
+  cwd: string;
+  env: Record<string, string>;
+  rows?: number;
+  ticket: string;
+  title?: string;
+  windowsVerbatimArguments?: boolean;
+};
+
 export type SentinelDesktopApi = {
   app: {
     arch: DesktopArchitecture;
@@ -91,12 +106,7 @@ export type SentinelDesktopApi = {
     >;
     axAction: (input: {
       action:
-        | "decrement"
-        | "focus"
-        | "increment"
-        | "press"
-        | "setValue"
-        | "showMenu";
+        "decrement" | "focus" | "increment" | "press" | "setValue" | "showMenu";
       appName?: string;
       axPath?: string;
       bundleId?: string;
@@ -188,12 +198,20 @@ export type SentinelDesktopApi = {
   };
   terminal: {
     create: (cwd: string) => Promise<DesktopTerminalSession>;
+    /** Absent in desktop shells older than the renderer. */
+    createCommand?: (
+      input: DesktopTerminalCommandInput,
+    ) => Promise<DesktopTerminalSession>;
     write: (sessionId: string, data: string) => void;
     resize: (sessionId: string, cols: number, rows: number) => void;
     kill: (sessionId: string) => Promise<void>;
     onData: (callback: (sessionId: string, data: string) => void) => () => void;
     onExit: (
-      callback: (sessionId: string, exitCode: number) => void,
+      callback: (
+        sessionId: string,
+        exitCode: number,
+        signal?: number | null,
+      ) => void,
     ) => () => void;
   };
   window: {

@@ -85,6 +85,30 @@ async function writeLocalRuntimeEnvFile(content: string) {
   await applyPrivateFsMode(localRuntimeEnvPath, LOCAL_RUNTIME_ENV_FILE_MODE);
 }
 
+/**
+ * The value saved for `key` in desktop.env, parsed the way the desktop shell
+ * and src/env.js load it into the server environment (surrounding quotes
+ * stripped), or null when the file or the key is missing.
+ */
+export async function readLocalRuntimeEnvValue(key: string) {
+  const content = await readLocalRuntimeEnvFile();
+  let value: string | null = null;
+
+  for (const line of content.split("\n")) {
+    if (readDotEnvLineKey(line) !== key) {
+      continue;
+    }
+
+    const trimmed = line.trim();
+    value = trimmed
+      .slice(trimmed.indexOf("=") + 1)
+      .trim()
+      .replace(/^"(.*)"$/, "$1");
+  }
+
+  return value;
+}
+
 export async function setLocalRuntimeEnvValue(
   key: string,
   value: string | null | undefined,

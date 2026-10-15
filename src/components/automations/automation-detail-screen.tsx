@@ -42,18 +42,25 @@ import {
 import { SidebarToggle, useShell } from "@/components/shell";
 import { SettingsPageWrapper } from "@/components/settings/settings-page-wrapper";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
+import { AUTOMATION_SCHEDULE_TYPES } from "@/server/db/enums";
 import {
-  AUTOMATION_SCHEDULE_TYPES,
-  CHAT_ENGINES,
-  type ChatEngine,
-} from "@/server/db/enums";
+  AutomationEngineFields,
+  AutomationModelOptionFields,
+} from "@/components/automations/automation-engine-fields";
 import {
+  AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE,
   getAvailableAutomationModels,
-  getAutomationEngineOptions,
+  getAutomationModelOptionDescriptors,
   getAutomationModelOptions,
-  getAutomationModelsForEngine,
+  getAutomationModelsForInstance,
   getAutomationReasoningOptions,
+  getAutomationUnattendedNotice,
+  pruneAutomationOptionValues,
+  resolveAutomationEngine,
+  resolveAutomationInstanceId,
+  resolveAutomationModelOptionsForSave,
   resolveAutomationSelection,
+  toAutomationOptionValues,
 } from "@/components/automations/automation-form-helpers";
 import { isLikelyCronExpression } from "@/schemas/automation.schema";
 import { sileo } from "sileo";
@@ -125,8 +132,11 @@ const editFormSchema = z
     scheduleDayOfWeek: z.string(),
     scheduleTime: z.string(),
     scheduleCron: z.string(),
-    chatEngine: z.enum(CHAT_ENGINES),
+    /** The engine instance; its driver kind is sent as chatEngine. */
+    engineInstanceId: z.string().trim().min(1, "Engine is required."),
     modelId: z.string().trim().min(1, "Model is required."),
+    /** The selected model's option picks (agent, variant, …) by option id. */
+    modelOptionValues: z.record(z.string(), z.string()),
     reasoningEffort: z.string(),
   })
   .superRefine((data, ctx) => {
@@ -254,68 +264,36 @@ export function AutomationDetailScreen({
   const updateMutation = api.automations.update.useMutation();
 
   const workspacesQuery = api.workspaces.list.useQuery();
-  const enginesQuery = api.engines.list.useQuery();
-  const sentinelModelsQuery = api.engines.models.useQuery({
-    engine: "sentinel",
-  });
-  const codexModelsQuery = api.engines.models.useQuery({
-    engine: "codex",
-  });
-  const claudeModelsQuery = api.engines.models.useQuery({
-    engine: "claude",
-  });
-  const copilotModelsQuery = api.engines.models.useQuery({
-    engine: "copilot",
-  });
-  const cursorModelsQuery = api.engines.models.useQuery({
-    engine: "cursor",
-  });
-  const openCodeModelsQuery = api.engines.models.useQuery({
-    engine: "opencode",
-  });
+  const catalogQuery = api.engines.composerCatalog.useQuery();
+  const securityQuery = api.security.get.useQuery();
 
   const automation = automationQuery.data ?? null;
   const statusTone = automation?.status === "active" ? "success" : "warning";
 
   const [submitError, setSubmitError] = useState("");
 
-  const availableSentinelModels = useMemo(
-    () => getAvailableAutomationModels(sentinelModelsQuery.data ?? []),
-    [sentinelModelsQuery.data],
+  const catalogOptions = useMemo(
+    () => catalogQuery.data?.options ?? [],
+    [catalogQuery.data?.options],
   );
-  const availableCodexModels = useMemo(
-    () => getAvailableAutomationModels(codexModelsQuery.data ?? []),
-    [codexModelsQuery.data],
-  );
-  const availableClaudeModels = useMemo(
-    () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
-    [claudeModelsQuery.data],
-  );
-  const availableCopilotModels = useMemo(
-    () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
-    [copilotModelsQuery.data],
-  );
-  const availableCursorModels = useMemo(
-    () => getAvailableAutomationModels(cursorModelsQuery.data ?? []),
-    [cursorModelsQuery.data],
-  );
-  const availableOpenCodeModels = useMemo(
-    () => getAvailableAutomationModels(openCodeModelsQuery.data ?? []),
-    [openCodeModelsQuery.data],
+  const availableModelsByInstance = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(catalogQuery.data?.modelsByInstance ?? {}).map(
+          ([instanceId, models]) => [
+            instanceId,
+            getAvailableAutomationModels(models),
+          ],
+        ),
+      ),
+    [catalogQuery.data?.modelsByInstance],
   );
 
   const formDefaults = useMemo<EditFormValues | null>(() => {
     if (!automation) return null;
-    const engine = (automation.chatEngine ?? "sentinel") as ChatEngine;
+    const instanceId = resolveAutomationInstanceId(automation);
     const selection = resolveAutomationSelection(
-      getAutomationModelsForEngine(engine, {
-        claude: availableClaudeModels,
-        copilot: availableCopilotModels,
-        codex: availableCodexModels,
-        cursor: availableCursorModels,
-        opencode: availableOpenCodeModels,
-        sentinel: availableSentinelModels,
-      }),
+      getAutomationModelsForInstance(instanceId, availableModelsByInstance),
       automation.modelId ?? null,
       (automation.reasoningEffort as ReasoningEffort | null) ?? null,
     );
@@ -323,27 +301,20 @@ export function AutomationDetailScreen({
     return {
       title: automation.title,
       prompt: automation.prompt,
-      chatEngine: engine,
+      engineInstanceId: instanceId,
       workspaceId: automation.workspaceId ?? "__current__",
       scheduleType: automation.scheduleType,
       scheduleDayOfWeek: String(automation.scheduleDayOfWeek ?? 1),
       scheduleTime: automation.scheduleTime ?? "09:00",
       scheduleCron: automation.scheduleCron ?? "",
       modelId: automation.modelId ?? selection.modelId,
+      modelOptionValues: toAutomationOptionValues(automation.modelOptions),
       reasoningEffort:
         (automation.reasoningEffort as ReasoningEffort | null) ??
         selection.reasoningEffort ??
         "",
     };
-  }, [
-    automation,
-    availableClaudeModels,
-    availableCopilotModels,
-    availableCodexModels,
-    availableCursorModels,
-    availableOpenCodeModels,
-    availableSentinelModels,
-  ]);
+  }, [automation, availableModelsByInstance]);
 
   const form = useForm<EditFormValues>({
     defaultValues: formDefaults ?? undefined,
@@ -371,7 +342,8 @@ export function AutomationDetailScreen({
   }, [automation, form, formDefaults, form.formState.isDirty]);
 
   const scheduleType = form.watch("scheduleType");
-  const selectedEngine = form.watch("chatEngine");
+  const selectedInstanceId = form.watch("engineInstanceId");
+  const selectedWorkspaceId = form.watch("workspaceId");
   const selectedModelKey = form.watch("modelId");
 
   const workspaceOptions = useMemo(() => {
@@ -390,30 +362,33 @@ export function AutomationDetailScreen({
     ];
   }, [workspacesQuery.data]);
 
-  const engineOptions = useMemo(
-    () => getAutomationEngineOptions(enginesQuery.data ?? []),
-    [enginesQuery.data],
-  );
   const availableModels = useMemo(
     () =>
-      getAutomationModelsForEngine(selectedEngine, {
-        claude: availableClaudeModels,
-        copilot: availableCopilotModels,
-        codex: availableCodexModels,
-        cursor: availableCursorModels,
-        opencode: availableOpenCodeModels,
-        sentinel: availableSentinelModels,
-      }),
-    [
-      availableClaudeModels,
-      availableCopilotModels,
-      availableCodexModels,
-      availableCursorModels,
-      availableOpenCodeModels,
-      availableSentinelModels,
-      selectedEngine,
-    ],
+      getAutomationModelsForInstance(
+        selectedInstanceId,
+        availableModelsByInstance,
+      ),
+    [availableModelsByInstance, selectedInstanceId],
   );
+  const unattendedNotice = useMemo(() => {
+    const workspaces = workspacesQuery.data ?? [];
+    const workspace =
+      selectedWorkspaceId === "__current__"
+        ? workspaces.find((candidate) => candidate.isSelected)
+        : workspaces.find((candidate) => candidate.id === selectedWorkspaceId);
+    return getAutomationUnattendedNotice(
+      workspace?.permissionModeOverride ??
+        securityQuery.data?.permissionMode ??
+        null,
+      catalogOptions.find((option) => option.instanceId === selectedInstanceId),
+    );
+  }, [
+    catalogOptions,
+    securityQuery.data?.permissionMode,
+    selectedInstanceId,
+    selectedWorkspaceId,
+    workspacesQuery.data,
+  ]);
   const modelOptions = useMemo(() => {
     return getAutomationModelOptions(availableModels, selectedModelKey);
   }, [availableModels, selectedModelKey]);
@@ -435,6 +410,21 @@ export function AutomationDetailScreen({
     () => getAutomationReasoningOptions(supportedReasoningEfforts),
     [supportedReasoningEfforts],
   );
+  const optionDescriptors = useMemo(
+    () => getAutomationModelOptionDescriptors(selectedModel),
+    [selectedModel],
+  );
+
+  useEffect(() => {
+    if (!selectedModel) {
+      return;
+    }
+    const current = form.getValues("modelOptionValues") ?? {};
+    const pruned = pruneAutomationOptionValues(current, optionDescriptors);
+    if (JSON.stringify(pruned) !== JSON.stringify(current)) {
+      form.setValue("modelOptionValues", pruned);
+    }
+  }, [form, optionDescriptors, selectedModel]);
 
   useEffect(() => {
     const currentModelKey = form.getValues("modelId");
@@ -507,12 +497,22 @@ export function AutomationDetailScreen({
           values.reasoningEffort.trim().length > 0
             ? (values.reasoningEffort as ReasoningEffort)
             : null;
+        const chatEngine = resolveAutomationEngine(
+          values.engineInstanceId,
+          catalogOptions,
+          automation,
+        );
+        if (!chatEngine) {
+          setSubmitError(AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE);
+          return;
+        }
 
         const updated = await updateMutation.mutateAsync({
           id: automation.id,
           title: values.title,
           prompt: values.prompt,
-          chatEngine: values.chatEngine,
+          chatEngine,
+          chatEngineInstanceId: values.engineInstanceId,
           workspaceId:
             values.workspaceId === "__current__" ? null : values.workspaceId,
           scheduleType: values.scheduleType,
@@ -520,6 +520,16 @@ export function AutomationDetailScreen({
           scheduleTime,
           scheduleCron,
           modelId: values.modelId === "__default__" ? null : values.modelId,
+          modelOptions: resolveAutomationModelOptionsForSave(
+            values.modelId,
+            values.modelOptionValues,
+            availableModels,
+            {
+              instanceId: resolveAutomationInstanceId(automation),
+              modelId: automation.modelId ?? null,
+              modelOptions: automation.modelOptions,
+            },
+          ),
           reasoningEffort: selectedReasoning,
         });
 
@@ -538,7 +548,15 @@ export function AutomationDetailScreen({
         );
       }
     },
-    [automation, updateMutation, automationQuery, utils, form],
+    [
+      automation,
+      availableModels,
+      catalogOptions,
+      updateMutation,
+      automationQuery,
+      utils,
+      form,
+    ],
   );
 
   const handleRunNow = async () => {
@@ -1012,12 +1030,22 @@ export function AutomationDetailScreen({
                   options={workspaceOptions}
                 />
 
-                <ControlledSelectField
+                <Controller
                   control={form.control}
-                  description="Choose which engine and runtime this automation should use."
-                  label="Engine"
-                  name="chatEngine"
-                  options={engineOptions}
+                  name="engineInstanceId"
+                  render={({ field }) => (
+                    <AutomationEngineFields
+                      catalogOptions={catalogOptions}
+                      driver={resolveAutomationEngine(
+                        field.value,
+                        catalogOptions,
+                        automation,
+                      )}
+                      instanceId={field.value}
+                      notice={unattendedNotice}
+                      onInstanceChange={field.onChange}
+                    />
+                  )}
                 />
 
                 <ControlledSelectField
@@ -1037,6 +1065,18 @@ export function AutomationDetailScreen({
                   selectProps={{
                     isDisabled: reasoningOptions.length === 0,
                   }}
+                />
+
+                <Controller
+                  control={form.control}
+                  name="modelOptionValues"
+                  render={({ field }) => (
+                    <AutomationModelOptionFields
+                      descriptors={optionDescriptors}
+                      onChange={field.onChange}
+                      values={field.value ?? {}}
+                    />
+                  )}
                 />
               </div>
             </div>

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
 import {
+  BUILTIN_DRIVER_KINDS,
+  DRIVER_CATALOG,
+} from "@/lib/ai/chat/engines/catalog";
+
+import {
   ENGINE_TOOL_RENDERING_COVERAGE,
   KNOWN_CODEX_RENDERER_TOOL_NAMES,
   KNOWN_CLAUDE_RENDERER_TOOL_NAMES,
@@ -10,6 +15,8 @@ import {
   resolveRenderer,
 } from "./registry";
 import { CodexRuntimeTool } from "./renderers/codex-runtime";
+import { ExternalAgentTool } from "./renderers/ext-agent";
+import { ExternalUserInputTool } from "./renderers/external-runtime/user-input";
 import { CodexFileChangeTool } from "./renderers/codex-file-change";
 import { CodexImageViewTool } from "./renderers/codex-image-view";
 import { CodexMcpTool } from "./renderers/codex-mcp";
@@ -34,6 +41,7 @@ import { ClaudeRuntimeTool } from "./renderers/claude-runtime";
 import { ClaudeSessionUtilityTool } from "./renderers/claude-session";
 import { ClaudeGlobTool, ClaudeGrepTool } from "./renderers/claude-search";
 import { ClaudeShellTool } from "./renderers/claude-shell";
+import { ClaudeTaskTool } from "./renderers/claude-tasks";
 import { ClaudeTodoWriteTool } from "./renderers/claude-todo";
 import { ClaudeUserInputTool } from "./renderers/claude-user-input";
 import {
@@ -418,6 +426,30 @@ describe("resolveRenderer", () => {
     expect(renderer).toBe(CodexRuntimeTool);
   });
 
+  it("renders Codex 0.160 approvals and new item types with the generic Codex card", () => {
+    for (const toolName of [
+      "codex_apply_patch_approval",
+      "codex_dynamic_tool_call",
+      "codex_exec_command_approval",
+      "codex_image_generation",
+      "codex_mcp_elicitation",
+      "codex_permissions_request",
+      "codex_sleep",
+      "codex_sub_agent_activity",
+    ]) {
+      const renderer = resolveRenderer({
+        approval: { id: "approval-1" },
+        input: { reason: "Needs access" },
+        state: "approval-requested",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      } as any);
+
+      expect(renderer).toBe(CodexRuntimeTool);
+    }
+  });
+
   it("uses the ClaudeShellTool renderer for claude_bash", () => {
     const renderer = resolveRenderer({
       input: { command: "ls -la" },
@@ -765,6 +797,25 @@ describe("resolveRenderer", () => {
     } as any);
 
     expect(renderer).toBe(ClaudeShellTool);
+  });
+
+  it("uses the ClaudeTaskTool renderer for every Claude Task* tool", () => {
+    for (const toolName of [
+      "claude_taskcreate",
+      "claude_taskget",
+      "claude_tasklist",
+      "claude_taskupdate",
+    ]) {
+      const renderer = resolveRenderer({
+        input: {},
+        state: "output-available",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      } as any);
+
+      expect(renderer).toBe(ClaudeTaskTool);
+    }
   });
 
   it("uses the ClaudeTodoWriteTool renderer for claude_todowrite", () => {
@@ -1256,6 +1307,43 @@ describe("resolveRenderer", () => {
     }
   });
 
+  it("picks the shared external family from the part's kind metadata, not its name", () => {
+    const part = (toolName: string, kind: string) =>
+      ({
+        callProviderMetadata: {
+          sentinel: { agentLabel: "Work Cursor", kind },
+        },
+        input: {},
+        output: {},
+        state: "output-available",
+        toolCallId: `tool-call-${toolName}`,
+        toolName,
+        type: "dynamic-tool",
+      }) as any;
+
+    // A name the keyword heuristic would read as a shell still renders by kind.
+    expect(resolveRenderer(part("cursor_bash", "read"))).toBe(
+      ExternalAgentTool,
+    );
+    expect(resolveRenderer(part("cursor_edit", "edit"))).toBe(
+      ExternalAgentTool,
+    );
+    expect(resolveRenderer(part("grok_execute", "execute"))).toBe(
+      ExternalAgentTool,
+    );
+    expect(resolveRenderer(part("cursor_ask_question", "user_input"))).toBe(
+      ExternalUserInputTool,
+    );
+    // Without metadata (persisted before it existed) the Cursor names keep
+    // their renderers.
+    expect(
+      resolveRenderer({
+        ...part("cursor_bash", "read"),
+        callProviderMetadata: undefined,
+      }),
+    ).toBe(CursorShellTool);
+  });
+
   it("uses Cursor and OpenCode runtime fallbacks for unknown engine tools", () => {
     const cursorRenderer = resolveRenderer({
       input: { foo: "bar" },
@@ -1320,8 +1408,12 @@ describe("resolveRenderer", () => {
       "ReadMcpResource",
       "SubscribeMcpResource",
       "SubscribePolling",
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
       "TaskOutput",
       "TaskStop",
+      "TaskUpdate",
       "TodoWrite",
       "UnsubscribeMcpResource",
       "UnsubscribePolling",
@@ -1408,6 +1500,7 @@ describe("resolveRenderer", () => {
     ].map((toolName) => `copilot_${toolName}`);
     const runtimeBridgeToolNames = [
       "copilot_custom_tool",
+      "copilot_extension",
       "copilot_hook",
       "copilot_mcp",
       "copilot_memory",
@@ -1416,6 +1509,7 @@ describe("resolveRenderer", () => {
       "copilot_runtime",
       "copilot_shell",
       "copilot_url",
+      "copilot_workflow",
       "copilot_write",
     ];
 
@@ -1580,5 +1674,57 @@ describe("resolveRenderer", () => {
         expect(renderer).not.toBe(GenericTool);
       }
     }
+  });
+
+  it("covers every driver with a tool prefix, planned ones included", () => {
+    expect(Object.keys(ENGINE_TOOL_RENDERING_COVERAGE).sort()).toEqual(
+      BUILTIN_DRIVER_KINDS.filter(
+        (kind) => DRIVER_CATALOG[kind].toolPrefix !== null,
+      ).sort(),
+    );
+  });
+
+  it("renders agents on the shared external runtime through its family", () => {
+    // Kinds without exact renderers of their own use the shared family.
+    const sharedFamilyKinds = Object.entries(ENGINE_TOOL_RENDERING_COVERAGE)
+      .filter(([, toolNames]) => toolNames.length === 0)
+      .map(([kind]) => kind);
+
+    for (const kind of sharedFamilyKinds) {
+      const part = (toolName: string, metaKind?: string) =>
+        ({
+          callProviderMetadata: metaKind
+            ? { sentinel: { agentLabel: "Agent", kind: metaKind } }
+            : undefined,
+          input: {},
+          output: {},
+          state: "output-available",
+          toolCallId: `tool-call-${toolName}`,
+          toolName,
+          type: "dynamic-tool",
+        }) as any;
+
+      expect(resolveRenderer(part(`${kind}_read`, "read"))).toBe(
+        ExternalAgentTool,
+      );
+      expect(resolveRenderer(part(`${kind}_ask_user`))).toBe(
+        ExternalUserInputTool,
+      );
+      // A part without the kind metadata gets the generic card.
+      expect(resolveRenderer(part(`${kind}_read`))).toBe(GenericTool);
+    }
+  });
+
+  it("leaves tools of drivers without a renderer family to the generic renderer", () => {
+    expect(
+      resolveRenderer({
+        input: {},
+        output: {},
+        state: "output-available",
+        toolCallId: "tool-call-gemini",
+        toolName: "gemini_read",
+        type: "dynamic-tool",
+      } as any),
+    ).toBeUndefined();
   });
 });

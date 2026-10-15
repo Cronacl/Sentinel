@@ -14,6 +14,7 @@ import {
 } from "@/schemas/scratchpad.schema";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 
+import { assertEngineInstanceSelection } from "./engines/selection";
 import { getOwnedWorkspaceOrThrow } from "./workspace-thread-helpers";
 
 type ScratchpadWorkspaceContext = Parameters<
@@ -63,9 +64,19 @@ export const scratchpadRouter = createTRPCRouter({
     .input(scratchpadCreateTaskSchema)
     .mutation(async ({ ctx, input }) => {
       const workspaceId = await resolveScratchpadWorkspaceId(ctx);
+      if (input.engine) {
+        await assertEngineInstanceSelection(
+          ctx.user.id,
+          input.engine,
+          input.engineInstanceId,
+        );
+      }
       return createScratchpadTask({
         database: ctx.db,
         ...(input.engine ? { engine: input.engine } : {}),
+        ...(input.engine && input.engineInstanceId
+          ? { engineInstanceId: input.engineInstanceId }
+          : {}),
         ...(input.modelId ? { modelId: input.modelId } : {}),
         ...(input.permissionModeOverride
           ? { permissionModeOverride: input.permissionModeOverride }

@@ -16,8 +16,10 @@ import { sileo } from "sileo";
 
 import { getErrorMessage } from "@/lib/errors";
 import {
+  BUILTIN_PERMISSION_MODES,
   DEFAULT_PERMISSION_MODE,
   PERMISSION_MODE_OPTIONS,
+  getPermissionModeOptions,
   type PermissionMode,
 } from "@/lib/security";
 import { api } from "@/trpc/react";
@@ -53,13 +55,22 @@ type ComposerWorkspaceBarProps = {
   ) => void;
   onDraftProjectModeChange?: (mode: DraftProjectMode) => void;
   onSetupPendingChange?: (isPending: boolean) => void;
+  /** Modes the selected engine supports; the menu offers only these. */
+  permissionModes?: readonly PermissionMode[];
   repoThreadId?: string;
   showBranchSwitcher: boolean;
+  /**
+   * An existing thread: the menu then sets that thread's own mode, which
+   * falls back to the workspace's. Without it the menu sets the workspace's.
+   */
+  threadPermission?: {
+    permissionModeOverride: PermissionMode | null;
+    threadId: string;
+  } | null;
 };
 
 type ComposerRepoContextSnapshot =
-  | (ComposerWorkspaceBarRepoContext & RepoThreadUiContext)
-  | null;
+  (ComposerWorkspaceBarRepoContext & RepoThreadUiContext) | null;
 
 function getPermissionModeLabel(value: PermissionMode) {
   return (
@@ -77,16 +88,24 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   onDraftPreparedWorktreeChange,
   onDraftProjectModeChange,
   onSetupPendingChange,
+  permissionModes = BUILTIN_PERMISSION_MODES,
   repoThreadId,
   showBranchSwitcher,
+  threadPermission = null,
 }: ComposerWorkspaceBarProps) {
   const utils = api.useUtils();
+  const permissionModeOptions = useMemo(
+    () => getPermissionModeOptions(permissionModes),
+    [permissionModes],
+  );
   const [permissionPopoverOpen, setPermissionPopoverOpen] = useState(false);
   const [projectModePopoverOpen, setProjectModePopoverOpen] = useState(false);
+  const permissionThreadId = threadPermission?.threadId ?? null;
+  const scopedPermissionOverride = threadPermission
+    ? threadPermission.permissionModeOverride
+    : (activeWorkspace.permissionModeOverride ?? null);
   const [permissionOverride, setPermissionOverride] =
-    useState<PermissionMode | null>(
-      activeWorkspace.permissionModeOverride ?? null,
-    );
+    useState<PermissionMode | null>(scopedPermissionOverride);
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
   const [branchMode, setBranchMode] = useState<"list" | "create">("list");
   const [branchSearch, setBranchSearch] = useState("");
@@ -134,8 +153,8 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   });
 
   useEffect(() => {
-    setPermissionOverride(activeWorkspace.permissionModeOverride ?? null);
-  }, [activeWorkspace.id, activeWorkspace.permissionModeOverride]);
+    setPermissionOverride(scopedPermissionOverride);
+  }, [activeWorkspace.id, permissionThreadId, scopedPermissionOverride]);
 
   const seedStableRepoContext = useCallback(
     (nextThreadId: string | null | undefined, repoContext: unknown) => {
@@ -226,6 +245,58 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
       },
     });
 
+  const updateThreadPermissionOverrideMutation =
+    api.threads.updatePermissionOverride.useMutation({
+      onMutate: (input) => {
+        const previousThread = utils.threads.get.getData({
+          threadId: input.threadId,
+        });
+
+        setPermissionOverride(input.permissionModeOverride);
+        utils.threads.get.setData({ threadId: input.threadId }, (current) =>
+          current
+            ? {
+                ...current,
+                thread: {
+                  ...current.thread,
+                  permissionModeOverride: input.permissionModeOverride,
+                },
+              }
+            : current,
+        );
+
+        return { previousOverride: permissionOverride, previousThread };
+      },
+      onError: (error, input, context) => {
+        setPermissionOverride(context?.previousOverride ?? null);
+        if (context?.previousThread) {
+          utils.threads.get.setData(
+            { threadId: input.threadId },
+            context.previousThread,
+          );
+        }
+        sileo.error({
+          description: getErrorMessage(
+            error,
+            "Unable to update thread permissions.",
+          ),
+          title: "Thread permissions failed",
+        });
+      },
+      onSuccess: (result) => {
+        setPermissionOverride(result.permissionModeOverride);
+        sileo.success({
+          description: result.permissionModeOverride
+            ? `Thread permissions set to ${getPermissionModeLabel(result.permissionModeOverride)}.`
+            : "Thread now uses workspace permissions.",
+          title: "Permissions updated",
+        });
+      },
+      onSettled: async (_result, _error, input) => {
+        await utils.threads.get.invalidate({ threadId: input.threadId });
+      },
+    });
+
   const checkoutBranchMutation = api.repo.checkoutBranch.useMutation({
     onError: (error) => {
       const message = getErrorMessage(error, "Unable to switch branches.");
@@ -253,13 +324,19 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
   const removeThreadWorktreeMutation =
     api.repo.removeThreadWorktree.useMutation();
 
-  const effectivePermissionMode =
-    permissionOverride ??
-    securityQuery.data?.permissionMode ??
-    DEFAULT_PERMISSION_MODE;
+  const globalPermissionMode =
+    securityQuery.data?.permissionMode ?? DEFAULT_PERMISSION_MODE;
+  // What "no override" means here: a thread falls back to its workspace.
+  const inheritedPermissionMode = threadPermission
+    ? (activeWorkspace.permissionModeOverride ?? globalPermissionMode)
+    : globalPermissionMode;
+  const effectivePermissionMode = permissionOverride ?? inheritedPermissionMode;
   const isFullPermissionsActive = effectivePermissionMode === "full";
+  const isPermissionUpdatePending =
+    updatePermissionOverrideMutation.isPending ||
+    updateThreadPermissionOverrideMutation.isPending;
   const isPermissionLoading =
-    securityQuery.isLoading || updatePermissionOverrideMutation.isPending;
+    securityQuery.isLoading || isPermissionUpdatePending;
   const branchSwitcherVisible = Boolean(
     showBranchSwitcher &&
     activeWorkspace.rootPath &&
@@ -516,20 +593,31 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
 
   const handlePermissionChange = useCallback(
     (nextValue: PermissionMode | null) => {
-      if (
-        updatePermissionOverrideMutation.isPending ||
-        nextValue === permissionOverride
-      ) {
+      if (isPermissionUpdatePending || nextValue === permissionOverride) {
         return;
       }
 
-      updatePermissionOverrideMutation.mutate({
-        permissionModeOverride: nextValue,
-        workspaceId: activeWorkspace.id,
-      });
+      if (permissionThreadId) {
+        updateThreadPermissionOverrideMutation.mutate({
+          permissionModeOverride: nextValue,
+          threadId: permissionThreadId,
+        });
+      } else {
+        updatePermissionOverrideMutation.mutate({
+          permissionModeOverride: nextValue,
+          workspaceId: activeWorkspace.id,
+        });
+      }
       setPermissionPopoverOpen(false);
     },
-    [activeWorkspace.id, permissionOverride, updatePermissionOverrideMutation],
+    [
+      activeWorkspace.id,
+      isPermissionUpdatePending,
+      permissionOverride,
+      permissionThreadId,
+      updatePermissionOverrideMutation,
+      updateThreadPermissionOverrideMutation,
+    ],
   );
 
   const handleCreateBranch = useCallback(() => {
@@ -998,13 +1086,9 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                 type="button"
               >
                 <div className="min-w-0">
-                  <p>Use global</p>
+                  <p>{threadPermission ? "Use workspace" : "Use global"}</p>
                   <p className="text-xs text-muted">
-                    Currently{" "}
-                    {getPermissionModeLabel(
-                      securityQuery.data?.permissionMode ??
-                        DEFAULT_PERMISSION_MODE,
-                    )}
+                    Currently {getPermissionModeLabel(inheritedPermissionMode)}
                   </p>
                 </div>
                 {permissionOverride == null ? (
@@ -1017,7 +1101,7 @@ export const ComposerWorkspaceBar = memo(function ComposerWorkspaceBar({
                 ) : null}
               </button>
 
-              {PERMISSION_MODE_OPTIONS.map((option) => (
+              {permissionModeOptions.map((option) => (
                 <button
                   className="flex items-center justify-between rounded-xl px-2 py-1.5 text-left text-sm text-foreground transition-colors duration-150 ease-out hover:bg-default"
                   key={option.value}

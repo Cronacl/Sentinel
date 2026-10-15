@@ -190,10 +190,10 @@ function ToolApprovalRow({
         isSelected={tool.requireApproval}
         onChange={(requireApproval) => void onToggle(tool, requireApproval)}
       >
-        <Switch.Control>
-          <Switch.Thumb />
-        </Switch.Control>
-        <Switch.Content>
+        <Switch.Content className="font-normal">
+          <Switch.Control>
+            <Switch.Thumb />
+          </Switch.Control>
           <div className="space-y-0.5">
             <p className="text-sm font-medium">Require approval</p>
             <p className="text-muted text-xs">
@@ -538,9 +538,11 @@ export default function ApprovalsSettingsPage() {
                                       void handleGroupToggle(group, value)
                                     }
                                   >
-                                    <Switch.Control>
-                                      <Switch.Thumb />
-                                    </Switch.Control>
+                                    <Switch.Content>
+                                      <Switch.Control>
+                                        <Switch.Thumb />
+                                      </Switch.Control>
+                                    </Switch.Content>
                                   </Switch.Root>
                                 </div>
                               ) : null}

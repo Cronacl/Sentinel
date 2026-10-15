@@ -156,9 +156,11 @@ function IntegrationCell({
               )
             }
           >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Content>
           </Switch>
         ) : (
           <>
@@ -171,9 +173,11 @@ function IntegrationCell({
                   onToggle(integration.provider, !integration.isEnabled)
                 }
               >
-                <Switch.Control>
-                  <Switch.Thumb />
-                </Switch.Control>
+                <Switch.Content>
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                </Switch.Content>
               </Switch>
             ) : null}
 

@@ -281,9 +281,13 @@ function QuestionBody({
     answers.length === output.questions.length &&
     answers.every((answer) => answer.answer.trim().length > 0);
 
-  const optionClass =
-    "w-full cursor-pointer my-0.5 items-start gap-1.5 rounded-lg px-1.5 py-1 transition-colors data-selected:bg-surface";
-  const controlClass = "size-3 shrink-0";
+  const optionClass = "my-0.5 w-full";
+  // The card is the option's clickable label (`Checkbox.Content` / `Radio.Content`).
+  const optionContentClass =
+    "w-full cursor-pointer items-start gap-1.5 rounded-lg px-1.5 py-1 font-normal transition-colors data-selected:bg-surface";
+  // HeroUI 3.2 no longer offsets the controls; keep them centered on the first label line.
+  const checkboxControlClass = "mt-0.5 size-3 shrink-0";
+  const radioControlClass = "mt-[3px] size-3 shrink-0";
 
   return (
     <div className="overflow-hidden rounded-xl border border-border/40 bg-surface/20">
@@ -324,30 +328,34 @@ function QuestionBody({
                 key={option.label}
                 value={option.label}
               >
-                <Checkbox.Control className={controlClass}>
-                  <Checkbox.Indicator />
-                </Checkbox.Control>
-                <Checkbox.Content className="min-w-0 gap-0">
-                  <Label className="cursor-pointer text-[12px]">
-                    {option.label}
-                  </Label>
-                  {option.description ? (
-                    <Description className="text-[11px]">
-                      {option.description}
-                    </Description>
-                  ) : null}
+                <Checkbox.Content className={optionContentClass}>
+                  <Checkbox.Control className={checkboxControlClass}>
+                    <Checkbox.Indicator />
+                  </Checkbox.Control>
+                  <span className="flex min-w-0 flex-col">
+                    <Label className="cursor-pointer text-[12px]">
+                      {option.label}
+                    </Label>
+                    {option.description ? (
+                      <Description className="text-[11px]">
+                        {option.description}
+                      </Description>
+                    ) : null}
+                  </span>
                 </Checkbox.Content>
               </Checkbox>
             ))}
 
             <Checkbox className={optionClass} value={CUSTOM_OPTION_KEY}>
-              <Checkbox.Control className={controlClass}>
-                <Checkbox.Indicator />
-              </Checkbox.Control>
-              <Checkbox.Content className="min-w-0 gap-0">
-                <Label className="cursor-pointer text-[12px]">
-                  Custom answer
-                </Label>
+              <Checkbox.Content className={optionContentClass}>
+                <Checkbox.Control className={checkboxControlClass}>
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+                <span className="flex min-w-0 flex-col">
+                  <Label className="cursor-pointer text-[12px]">
+                    Custom answer
+                  </Label>
+                </span>
               </Checkbox.Content>
             </Checkbox>
           </CheckboxGroup>
@@ -379,30 +387,34 @@ function QuestionBody({
                 key={option.label}
                 value={option.label}
               >
-                <Radio.Control className={controlClass}>
-                  <Radio.Indicator />
-                </Radio.Control>
-                <Radio.Content className="min-w-0 gap-0">
-                  <Label className="cursor-pointer text-[12px]">
-                    {option.label}
-                  </Label>
-                  {option.description ? (
-                    <Description className="text-[11px]">
-                      {option.description}
-                    </Description>
-                  ) : null}
+                <Radio.Content className={optionContentClass}>
+                  <Radio.Control className={radioControlClass}>
+                    <Radio.Indicator />
+                  </Radio.Control>
+                  <span className="flex min-w-0 flex-col">
+                    <Label className="cursor-pointer text-[12px]">
+                      {option.label}
+                    </Label>
+                    {option.description ? (
+                      <Description className="text-[11px]">
+                        {option.description}
+                      </Description>
+                    ) : null}
+                  </span>
                 </Radio.Content>
               </Radio>
             ))}
 
             <Radio className={optionClass} value={CUSTOM_OPTION_KEY}>
-              <Radio.Control className={controlClass}>
-                <Radio.Indicator />
-              </Radio.Control>
-              <Radio.Content className="min-w-0 gap-0">
-                <Label className="cursor-pointer text-[12px]">
-                  Custom answer
-                </Label>
+              <Radio.Content className={optionContentClass}>
+                <Radio.Control className={radioControlClass}>
+                  <Radio.Indicator />
+                </Radio.Control>
+                <span className="flex min-w-0 flex-col">
+                  <Label className="cursor-pointer text-[12px]">
+                    Custom answer
+                  </Label>
+                </span>
               </Radio.Content>
             </Radio>
           </RadioGroup>

@@ -19,6 +19,8 @@ export type QueuedFollowUpSummary = {
 export type ThreadSessionSnapshot = {
   activeRunId: string | null;
   chatEngine: ChatEngine;
+  /** The thread's engine instance (the engine itself for the default). */
+  chatEngineInstanceId?: string;
   messages: ThreadUIMessage[];
   mode?: "chat" | "plan" | null;
   queuedFollowUps: QueuedFollowUpSummary[];

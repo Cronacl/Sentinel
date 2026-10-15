@@ -1,7 +1,12 @@
 "use client";
 
 import { type QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchStreamLink, loggerLink } from "@trpc/client";
+import {
+  httpBatchStreamLink,
+  httpSubscriptionLink,
+  loggerLink,
+  splitLink,
+} from "@trpc/client";
 import { createTRPCReact } from "@trpc/react-query";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import { useState } from "react";
@@ -10,6 +15,7 @@ import SuperJSON from "superjson";
 import type { AppRouter } from "@/server/api/root";
 
 import { createQueryClient } from "./query-client";
+import { isSensitiveTrpcOperation } from "./sensitive-operations";
 
 let clientQueryClientSingleton: QueryClient | undefined;
 
@@ -36,17 +42,28 @@ export function TRPCReactProvider(props: { children: React.ReactNode }) {
       links: [
         loggerLink({
           enabled: (op) =>
-            process.env.NODE_ENV === "development" ||
-            (op.direction === "down" && op.result instanceof Error),
+            // loggerLink passes the whole operation in both directions; its
+            // type only declares `path` on the way up.
+            !isSensitiveTrpcOperation((op as { path?: string }).path ?? "") &&
+            (process.env.NODE_ENV === "development" ||
+              (op.direction === "down" && op.result instanceof Error)),
         }),
-        httpBatchStreamLink({
-          transformer: SuperJSON,
-          url: `${getBaseUrl()}/api/trpc`,
-          headers: () => {
-            const headers = new Headers();
-            headers.set("x-trpc-source", "nextjs-react");
-            return headers;
-          },
+        // Subscriptions (engines.onEvents) use SSE on the same route.
+        splitLink({
+          condition: (op) => op.type === "subscription",
+          false: httpBatchStreamLink({
+            transformer: SuperJSON,
+            url: `${getBaseUrl()}/api/trpc`,
+            headers: () => {
+              const headers = new Headers();
+              headers.set("x-trpc-source", "nextjs-react");
+              return headers;
+            },
+          }),
+          true: httpSubscriptionLink({
+            transformer: SuperJSON,
+            url: `${getBaseUrl()}/api/trpc`,
+          }),
         }),
       ],
     }),

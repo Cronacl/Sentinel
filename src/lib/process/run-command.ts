@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
+
 export type CommandResult = {
   code: number;
   stderr: string;
@@ -22,10 +24,10 @@ export async function runCommand({
   return await new Promise<CommandResult>((resolve, reject) => {
     const child = spawn(command, args ?? [], {
       cwd,
-      env: {
+      env: withoutSentinelPrivateEnv({
         ...process.env,
         ...(env ?? {}),
-      },
+      }),
       stdio: ["ignore", "pipe", "pipe"],
     });
 

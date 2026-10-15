@@ -25,6 +25,7 @@ mock.module("@/lib/ai/providers/factory", () => ({
 const {
   buildVideoGenerationProviderEntries,
   buildVideoGenerationRuntime,
+  getRetiredVideoModelReplacement,
   getVideoModelMeta,
   getVideoModelsForProvider,
 } = await import("./videos");
@@ -163,15 +164,48 @@ describe("video generation provider runtime", () => {
     expect(providerEntries[0]?.modelId).toBe(null);
   });
 
-  it("includes Veo 2 for Google AI Studio", () => {
-    expect(getVideoModelsForProvider("google")).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          displayName: "Veo 2",
-          id: "veo-2.0-generate-001",
-        }),
-      ]),
+  it("lists only the Veo models Google AI Studio still serves", () => {
+    expect(
+      getVideoModelsForProvider("google").map((model) => model.id),
+    ).toEqual(["veo-3.1-fast-generate-preview", "veo-3.1-generate-preview"]);
+    expect(getVideoModelsForProvider("google_vertex")[0]?.id).toBe(
+      "veo-3.1-fast-generate-001",
     );
+    expect(getVideoModelsForProvider("xai")[0]?.id).toBe(
+      "grok-imagine-video-1.5",
+    );
+  });
+
+  it("moves a stored retired Veo model to its replacement", () => {
+    const [entry] = buildVideoGenerationProviderEntries({
+      credentials: [
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "google-key" }),
+          isEnabled: true,
+          provider: "google",
+        },
+      ],
+      providerSettings: [
+        {
+          isCustom: false,
+          isEnabled: true,
+          modelId: "veo-2.0-generate-001",
+          provider: "google",
+        },
+      ],
+    });
+
+    expect(entry).toMatchObject({
+      hasValidModel: true,
+      modelId: "veo-3.1-generate-preview",
+      provider: "google",
+    });
+    expect(
+      getRetiredVideoModelReplacement("google", "veo-2.0-generate-001"),
+    ).toBe("veo-3.1-generate-preview");
+    expect(
+      getRetiredVideoModelReplacement("google_vertex", "veo-2.0-generate-001"),
+    ).toBe(null);
   });
 
   it("includes new native media video providers and capability metadata", () => {

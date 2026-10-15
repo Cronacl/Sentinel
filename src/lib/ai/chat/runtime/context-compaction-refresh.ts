@@ -1,4 +1,4 @@
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 import { createLogger } from "@/lib/logger";
 import type { ThreadUIMessage } from "@/lib/ai/messages/types";
@@ -34,7 +34,7 @@ export async function refreshThreadContextCompactionCheckpoint(input: {
   fixedWindowSize?: number | null;
   languageModel: unknown;
   onCompactionStart?: () => void | Promise<void>;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
   staleWriteProtection?: boolean;
   threadId: string;
   transcript: ThreadUIMessage[];

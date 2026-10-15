@@ -97,7 +97,11 @@ const NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES: VideoModelCapabilities = {
   supportsTextToVideo: true,
 };
 
+// The first entry of each provider is its default video model. Retired ids
+// live in RETIRED_VIDEO_MODEL_REPLACEMENTS below, not here.
 const VIDEO_MODEL_CATALOG: Partial<Record<AIProvider, VideoModelMeta[]>> = {
+  // Google shuts the Veo 3.1 previews down on 2026-10-22 and points to Gemini
+  // Omni, which needs the Interactions API rather than a video model.
   google: [
     {
       capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
@@ -111,24 +115,30 @@ const VIDEO_MODEL_CATALOG: Partial<Record<AIProvider, VideoModelMeta[]>> = {
       displayName: "Veo 3.1",
       id: "veo-3.1-generate-preview",
     },
-    {
-      capabilities: TEXT_ONLY_VIDEO_CAPABILITIES,
-      description: "Google Veo 2 stable text-to-video model.",
-      displayName: "Veo 2",
-      id: "veo-2.0-generate-001",
-    },
   ],
   google_vertex: [
     {
       capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
-      description: "Vertex AI Veo 3.1 fast preview model.",
+      description: "Vertex AI Veo 3.1 Fast (GA).",
       displayName: "Veo 3.1 Fast",
+      id: "veo-3.1-fast-generate-001",
+    },
+    {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "Vertex AI Veo 3.1 (GA).",
+      displayName: "Veo 3.1",
+      id: "veo-3.1-generate-001",
+    },
+    {
+      capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "Vertex AI Veo 3.1 fast preview model.",
+      displayName: "Veo 3.1 Fast Preview",
       id: "veo-3.1-fast-generate-preview",
     },
     {
       capabilities: TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "Vertex AI Veo 3.1 quality preview model.",
-      displayName: "Veo 3.1",
+      displayName: "Veo 3.1 Preview",
       id: "veo-3.1-generate-preview",
     },
     {
@@ -139,6 +149,12 @@ const VIDEO_MODEL_CATALOG: Partial<Record<AIProvider, VideoModelMeta[]>> = {
     },
   ],
   xai: [
+    {
+      capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
+      description: "Latest xAI Grok Imagine video model (up to 1080p).",
+      displayName: "Grok Imagine Video 1.5",
+      id: "grok-imagine-video-1.5",
+    },
     {
       capabilities: NO_SEED_TEXT_AND_IMAGE_VIDEO_CAPABILITIES,
       description: "xAI Grok imagine video model.",
@@ -356,14 +372,42 @@ export function supportsVideoGeneration({
   }
 }
 
+/**
+ * Video model ids that providers have retired, mapped to their recommended
+ * replacement, so a stored video model keeps working instead of disabling
+ * the provider.
+ */
+const RETIRED_VIDEO_MODEL_REPLACEMENTS: Partial<
+  Record<AIProvider, Readonly<Record<string, string>>>
+> = {
+  // Shut down 2026-06-30 (https://ai.google.dev/gemini-api/docs/deprecations).
+  google: {
+    "veo-2.0-generate-001": "veo-3.1-generate-preview",
+    "veo-3.0-generate-001": "veo-3.1-generate-preview",
+    "veo-3.0-fast-generate-001": "veo-3.1-fast-generate-preview",
+  },
+};
+
+export function getRetiredVideoModelReplacement(
+  provider: AIProvider,
+  modelId: string,
+): string | null {
+  const replacements = RETIRED_VIDEO_MODEL_REPLACEMENTS[provider];
+  return replacements && Object.hasOwn(replacements, modelId)
+    ? replacements[modelId]!
+    : null;
+}
+
 function resolveSelectedModelId({
   availableModels,
   isCustom,
+  provider,
   requestedModelId,
   supportsCustomModel,
 }: {
   availableModels: VideoModelMeta[];
   isCustom: boolean;
+  provider: AIProvider;
   requestedModelId: string | null;
   supportsCustomModel: boolean;
 }) {
@@ -376,7 +420,14 @@ function resolveSelectedModelId({
       return requestedModelId;
     }
 
-    return null;
+    const replacement = getRetiredVideoModelReplacement(
+      provider,
+      requestedModelId,
+    );
+    return replacement &&
+      availableModels.some((model) => model.id === replacement)
+      ? replacement
+      : null;
   }
 
   return availableModels[0]?.id ?? null;
@@ -415,6 +466,7 @@ export function buildVideoGenerationProviderEntries({
     const modelId = resolveSelectedModelId({
       availableModels,
       isCustom,
+      provider: credential.provider,
       requestedModelId,
       supportsCustomModel,
     });

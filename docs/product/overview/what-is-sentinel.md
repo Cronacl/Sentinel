@@ -43,15 +43,22 @@ The shell stays around that work:
 
 ## Engines
 
-Sentinel supports three engines:
+Sentinel supports ten engines:
 
 - `sentinel`
-- `codex`
 - `claude`
+- `codex`
+- `copilot`
+- `cursor`
+- `opencode`
+- `grok`
+- `antigravity`
+- `pi`
+- `acp` (agents from the ACP Registry)
 
 `sentinel` is the built-in app-managed engine. It handles the app side of the workflow around the model, including things like tool routing, plan mode state, approvals, memory retrieval, integrations, and repo checkpoints.
 
-`codex` and `claude` are local runtime options that still run inside the Sentinel shell.
+The others are local coding agents that still run inside the Sentinel shell. See [Engines by agent](../engines-and-runtime/agents.md).
 
 ## The Sentinel harness
 

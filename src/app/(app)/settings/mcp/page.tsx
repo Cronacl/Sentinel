@@ -78,9 +78,11 @@ function CustomServerCell({
             isSelected={server.status === "active"}
             onChange={() => onToggle(server.id, server.status !== "active")}
           >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Content>
           </Switch>
         ) : null}
         <Button
@@ -189,9 +191,11 @@ function RecommendedServerCell({
                 )
               }
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
+              <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+              </Switch.Content>
             </Switch>
           </>
         ) : null}

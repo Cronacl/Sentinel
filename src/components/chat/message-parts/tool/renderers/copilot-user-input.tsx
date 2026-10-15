@@ -337,22 +337,24 @@ export const CopilotUserInputTool = memo(function CopilotUserInputTool({
                       >
                         {currentQuestion.options.map((option) => (
                           <Checkbox
-                            className="my-0.5 w-full cursor-pointer items-start gap-2 rounded-xl border border-border/30 px-2.5 py-2 transition-colors data-selected:border-primary/35 data-selected:bg-primary/8"
+                            className="my-0.5 w-full"
                             key={option.label}
                             value={option.label}
                           >
-                            <Checkbox.Control className="mt-0.5 size-3 shrink-0">
-                              <Checkbox.Indicator />
-                            </Checkbox.Control>
-                            <Checkbox.Content className="min-w-0 gap-0">
-                              <Label className="cursor-pointer text-[12px] font-medium text-foreground">
-                                {option.label}
-                              </Label>
-                              {option.description ? (
-                                <Description className="text-[11px] leading-5 text-foreground/55">
-                                  {option.description}
-                                </Description>
-                              ) : null}
+                            <Checkbox.Content className="w-full cursor-pointer items-start gap-2 rounded-xl border border-border/30 px-2.5 py-2 font-normal transition-colors data-selected:border-primary/35 data-selected:bg-primary/8">
+                              <Checkbox.Control className="mt-0.5 size-3 shrink-0">
+                                <Checkbox.Indicator />
+                              </Checkbox.Control>
+                              <span className="flex min-w-0 flex-col">
+                                <Label className="cursor-pointer text-[12px] font-medium text-foreground">
+                                  {option.label}
+                                </Label>
+                                {option.description ? (
+                                  <Description className="text-[11px] leading-5 text-foreground/55">
+                                    {option.description}
+                                  </Description>
+                                ) : null}
+                              </span>
                             </Checkbox.Content>
                           </Checkbox>
                         ))}
@@ -370,22 +372,24 @@ export const CopilotUserInputTool = memo(function CopilotUserInputTool({
                       >
                         {currentQuestion.options.map((option) => (
                           <Radio
-                            className="my-0.5 w-full cursor-pointer items-start gap-2 rounded-xl border border-border/30 px-2.5 py-2 transition-colors data-selected:border-primary/35 data-selected:bg-primary/8"
+                            className="my-0.5 w-full"
                             key={option.label}
                             value={option.label}
                           >
-                            <Radio.Control className="mt-0.5 size-3 shrink-0">
-                              <Radio.Indicator />
-                            </Radio.Control>
-                            <Radio.Content className="min-w-0 gap-0">
-                              <Label className="cursor-pointer text-[12px] font-medium text-foreground">
-                                {option.label}
-                              </Label>
-                              {option.description ? (
-                                <Description className="text-[11px] leading-5 text-foreground/55">
-                                  {option.description}
-                                </Description>
-                              ) : null}
+                            <Radio.Content className="w-full cursor-pointer items-start gap-2 rounded-xl border border-border/30 px-2.5 py-2 font-normal transition-colors data-selected:border-primary/35 data-selected:bg-primary/8">
+                              <Radio.Control className="mt-0.5 size-3 shrink-0">
+                                <Radio.Indicator />
+                              </Radio.Control>
+                              <span className="flex min-w-0 flex-col">
+                                <Label className="cursor-pointer text-[12px] font-medium text-foreground">
+                                  {option.label}
+                                </Label>
+                                {option.description ? (
+                                  <Description className="text-[11px] leading-5 text-foreground/55">
+                                    {option.description}
+                                  </Description>
+                                ) : null}
+                              </span>
                             </Radio.Content>
                           </Radio>
                         ))}

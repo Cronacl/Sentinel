@@ -21,15 +21,17 @@ const generateImageMock = mock(
           mediaType: "image/png",
         },
       ],
-      providerMetadata: {
-        provider: {
-          quality: "high",
-        },
-      },
-      responses: [
+      calls: [
         {
-          modelId: model.modelId,
-          timestamp: new Date("2026-04-03T12:00:00.000Z"),
+          providerMetadata: {
+            provider: {
+              quality: "high",
+            },
+          },
+          response: {
+            modelId: model.modelId,
+            timestamp: new Date("2026-04-03T12:00:00.000Z"),
+          },
         },
       ],
       warnings:
@@ -86,7 +88,7 @@ const runtime = {
         config: { apiKey: "openai-key" },
         displayName: "OpenAI",
         isCustom: false,
-        modelId: "gpt-image-1",
+        modelId: "gpt-image-1.5",
         provider: "openai" as const,
       },
       google: {
@@ -127,8 +129,10 @@ describe("executeGenerateImage", () => {
     expect(result.successCount).toBe(1);
     expect(result.failureCount).toBe(0);
     expect(result.targets[0]).toMatchObject({
-      modelId: "gpt-image-1",
+      modelId: "gpt-image-1.5",
       provider: "openai",
+      providerMetadataSummary: '{"provider":{"quality":"high"}}',
+      responseModelId: "gpt-image-1.5",
       status: "success",
     });
   });
@@ -320,10 +324,10 @@ describe("executeGenerateImage", () => {
               mediaType: "image/png",
             },
           ],
-          modelId: "gpt-image-1",
+          modelId: "gpt-image-1.5",
           provider: "openai",
           providerMetadataSummary: null,
-          responseModelId: "gpt-image-1",
+          responseModelId: "gpt-image-1.5",
           status: "success",
           warnings: [],
         },

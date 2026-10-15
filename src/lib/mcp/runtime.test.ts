@@ -3,6 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import os from "node:os";
 
+import { toolCallNeedsApproval } from "@/lib/ai/chat/tools/approval";
+
 const close = mock(async () => undefined);
 const createMCPClient = mock(async (config) => ({
   close,
@@ -173,9 +175,9 @@ describe("mcp runtime", () => {
 
     expect(result.tools).toHaveProperty("mcp_remote__fetch_remote");
     expect(result.tools).toHaveProperty("mcp_local__run_local");
-    expect(await result.tools.mcp_remote__fetch_remote.needsApproval()).toBe(
-      false,
-    );
+    expect(
+      await toolCallNeedsApproval(result.tools.mcp_remote__fetch_remote, {}),
+    ).toBe(false);
     expect(stdioCtorCalls[0]).toEqual({
       args: ["serve"],
       command: "npx",
@@ -185,6 +187,14 @@ describe("mcp runtime", () => {
         OPENAI_API_KEY: "key",
       },
     });
+    const clientConfigs = createMCPClient.mock.calls.map(([config]) => config);
+    const httpConfig = clientConfigs.find(
+      (config) => config.transport.type === "http",
+    );
+    expect(httpConfig?.transport.redirect).toBe("follow");
+    expect(
+      clientConfigs.map((config) => config.protocolVersionDiscovery),
+    ).toEqual([false, false]);
 
     const second = await loadMcpTools({
       entries: [
@@ -261,10 +271,16 @@ describe("mcp runtime", () => {
     });
 
     expect(
-      await result.tools.mcp_playwright__browser_click.needsApproval(),
+      await toolCallNeedsApproval(
+        result.tools.mcp_playwright__browser_click,
+        {},
+      ),
     ).toBe(true);
     expect(
-      await result.tools.mcp_playwright__browser_tabs.needsApproval(),
+      await toolCallNeedsApproval(
+        result.tools.mcp_playwright__browser_tabs,
+        {},
+      ),
     ).toBe(false);
   });
 

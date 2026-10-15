@@ -1,4 +1,4 @@
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 import type { AIProvider } from "@/server/db/enums";
 
@@ -6,9 +6,12 @@ export const MEMORY_EMBEDDING_PROFILE_IDS = [
   "openai:text-embedding-3-small",
   "openai:text-embedding-3-large",
   "openai:text-embedding-ada-002",
+  "google:gemini-embedding-2",
   "google:gemini-embedding-001",
+  "google_vertex:gemini-embedding-2",
   "google_vertex:text-embedding-005",
   "google_vertex:text-multilingual-embedding-002",
+  "cohere:embed-v4.0",
   "cohere:embed-english-v3.0",
   "cohere:embed-multilingual-v3.0",
   "cohere:embed-english-light-v3.0",
@@ -29,7 +32,7 @@ export type MemoryEmbeddingProfile = {
   id: MemoryEmbeddingProfileId;
   model: string;
   provider: AIProvider;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
 };
 
 export const MEMORY_EMBEDDING_PROFILES = [
@@ -60,6 +63,20 @@ export const MEMORY_EMBEDDING_PROFILES = [
   },
   {
     description:
+      "Google's current multimodal Gemini embeddings for durable recall.",
+    dimensions: 3072,
+    displayName: "Google gemini-embedding-2",
+    id: "google:gemini-embedding-2",
+    model: "gemini-embedding-2",
+    provider: "google",
+    providerOptions: {
+      google: {
+        outputDimensionality: 3072,
+      },
+    },
+  },
+  {
+    description:
       "Google Gemini embeddings for multilingual and code-aware recall.",
     dimensions: 3072,
     displayName: "Google gemini-embedding-001",
@@ -68,6 +85,19 @@ export const MEMORY_EMBEDDING_PROFILES = [
     provider: "google",
     providerOptions: {
       google: {
+        outputDimensionality: 3072,
+      },
+    },
+  },
+  {
+    description: "Vertex AI Gemini embeddings for multilingual recall.",
+    dimensions: 3072,
+    displayName: "Vertex AI gemini-embedding-2",
+    id: "google_vertex:gemini-embedding-2",
+    model: "gemini-embedding-2",
+    provider: "google_vertex",
+    providerOptions: {
+      vertex: {
         outputDimensionality: 3072,
       },
     },
@@ -96,6 +126,19 @@ export const MEMORY_EMBEDDING_PROFILES = [
     providerOptions: {
       vertex: {
         outputDimensionality: 768,
+      },
+    },
+  },
+  {
+    description: "Cohere's multimodal, multilingual Embed v4 model.",
+    dimensions: 1536,
+    displayName: "Cohere embed-v4.0",
+    id: "cohere:embed-v4.0",
+    model: "embed-v4.0",
+    provider: "cohere",
+    providerOptions: {
+      cohere: {
+        outputDimension: 1536,
       },
     },
   },

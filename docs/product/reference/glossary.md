@@ -18,7 +18,11 @@ A structured thread mode with a stored plan document, tracked tasks, and questio
 
 ## Engine
 
-The runtime layer used for a thread. Sentinel supports `sentinel`, `codex`, and `claude`.
+The runtime layer used for a thread. Sentinel supports `sentinel`, `claude`, `codex`, `copilot`, `cursor`, `opencode`, `grok`, `antigravity`, `pi`, and `acp`.
+
+## Engine instance
+
+One configured copy of an engine, with its own binary path, environment variables, custom models, and, for some engines, its own home directory.
 
 ## Provider
 

@@ -10,6 +10,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
+
 type PatchApplyFailure = {
   error: string;
   path: string;
@@ -56,11 +58,11 @@ async function runGitBuffer(
     (resolve, reject) => {
       const child = spawn("git", args, {
         cwd,
-        env: {
+        env: withoutSentinelPrivateEnv({
           ...process.env,
           GIT_TERMINAL_PROMPT: "0",
           ...(options?.env ?? {}),
-        },
+        }),
         stdio: ["ignore", "pipe", "pipe"],
       });
 

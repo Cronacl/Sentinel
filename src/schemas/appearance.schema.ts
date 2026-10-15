@@ -18,8 +18,10 @@ const fontFamilySchema = z.string().trim().min(1, "Font family is required.");
 const fontSizeSchema = (minimum: number, maximum: number) =>
   z
     .number({
-      invalid_type_error: "Enter a valid font size.",
-      required_error: "Font size is required.",
+      error: (issue) =>
+        issue.input === undefined
+          ? "Font size is required."
+          : "Enter a valid font size.",
     })
     .min(minimum, `Font size must be at least ${minimum}.`)
     .max(maximum, `Font size must be at most ${maximum}.`)

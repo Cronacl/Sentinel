@@ -133,10 +133,36 @@ mock.module("@/lib/skills/registry", () => ({
     name === registryEntry.name ? registryEntry : null,
 }));
 
+const codexManagerInstances: unknown[] = [];
 mock.module("@/lib/ai/chat/engines/codex-app-server", () => ({
-  getCodexAppServerManager: () => ({
-    listSkills: listCodexSkills,
-    writeSkillConfig,
+  getCodexAppServerManager: (instance: unknown) => {
+    codexManagerInstances.push(instance);
+    return {
+      listSkills: listCodexSkills,
+      writeSkillConfig,
+    };
+  },
+}));
+
+// The default Codex instance (null: none could be resolved).
+let defaultCodexInstance: { home: string | null; id: string } | null = null;
+// Other drivers' default instances, and instances the registry knows.
+let defaultInstances: Record<string, any> = {};
+let registeredInstances: Record<string, any> = {};
+mock.module("@/lib/ai/chat/engines/platform/instance-homes", () => ({
+  getInstanceHomeDirectory: (instance: { home: string | null }) =>
+    instance.home,
+  resolveDefaultEngineInstance: async (_userId: string, driver: string) =>
+    driver === "codex"
+      ? defaultCodexInstance
+      : (defaultInstances[driver] ?? null),
+}));
+mock.module("@/lib/ai/chat/engines/platform/instances", () => ({
+  getEngineInstanceRegistry: () => ({
+    get: async (_userId: string, instanceId: string) =>
+      registeredInstances[instanceId]
+        ? { instance: registeredInstances[instanceId], status: "available" }
+        : null,
   }),
 }));
 
@@ -246,6 +272,7 @@ describe("skillsRouter", () => {
           copilot: false,
           cursor: false,
           opencode: false,
+          pi: false,
           sentinel: true,
         },
         name: "example",
@@ -295,6 +322,7 @@ describe("skillsRouter", () => {
           copilot: false,
           cursor: false,
           opencode: false,
+          pi: false,
           sentinel: false,
         },
         name: "example",
@@ -357,6 +385,7 @@ describe("skillsRouter", () => {
           copilot: false,
           cursor: false,
           opencode: false,
+          pi: false,
           sentinel: true,
         },
         name: "example",
@@ -465,6 +494,30 @@ describe("skillsRouter", () => {
     });
 
     expect(writeSkillConfig).not.toHaveBeenCalled();
+  });
+
+  it("installs codex skills in the default Codex instance's home", async () => {
+    defaultCodexInstance = { home: "/tmp/codex-instance-home", id: "codex" };
+    codexManagerInstances.length = 0;
+
+    try {
+      await expect(
+        skillsRouter.install({
+          ctx: {
+            user: { id: "user-1", skillsBasePath: null },
+            workspace: null,
+          },
+          input: { name: "example", scope: "global", target: "codex" },
+        }),
+      ).resolves.toEqual({
+        directory: "/tmp/codex-instance-home/skills/example",
+        installSteps: registryEntry.installSteps,
+        name: "example",
+      });
+      expect(codexManagerInstances).toEqual([defaultCodexInstance]);
+    } finally {
+      defaultCodexInstance = null;
+    }
   });
 
   it("builds default steps for custom skill installs when no override is provided", async () => {
@@ -752,6 +805,7 @@ describe("skillsRouter", () => {
           copilot: true,
           cursor: false,
           opencode: false,
+          pi: false,
           sentinel: false,
         },
         name: "example",
@@ -814,10 +868,63 @@ describe("skillsRouter", () => {
           copilot: false,
           cursor: true,
           opencode: true,
+          pi: false,
           sentinel: false,
         },
         name: "example",
       }),
     ]);
+  });
+
+  it("lists and installs Claude skills in the Claude instance's config dir", async () => {
+    defaultInstances = {
+      claude: { driver: "claude", home: "/tmp/claude-home", id: "claude" },
+    };
+    registeredInstances = {
+      "copilot-work": {
+        driver: "copilot",
+        home: "/tmp/copilot-work",
+        id: "copilot-work",
+      },
+    };
+    const ctx = {
+      user: { id: "user-1", skillsBasePath: null },
+      workspace: { rootPath: "/tmp/workspace" },
+    };
+
+    try {
+      await skillsRouter.list({ ctx, input: { instanceId: "copilot-work" } });
+      expect(getSkillSnapshot).toHaveBeenLastCalledWith({
+        globalBase: null,
+        globalDirectories: {
+          claude: "/tmp/claude-home/skills",
+          copilot: "/tmp/copilot-work/skills",
+        },
+        workspaceRoot: "/tmp/workspace",
+      });
+
+      await skillsRouter.install({
+        ctx,
+        input: { name: "example", scope: "global", target: "claude" },
+      });
+      expect(executeInstallSteps).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          globalSkillsDirectory: "/tmp/claude-home/skills",
+          target: "claude",
+        }),
+      );
+
+      // Workspace installs stay in the workspace.
+      await skillsRouter.install({
+        ctx,
+        input: { name: "example", scope: "workspace", target: "claude" },
+      });
+      expect(
+        executeInstallSteps.mock.calls.at(-1)?.[0]?.globalSkillsDirectory,
+      ).toBeUndefined();
+    } finally {
+      defaultInstances = {};
+      registeredInstances = {};
+    }
   });
 });

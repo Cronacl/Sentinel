@@ -10,6 +10,12 @@ import {
 import os from "node:os";
 import path from "node:path";
 
+import {
+  restoreTestHome,
+  setTestHome,
+  writeFakeCli,
+} from "./platform/testing/fake-cli";
+
 const setLocalRuntimeEnvValueMock = mock(
   async (key: string, value: string | null | undefined) => {
     const normalizedValue = value?.trim() ?? "";
@@ -39,10 +45,9 @@ const setLocalRuntimeEnvValueMock = mock(
       .split(/\r?\n/)
       .filter((line) => line && !line.startsWith(`${key}=`));
     if (normalizedValue) {
-      const escapedValue = normalizedValue
-        .replaceAll("\\", "\\\\")
-        .replaceAll('"', '\\"');
-      nextLines.push(`${key}="${escapedValue}"`);
+      // As local-runtime-env writes it: quotes escaped, backslashes (Windows
+      // paths) kept.
+      nextLines.push(`${key}="${normalizedValue.replaceAll('"', '\\"')}"`);
     }
 
     await writeFile(
@@ -59,6 +64,8 @@ mock.module("@/lib/runtime/local-runtime-env", () => ({
 }));
 
 const {
+  buildClaudeSdkBaseOptions,
+  getClaudeExecutableNames,
   parseClaudeShellLookupOutput,
   resetClaudeCodeRuntimeCache,
   resolveClaudeCodeRuntime,
@@ -66,14 +73,19 @@ const {
 } = await import("./claude-sdk.ts?claude-sdk-test");
 
 const originalPath = process.env.PATH;
-const originalHome = process.env.HOME;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
 const originalClaudePath = process.env.CLAUDE_PATH;
 const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
+const originalTestMarker = process.env.SENTINEL_CLAUDE_TEST_MARKER;
 
 afterEach(async () => {
+  if (originalTestMarker) {
+    process.env.SENTINEL_CLAUDE_TEST_MARKER = originalTestMarker;
+  } else {
+    delete process.env.SENTINEL_CLAUDE_TEST_MARKER;
+  }
   process.env.PATH = originalPath;
-  process.env.HOME = originalHome;
+  restoreTestHome();
   if (originalSentinelClaudePath) {
     process.env.SENTINEL_CLAUDE_PATH = originalSentinelClaudePath;
   } else {
@@ -116,12 +128,10 @@ __SENTINEL_CLAUDE_SHELL_PATH_END__
 describe("resolveClaudeCodeRuntime", () => {
   it("detects claude directly from the current PATH", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
-    const executablePath = path.join(tempRoot, "claude");
 
     try {
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      const executablePath = await writeFakeCli(path.join(tempRoot, "claude"));
+      setTestHome(tempRoot);
       process.env.PATH = `${tempRoot}${path.delimiter}${originalPath ?? ""}`;
       delete process.env.SENTINEL_STATE_PATH;
 
@@ -140,13 +150,12 @@ describe("resolveClaudeCodeRuntime", () => {
   it("detects claude from common user bin locations when PATH is stripped", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
     const bunBinRoot = path.join(tempRoot, ".bun", "bin");
-    const executablePath = path.join(bunBinRoot, "claude");
 
     try {
-      await mkdir(bunBinRoot, { recursive: true });
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      const executablePath = await writeFakeCli(
+        path.join(bunBinRoot, "claude"),
+      );
+      setTestHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
       delete process.env.SENTINEL_STATE_PATH;
 
@@ -173,7 +182,7 @@ describe("resolveClaudeCodeRuntime", () => {
     try {
       await writeFile(executablePath, "#!/bin/sh\nexit 1\n", "utf8");
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
       process.env.SENTINEL_CLAUDE_PATH = executablePath;
       delete process.env.CLAUDE_PATH;
@@ -185,6 +194,195 @@ describe("resolveClaudeCodeRuntime", () => {
       expect(resolved.binaryVersion).toBeNull();
       expect(resolved.executablePath).toBeNull();
       expect(process.env.SENTINEL_CLAUDE_PATH).toBe(executablePath);
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("verifies an npm node shim through process.execPath when PATH has no node", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+    const executablePath = path.join(tempRoot, "claude");
+
+    try {
+      await writeFile(
+        executablePath,
+        [
+          "#!/usr/bin/env node",
+          'console.log("2.1.292 (Claude Code) " + (process.env.ELECTRON_RUN_AS_NODE ?? "direct"));',
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      await chmod(executablePath, 0o755);
+      setTestHome(tempRoot);
+      process.env.PATH = tempRoot;
+      process.env.SENTINEL_CLAUDE_PATH = executablePath;
+      delete process.env.CLAUDE_PATH;
+      delete process.env.SENTINEL_STATE_PATH;
+
+      const resolved = await resolveClaudeCodeRuntime({ forceRefresh: true });
+
+      expect(resolved.executablePath).toBe(executablePath);
+      expect(resolved.binaryVersion).toBe("2.1.292 (Claude Code) 1");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("resolveClaudeCodeRuntime for an instance", () => {
+  it("verifies a non-default instance's binaryPath under the instance env", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+
+    try {
+      const configured = await writeFakeCli(
+        path.join(tempRoot, "work", "claude"),
+        'console.log("2.1.300 (Claude Code) " + process.env.CLAUDE_CONFIG_DIR);',
+      );
+      setTestHome(tempRoot);
+      process.env.SENTINEL_CLAUDE_PATH = "/somewhere/else/claude";
+      delete process.env.SENTINEL_STATE_PATH;
+
+      const resolved = await resolveClaudeCodeRuntime({
+        forceRefresh: true,
+        instance: {
+          config: { binaryPath: configured },
+          envOverrides: { CLAUDE_CONFIG_DIR: "/homes/claude-work" },
+          envUnset: [],
+          id: "claude-work",
+          isDefault: false,
+        },
+      });
+
+      expect(resolved).toEqual(
+        expect.objectContaining({
+          binaryDetected: true,
+          binaryVersion: "2.1.300 (Claude Code) /homes/claude-work",
+          executablePath: configured,
+          source: "config",
+        }),
+      );
+      expect(resolved.env.CLAUDE_CONFIG_DIR).toBe("/homes/claude-work");
+      expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();
+      expect(process.env.SENTINEL_CLAUDE_PATH).toBe("/somewhere/else/claude");
+    } finally {
+      await rm(tempRoot, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("getClaudeExecutableNames", () => {
+  it("only looks for PATHEXT names on Windows, so npm's sh script is skipped", () => {
+    expect(
+      getClaudeExecutableNames("claude", {
+        pathExt: ".COM;.EXE;.BAT;.CMD",
+        platform: "win32",
+      }),
+    ).toEqual(["claude.COM", "claude.EXE", "claude.BAT", "claude.CMD"]);
+    expect(
+      getClaudeExecutableNames("claude.cmd", {
+        pathExt: ".EXE;.CMD",
+        platform: "win32",
+      }),
+    ).toEqual(["claude.cmd"]);
+    expect(getClaudeExecutableNames("claude", { platform: "darwin" })).toEqual([
+      "claude",
+    ]);
+  });
+});
+
+describe("buildClaudeSdkBaseOptions", () => {
+  it("merges the runtime env over process.env because options.env replaces it", () => {
+    process.env.SENTINEL_CLAUDE_TEST_MARKER = "inherited";
+
+    const options = buildClaudeSdkBaseOptions({
+      env: { PATH: "/managed/bin" },
+    });
+
+    expect(options.env).toEqual(
+      expect.objectContaining({
+        CLAUDE_AGENT_SDK_CLIENT_APP: "sentinel",
+        PATH: "/managed/bin",
+        SENTINEL_CLAUDE_TEST_MARKER: "inherited",
+      }),
+    );
+  });
+
+  it("keeps Sentinel's own secrets from the CLI and its Bash tool", () => {
+    const previous = process.env.ENCRYPTION_KEY;
+    process.env.ENCRYPTION_KEY = "e".repeat(64);
+    try {
+      const options = buildClaudeSdkBaseOptions({
+        env: { PATH: "/managed/bin", SENTINEL_INTERNAL_TOKEN: "t".repeat(64) },
+      });
+
+      expect(options.env).not.toHaveProperty("ENCRYPTION_KEY");
+      expect(options.env).not.toHaveProperty("SENTINEL_INTERNAL_TOKEN");
+      expect(options.env?.PATH).toBe("/managed/bin");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.ENCRYPTION_KEY;
+      } else {
+        process.env.ENCRYPTION_KEY = previous;
+      }
+    }
+  });
+
+  it("always sets a permission mode and keeps the Task tools available", () => {
+    const options = buildClaudeSdkBaseOptions({
+      allowedTools: ["Read"],
+    });
+
+    expect(options.permissionMode).toBe("default");
+    expect(options.tools).toEqual({ preset: "claude_code", type: "preset" });
+    expect(options.allowedTools).toEqual([
+      "TaskCreate",
+      "TaskGet",
+      "TaskList",
+      "TaskUpdate",
+      "Read",
+    ]);
+    expect(
+      buildClaudeSdkBaseOptions({ permissionMode: "plan" }).permissionMode,
+    ).toBe("plan");
+  });
+
+  it("never pre-approves Grep or Glob, so searches outside the workspace still reach canUseTool", () => {
+    // Chat mode: default permissions with the sandbox on.
+    const chatOptions = buildClaudeSdkBaseOptions({
+      permissionMode: "default",
+      sandbox: { enabled: true, failIfUnavailable: false },
+    });
+    const planOptions = buildClaudeSdkBaseOptions({ permissionMode: "plan" });
+
+    for (const options of [chatOptions, planOptions]) {
+      expect(options.allowedTools).not.toContain("Grep");
+      expect(options.allowedTools).not.toContain("Glob");
+      // The preset stays whole: no explicit list that could drop tools.
+      expect(options.tools).toEqual({ preset: "claude_code", type: "preset" });
+    }
+  });
+
+  it("installs Sentinel's spawner only for Node-script CLIs", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
+    const nativePath = path.join(tempRoot, "claude");
+
+    try {
+      await writeFile(nativePath, "#!/bin/sh\nexit 0\n", "utf8");
+      await chmod(nativePath, 0o755);
+
+      expect(
+        buildClaudeSdkBaseOptions({ pathToClaudeCodeExecutable: nativePath })
+          .spawnClaudeCodeProcess,
+      ).toBeUndefined();
+      expect(
+        buildClaudeSdkBaseOptions({
+          pathToClaudeCodeExecutable: path.join(tempRoot, "cli.js"),
+        }).spawnClaudeCodeProcess,
+      ).toBeFunction();
+      expect(
+        buildClaudeSdkBaseOptions().spawnClaudeCodeProcess,
+      ).toBeUndefined();
     } finally {
       await rm(tempRoot, { force: true, recursive: true });
     }

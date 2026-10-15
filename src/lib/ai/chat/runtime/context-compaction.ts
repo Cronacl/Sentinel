@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import type { SharedV3ProviderOptions } from "@ai-sdk/provider";
+import type { ProviderOptions } from "@ai-sdk/provider-utils";
 
 import {
   getLatestCompletedAssistantInputTokens,
@@ -196,7 +196,7 @@ export async function generateCompactionSummary({
   existingSummary: string | null;
   languageModel: unknown;
   messages: ThreadUIMessage[];
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
 }) {
   const result = await generateText({
     model: languageModel as Parameters<typeof generateText>[0]["model"],
@@ -328,7 +328,7 @@ export async function applyContextCompaction(input: {
   fixedWindowSize?: number | null;
   languageModel: unknown;
   onCompactionStart?: () => void | Promise<void>;
-  providerOptions?: SharedV3ProviderOptions;
+  providerOptions?: ProviderOptions;
   transcript: ThreadUIMessage[];
   useFixedWindow?: boolean;
   windowPercent: number;

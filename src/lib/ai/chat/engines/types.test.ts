@@ -219,3 +219,61 @@ describe("mergeThreadChatEngineState", () => {
     });
   });
 });
+
+describe("parseThreadChatEngineState", () => {
+  it("round-trips persisted state, keeps unknown drivers, drops unknown fields", () => {
+    const state = {
+      claude: {
+        cwd: "/tmp/project",
+        modelId: null,
+        permissionMode: "acceptEdits",
+        sessionId: "claude-session-1",
+      },
+      codex: {
+        approvalPolicy: "on-request",
+        codexThreadId: "codex-thread-1",
+        pendingTurnId: null,
+        sandboxMode: "workspace-write",
+      },
+      copilot: null,
+      permissionModeOverride: "full",
+      repo: {
+        lastPullRequest: {
+          base: "main",
+          createdAt: "2026-03-28T10:00:00.000Z",
+          draft: false,
+          head: "feature/test",
+          kind: "compare",
+          repoFullName: "openai/sentinel",
+          url: "https://github.com/openai/sentinel/compare/main...feature/test",
+        },
+        projectMode: "worktree",
+        worktreePath: "/tmp/worktree",
+      },
+    };
+    const stored = JSON.parse(
+      JSON.stringify({
+        ...state,
+        claude: { ...state.claude, legacyField: true },
+        unknownEngine: { sessionId: "x" },
+      }),
+    );
+
+    // A driver this build does not know (newer build, fork, unmerged branch)
+    // is carried through untouched; known drivers still drop unknown fields.
+    expect(parseThreadChatEngineState(stored)).toStrictEqual({
+      ...state,
+      unknownEngine: { sessionId: "x" },
+    });
+  });
+
+  it("leaves out a driver entry that is missing its session id", () => {
+    expect(
+      parseThreadChatEngineState({
+        claude: { cwd: "/tmp" },
+        repo: { projectMode: "local" },
+      }),
+    ).toStrictEqual({ repo: { projectMode: "local" } });
+    expect(parseThreadChatEngineState("not state")).toBeNull();
+  });
+});

@@ -35,8 +35,10 @@ export const computerScreenshotInputSchema = z.object({
     .describe("Optional display id from computer_status. Defaults to primary."),
 });
 export const computerActionInputSchema = z.object({
+  // A plain union of the same actions: zod 4 turns discriminated unions into
+  // JSON Schema oneOf, which Gemini function declarations reject (anyOf only).
   actions: z
-    .array(computerAutomationActionSchema)
+    .array(z.union(computerAutomationActionSchema.options))
     .min(1)
     .max(25)
     .describe("Ordered desktop actions to perform in one conservative batch."),

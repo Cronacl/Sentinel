@@ -49,6 +49,7 @@ The docs are split by how the product is put together:
 
 - [Configuration](./configuration/index.md)
 - [Providers and models](./configuration/providers-and-models.md)
+- [Engines](./configuration/engines.md)
 - [Search, voice, images, and videos](./configuration/search-voice-and-media.md)
 - [Memory, security, and data](./configuration/memory-security-and-data.md)
 - [Integrations and MCP](./configuration/integrations-and-mcp.md)
@@ -57,6 +58,7 @@ The docs are split by how the product is put together:
 ### Engines and runtime
 
 - [Engines and runtime](./engines-and-runtime/index.md)
+- [Engines by agent](./engines-and-runtime/agents.md)
 - [Sentinel engine](./engines-and-runtime/sentinel-engine.md)
 - [Thread state](./engines-and-runtime/thread-state.md)
 - [Context compaction](./engines-and-runtime/context-compaction.md)

@@ -34,7 +34,7 @@ jobs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       target_commitish: ${{ steps.resolve.outputs.target_commitish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -140,7 +140,7 @@ jobs:
             runner: ubuntu-24.04-arm
             script: build:desktop:linux:arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: refs/tags/${{ needs.prepare.outputs.release_tag }}
@@ -227,7 +227,7 @@ jobs:
           fi
 
       - name: Upload ${{ matrix.platform }}-${{ matrix.arch }} artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           if-no-files-found: error
           name: ${{ matrix.artifact_name }}
@@ -244,13 +244,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: refs/tags/${{ needs.prepare.outputs.release_tag }}
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: release-assets
@@ -263,7 +263,7 @@ jobs:
             "$RUNNER_TEMP/release-notes.md"
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: ${{ runner.temp }}/release-notes.md
           files: release-assets/**/*

@@ -4,6 +4,11 @@ const invalidateThreadRuntimeBootstrap = mock(() => {});
 const findThreadRecord = mock(async () => null);
 const runInsert = mock(() => {});
 const runUpdate = mock(() => {});
+const setUpdate = mock((_values: Record<string, unknown>) => ({
+  where: mock(() => ({
+    run: runUpdate,
+  })),
+}));
 const getExistingThread = mock(() => ({
   chatEngineState: {
     repo: {
@@ -36,11 +41,7 @@ mock.module("@/server/db", () => ({
       })),
     })),
     update: mock(() => ({
-      set: mock(() => ({
-        where: mock(() => ({
-          run: runUpdate,
-        })),
-      })),
+      set: setUpdate,
     })),
   },
 }));
@@ -55,7 +56,12 @@ mock.module("../runtime/workspace.ts", () => ({
 
 // @ts-expect-error test-only isolated module import
 const persistenceModule = await import("./index?persistence-cache-test");
-const { ensureThread, updateThreadChatEngineState } = persistenceModule;
+const {
+  ensureThread,
+  updateDriverThreadState,
+  updateThreadChatEngineState,
+  updateThreadPermissionModeOverride,
+} = persistenceModule;
 
 describe("persistence thread state", () => {
   beforeEach(() => {
@@ -65,6 +71,7 @@ describe("persistence thread state", () => {
     invalidateThreadRuntimeBootstrap.mockClear();
     runInsert.mockClear();
     runUpdate.mockClear();
+    setUpdate.mockClear();
   });
 
   it("invalidates the cached runtime bootstrap for the updated thread", () => {
@@ -113,5 +120,68 @@ describe("persistence thread state", () => {
       "workspace-1",
       "thread-1",
     );
+  });
+
+  it("keeps permissionModeOverride and other drivers when a driver state is cleared", () => {
+    getExistingThread.mockImplementationOnce(() => ({
+      chatEngineState: {
+        codex: { codexThreadId: "codex-thread-1" },
+        gemini: { sessionId: "gemini-1" },
+        permissionModeOverride: "full",
+      },
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+
+    updateDriverThreadState("thread-1", "codex", null);
+
+    expect(setUpdate.mock.calls[0]?.[0]).toMatchObject({
+      chatEngineState: {
+        codex: null,
+        gemini: { sessionId: "gemini-1" },
+        permissionModeOverride: "full",
+      },
+    });
+  });
+
+  it("writes the thread permission override and keeps every other key", () => {
+    getExistingThread.mockImplementationOnce(() => ({
+      chatEngineState: {
+        codex: { codexThreadId: "codex-thread-1" },
+        repo: { activeBranch: "main" },
+      },
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+
+    updateThreadPermissionModeOverride("thread-1", "accept_edits");
+
+    expect(setUpdate.mock.calls[0]?.[0]).toMatchObject({
+      chatEngineState: {
+        codex: { codexThreadId: "codex-thread-1" },
+        permissionModeOverride: "accept_edits",
+        repo: { activeBranch: "main" },
+      },
+    });
+    // The next turn must not reuse a cached bootstrap with the old mode.
+    expect(invalidateThreadRuntimeBootstrap).toHaveBeenCalledWith(
+      "user-1",
+      "workspace-1",
+      "thread-1",
+    );
+  });
+
+  it("clears the thread permission override", () => {
+    getExistingThread.mockImplementationOnce(() => ({
+      chatEngineState: { permissionModeOverride: "full" },
+      userId: "user-1",
+      workspaceId: "workspace-1",
+    }));
+
+    updateThreadPermissionModeOverride("thread-1", null);
+
+    expect(setUpdate.mock.calls[0]?.[0]).toMatchObject({
+      chatEngineState: null,
+    });
   });
 });

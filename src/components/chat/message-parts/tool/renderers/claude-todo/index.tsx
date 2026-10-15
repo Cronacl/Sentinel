@@ -16,7 +16,7 @@ import {
   unwrapClaudeInput,
 } from "../claude-helpers";
 
-type TodoItem = {
+export type TodoItem = {
   activeForm: string;
   content: string;
   status: "completed" | "in_progress" | "pending";
@@ -110,7 +110,7 @@ const STATUS_COLOR: Record<TodoItem["status"], string> = {
   pending: "text-foreground/30",
 };
 
-function TodoList({ items }: { items: TodoItem[] }) {
+export function TodoList({ items }: { items: TodoItem[] }) {
   return (
     <div className="flex flex-col gap-1">
       {items.map((item, i) => (

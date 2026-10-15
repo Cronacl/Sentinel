@@ -55,7 +55,11 @@ mock.module("./workspace-thread-helpers", () => ({
 mock.module("@/lib/ai/chat/engines/types", () => ({
   getCodexThreadState: (value: any) => value?.codex ?? null,
   getRepoThreadState: () => null,
+  getThreadPermissionMode: (value: any) =>
+    value?.permissionModeOverride ?? null,
 }));
+
+const updateThreadPermissionModeOverride = mock(() => undefined);
 
 mock.module("@/lib/ai/chat", () => ({
   runThreadChat: mock(async () => undefined),
@@ -67,6 +71,7 @@ mock.module("@/lib/ai/chat/persistence", () => ({
   moveThreadFollowUpToFront: mock(() => undefined),
   removeThreadFollowUp: mock(() => undefined),
   setActiveMessage: mock(async () => undefined),
+  updateThreadPermissionModeOverride,
 }));
 
 mock.module("@/lib/ai/chat/session/server", () => ({
@@ -128,6 +133,7 @@ beforeEach(() => {
   getOwnedThreadOrThrow.mockClear();
   getOwnedProjectWorkspaceOrThrow.mockClear();
   insert.mockClear();
+  updateThreadPermissionModeOverride.mockClear();
   insertValues.mockClear();
   insertReturning.mockClear();
   insertAll.mockClear();
@@ -405,6 +411,7 @@ describe("threadsRouter.get", () => {
         codex: {
           codexThreadId: "codex-thread-1",
         },
+        permissionModeOverride: "accept_edits",
       },
       chatModelId: null,
       chatReasoningEffort: null,
@@ -450,5 +457,85 @@ describe("threadsRouter.get", () => {
     });
 
     expect(result.thread.hasCodexThread).toBe(true);
+    expect(result.thread.permissionModeOverride).toBe("accept_edits");
+  });
+});
+
+describe("threadsRouter.updatePermissionOverride", () => {
+  const ctx = { db: {}, session: { user: { id: "user-1" } } };
+
+  it("stores the thread's own permission mode", async () => {
+    const result = await threadsRouter.updatePermissionOverride({
+      ctx,
+      input: { permissionModeOverride: "full", threadId: "thread-1" },
+    });
+
+    expect(getOwnedThreadOrThrow).toHaveBeenCalledWith(ctx, "thread-1");
+    expect(updateThreadPermissionModeOverride).toHaveBeenCalledWith(
+      "thread-1",
+      "full",
+    );
+    expect(result).toEqual({
+      permissionModeOverride: "full",
+      threadId: "thread-1",
+    });
+  });
+
+  it("clears the override back to the workspace's", async () => {
+    await threadsRouter.updatePermissionOverride({
+      ctx,
+      input: { permissionModeOverride: null, threadId: "thread-1" },
+    });
+
+    expect(updateThreadPermissionModeOverride).toHaveBeenCalledWith(
+      "thread-1",
+      null,
+    );
+  });
+
+  it("does not write a thread the user does not own", async () => {
+    getOwnedThreadOrThrow.mockRejectedValueOnce(new Error("NOT_FOUND"));
+
+    await expect(
+      threadsRouter.updatePermissionOverride({
+        ctx,
+        input: { permissionModeOverride: "full", threadId: "thread-2" },
+      }),
+    ).rejects.toThrow("NOT_FOUND");
+    expect(updateThreadPermissionModeOverride).not.toHaveBeenCalled();
+  });
+});
+
+describe("threadsRouter.updateChatSettings", () => {
+  it("keeps a thread with messages on its engine instance", async () => {
+    getOwnedThreadOrThrow.mockResolvedValueOnce({
+      chatEngine: "codex",
+      chatEngineInstanceId: "codex-work",
+      id: "thread-1",
+    });
+    const messageFindFirst = mock(async () => ({ id: "message-1" }));
+    const update = mock(() => {
+      throw new Error("the thread must not be updated");
+    });
+
+    await expect(
+      threadsRouter.updateChatSettings({
+        ctx: {
+          db: {
+            query: { threadMessages: { findFirst: messageFindFirst } },
+            update,
+          },
+          session: { user: { id: "user-1" } },
+        },
+        input: {
+          engine: "codex",
+          engineInstanceId: "codex",
+          modelId: "gpt-5.5",
+          threadId: "thread-1",
+        },
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(messageFindFirst).toHaveBeenCalledTimes(1);
+    expect(update).not.toHaveBeenCalled();
   });
 });

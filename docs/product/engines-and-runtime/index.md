@@ -2,10 +2,11 @@
 
 This section is about how Sentinel actually carries a run.
 
-That means the harness around the model, the local runtimes, the thread state, the repo state, child work, and generated media.
+That means the harness around the model, the local coding agents, the thread state, the repo state, child work, and generated media.
 
 Start here:
 
+- [Engines by agent](./agents.md)
 - [Sentinel engine](./sentinel-engine.md)
 - [Thread state](./thread-state.md)
 - [Context compaction](./context-compaction.md)

@@ -42,7 +42,6 @@
   --surface: oklch(100% 0 0);
   --accent: oklch(0% 0 0);
   --accent-foreground: oklch(100% 0 0);
-  --default-hover: #f0f0f0;
   --default: oklch(94% 0 0);
   --overlay: #f5f5f5;
   --code-bg: #f5f5f5;
@@ -108,7 +107,6 @@
   --field-background: #202020;
   --accent: oklch(100% 0 0);
   --accent-foreground: oklch(0% 0 0);
-  --default-hover: #202020;
   /* a lighter 111; */
   --default: #181818;
   --overlay: #1c1c1c;
@@ -217,6 +215,12 @@ samp {
   display: none;
   height: 0;
   width: 0;
+}
+
+/* Scrollbars are hidden, so ScrollShadow must not leave a scrollbar-wide
+   unfaded strip at its edge (HeroUI reserves 10px by default). */
+.scroll-shadow {
+  --scroll-shadow-scrollbar-size: 0px;
 }
 
 .app-region-drag {

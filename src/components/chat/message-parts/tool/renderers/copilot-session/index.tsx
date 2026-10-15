@@ -65,6 +65,16 @@ function getSessionIcon(toolName: string) {
     case "copilot_task_output":
     case "copilot_taskoutput":
       return "solar:playback-speed-linear";
+    case "copilot_mcp":
+      return "solar:plug-circle-linear";
+    case "copilot_custom_tool":
+      return "solar:widget-2-linear";
+    case "copilot_hook":
+      return "solar:link-round-linear";
+    case "copilot_extension":
+      return "solar:key-linear";
+    case "copilot_workflow":
+      return "solar:branch-linear";
     default:
       return "solar:widget-4-linear";
   }
@@ -94,6 +104,16 @@ function getSessionVerb(toolName: string) {
     case "copilot_task_output":
     case "copilot_taskoutput":
       return "task output";
+    case "copilot_mcp":
+      return "MCP tool call";
+    case "copilot_custom_tool":
+      return "custom tool call";
+    case "copilot_hook":
+      return "hook";
+    case "copilot_extension":
+      return "extension access";
+    case "copilot_workflow":
+      return "workflow";
     default:
       return formatCopilotToolName(toolName).toLowerCase();
   }
@@ -147,6 +167,17 @@ function getSessionAction(
         denied: "Exit denied",
         pending: "Exit",
         running: "Exiting",
+      };
+    case "copilot_mcp":
+    case "copilot_custom_tool":
+    case "copilot_hook":
+    case "copilot_extension":
+    case "copilot_workflow":
+      return {
+        completed: "Completed",
+        denied: `${getSessionVerb(toolName)} denied`,
+        pending: "Approve",
+        running: "Running",
       };
     default:
       return {

@@ -2,22 +2,25 @@
 
 Sentinel can hand a thread off to the local Codex runtime and still keep the rest of the app around it.
 
+Sentinel talks to the `codex` CLI on your machine through its app server. Install and sign-in live in Settings → Engines. See [Engines by agent](./agents.md#codex).
+
 That split matters.
 
 Codex is driving the run. Sentinel is still carrying the thread, the workspace, the repo panels, the settings, and the rest of the shell.
 
 ## What Sentinel keeps for a Codex thread
 
-| Field              | Why it matters                                          |
-| ------------------ | ------------------------------------------------------- |
-| Codex thread ID    | Maps the Sentinel thread back to the live Codex session |
-| Approval policy    | Decides when the runtime has to stop and ask            |
-| Sandbox mode       | Decides how much machine access the runtime gets        |
-| Working directory  | Keeps the session attached to the right project path    |
-| Model              | Keeps model selection stable across turns               |
-| Reasoning effort   | Carries the thread's current reasoning level            |
-| CLI version        | Helps explain runtime behavior across local installs    |
-| Pending turn state | Lets Sentinel keep track of work still in flight        |
+| Field              | Why it matters                                           |
+| ------------------ | -------------------------------------------------------- |
+| Codex thread ID    | Maps the Sentinel thread back to the live Codex session  |
+| Approval policy    | Decides when the runtime has to stop and ask             |
+| Sandbox mode       | Decides how much machine access the runtime gets         |
+| Working directory  | Keeps the session attached to the right project path     |
+| Model              | Keeps model selection stable across turns                |
+| Reasoning effort   | Carries the thread's current reasoning level             |
+| CLI version        | Helps explain runtime behavior across local installs     |
+| Pending turn state | Lets Sentinel keep track of work still in flight         |
+| Engine instance    | Which Codex instance (and so which `CODEX_HOME`) it uses |
 
 That state lives with the Sentinel thread, so the app can reopen the thread and still know how it was wired.
 
@@ -38,6 +41,13 @@ That matters because the policy has to survive past a single run. If a thread is
 | Approval policy | `untrusted`, `on-failure`, `on-request`, `never`     |
 | Sandbox mode    | `read-only`, `workspace-write`, `danger-full-access` |
 
+Sentinel sets them from the thread's permission mode:
+
+| Permission mode | Approval policy | Sandbox mode                                        |
+| --------------- | --------------- | --------------------------------------------------- |
+| `default`       | `on-request`    | `workspace-write`, or `read-only` with no workspace |
+| `full`          | `never`         | `danger-full-access`                                |
+
 ## Model handling
 
 Sentinel asks the local Codex setup for runtime status and available models.
@@ -49,6 +59,15 @@ If the runtime is present but model discovery times out, Sentinel can still surf
 That fallback path matters because local runtime status is sometimes slower or rougher than the normal app flow.
 
 So the model picker is doing two jobs at once. It shows what the local runtime actually reported, and it keeps the thread operable when runtime discovery is slow.
+
+The engine manifest adds metadata the runtime leaves out, and models that need a newer Codex than the installed one are shown disabled.
+
+## Plan mode, usage, and skills
+
+- Plan mode uses Codex's own collaboration mode. Codex older than 0.156 uses a fallback.
+- Usage limits come from the app server's rate limits and update live during runs.
+- Codex skills are global and live in the instance's `CODEX_HOME`. Sentinel syncs their enabled state through the app server.
+- The slash menu offers compact, review, rollback, and run.
 
 ## Codex-specific thread actions
 
@@ -100,6 +119,7 @@ The Codex state surface is defined explicitly in the runtime types:
 
 ```ts
 export const codexThreadStateSchema = z.object({
+  ...threadStateSessionMeta,
   approvalPolicy: codexApprovalPolicySchema.nullish(),
   cliVersion: z.string().nullish(),
   codexThreadId: z.string(),
@@ -112,25 +132,25 @@ export const codexThreadStateSchema = z.object({
 });
 ```
 
-The compact action is also exposed directly through the engine router:
+The compact action is also exposed directly through the Codex engine router:
 
 ```ts
-codexCompact: protectedProcedure
-  .input(z.object({ threadId: z.string() }))
+compact: protectedProcedure
+  .input(threadInputSchema)
   .mutation(async ({ ctx, input }) => {
-    const codexThreadId = await resolveCodexThreadId(ctx, input.threadId);
-    const codex = getCodexAppServerManager();
+    const { codex, codexThreadId } = await resolveCodexThread(
+      ctx,
+      input.threadId,
+    );
     return codex.compactThread(codexThreadId);
   }),
 ```
 
 ## What stays in Sentinel
 
-Even when Codex is running the thread, Sentinel still owns:
-
-Sentinel still owns workspace selection, thread history, repo panels, the terminal and browser shell, settings, and sidebar state. So the Codex runtime is deep in the loop, but it is still one layer inside a larger thread model.
+Even when Codex is running the thread, Sentinel still owns workspace selection, thread history, repo panels, the terminal and browser shell, settings, and sidebar state. So the Codex runtime is deep in the loop, but it is still one layer inside a larger thread model.
 
 ## Code references
 
-- [`types.ts`](../../../src/lib/ai/chat/engines/types.ts)
-- [`engines.ts`](../../../src/server/api/routers/engines.ts)
+- [`state/codex.ts`](../../../src/lib/ai/chat/engines/state/codex.ts)
+- [`routers/engines/codex.ts`](../../../src/server/api/routers/engines/codex.ts)

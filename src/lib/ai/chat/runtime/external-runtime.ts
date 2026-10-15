@@ -29,7 +29,16 @@ function formatTranscriptMessage(message: ThreadUIMessage) {
 }
 
 export function buildExternalRuntimePromptText(input: {
+  /** Heading of the earlier turns (default "Conversation so far:"). */
+  historyHeading?: string;
+  /**
+   * Include the earlier turns (default true). False when the agent's own
+   * session already holds them (a loaded or resumed session).
+   */
+  includeHistory?: boolean;
   message: ThreadUIMessage;
+  /** Prepend the plan-mode preamble (default: in plan mode). */
+  planPreamble?: boolean;
   threadMode: "chat" | "plan";
   transcript: ThreadUIMessage[];
   workspaceRoot: string | null;
@@ -38,21 +47,28 @@ export function buildExternalRuntimePromptText(input: {
     ? serializeComposerContextToText(input.message.metadata.composerContext)
     : null;
   const latestText = getTextContent(input.message);
-  const history = input.transcript
-    .filter((message) => message.id !== input.message.id)
-    .map(formatTranscriptMessage)
-    .filter(Boolean)
-    .join("\n\n");
+  const history =
+    input.includeHistory === false
+      ? ""
+      : input.transcript
+          .filter((message) => message.id !== input.message.id)
+          .map(formatTranscriptMessage)
+          .filter(Boolean)
+          .join("\n\n");
 
   const sections = [
-    input.threadMode === "plan" ? buildPlanModePromptPreamble() : null,
+    (input.planPreamble ?? input.threadMode === "plan")
+      ? buildPlanModePromptPreamble()
+      : null,
     composerContextText,
     [
       "External runtime context:",
       `Current mode: ${input.threadMode}.`,
       `Workspace root: ${input.workspaceRoot ?? "unavailable"}.`,
     ].join("\n"),
-    history ? `Conversation so far:\n${history}` : null,
+    history
+      ? `${input.historyHeading ?? "Conversation so far:"}\n${history}`
+      : null,
     latestText ? `Latest user request:\n${latestText}` : null,
   ];
 
@@ -66,10 +82,16 @@ export function shouldAutoApproveExternalPermission(input: {
   return input.permissionMode === "full" && input.toolsEnabled;
 }
 
+/**
+ * Declined without asking: tools are off, or nobody can answer (an
+ * unattended run such as an automation). Check auto-approval first: full
+ * access still approves in an unattended run.
+ */
 export function shouldAutoDenyExternalPermission(input: {
+  interactive?: boolean;
   toolsEnabled: boolean;
 }) {
-  return !input.toolsEnabled;
+  return !input.toolsEnabled || input.interactive === false;
 }
 
 export async function beginExternalRuntimeRepoCheckpoint(input: {

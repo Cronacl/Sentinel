@@ -53,6 +53,7 @@ import {
   DEFAULT_FIXED_CONTEXT_WINDOW_SIZE,
   DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
 } from "@/schemas/general-settings.schema";
+import { resolveBuiltinPermissionMode } from "@/lib/security";
 import type { PermissionMode } from "@/server/db/enums";
 import { db } from "@/server/db";
 import {
@@ -250,11 +251,12 @@ export async function getThreadRuntimeBootstrap(
           user?.contextCompactionWindowPercent ??
           DEFAULT_CONTEXT_COMPACTION_WINDOW_PERCENT,
       },
-      permissionMode:
+      // The built-in engine and its tools know default and full only.
+      permissionMode: resolveBuiltinPermissionMode(
         getThreadPermissionMode(thread?.chatEngineState) ??
-        workspace?.permissionModeOverride ??
-        user?.permissionMode ??
-        "default",
+          workspace?.permissionModeOverride ??
+          user?.permissionMode,
+      ),
       personalizationPrompt: user
         ? buildPersonalizationPrompt({
             aboutUser: user.aboutUser,
@@ -308,6 +310,11 @@ export async function getWorkspaceRootPath(
   );
 }
 
+/**
+ * The stored permission mode for a thread (thread override, then workspace
+ * override, then the user's default). External runtimes map it onto the
+ * modes their driver supports with resolveSupportedPermissionMode.
+ */
 export async function getToolPermissionMode(
   userId: string,
   workspaceId?: string | null,

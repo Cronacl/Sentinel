@@ -2,19 +2,37 @@
 
 ## Environment variables
 
-| Variable                 | Required | Description                                                                                     |
-| ------------------------ | -------- | ----------------------------------------------------------------------------------------------- |
-| `ENCRYPTION_KEY`         | No       | Generated on first launch if omitted                                                            |
-| `SENTINEL_DB_PATH`       | No       | Custom path for the local SQLite database                                                       |
-| `SENTINEL_STATE_PATH`    | No       | Custom path for app state                                                                       |
-| `SENTINEL_APP_URL`       | No       | Override the default app URL                                                                    |
-| `SENTINEL_LINUX_SANDBOX` | No       | Set to `true` to force Electron's Chromium sandbox when launching the Linux executable directly |
+| Variable                                | Required | Description                                                                                     |
+| --------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `ENCRYPTION_KEY`                        | No       | Generated on first launch if omitted                                                            |
+| `SENTINEL_DB_PATH`                      | No       | Custom path for the local SQLite database                                                       |
+| `SENTINEL_STATE_PATH`                   | No       | Custom path for app state                                                                       |
+| `SENTINEL_APP_URL`                      | No       | Override the default app URL                                                                    |
+| `SENTINEL_LINUX_SANDBOX`                | No       | Set to `true` to force Electron's Chromium sandbox when launching the Linux executable directly |
+| `SENTINEL_DISABLE_REMOTE_MANIFEST`      | No       | Turns off the hourly engine manifest refresh; Sentinel uses the bundled copy                    |
+| `SENTINEL_DISABLE_ENGINE_UPDATE_CHECKS` | No       | Turns off the hourly lookups for newer engine CLI releases                                      |
+
+The two `SENTINEL_DISABLE_*` variables take any value other than empty, `0`, `false`, `no`, or `off`, and lock the matching switch in Settings → Engines.
+
+Older binary override variables such as `SENTINEL_CODEX_PATH` and `SENTINEL_CLAUDE_PATH` still set the binary of an engine's default instance. See [Engines settings](../configuration/engines.md#binary-overrides-from-the-environment).
+
+## Requirements
+
+| Tool     | Version                                                    |
+| -------- | ---------------------------------------------------------- |
+| Node.js  | 24 LTS, 24.14 or later (`engines.node` is `>=24.14.0 <25`) |
+| Bun      | 1.4.2 or later (`packageManager` is `bun@1.4.2`)           |
+| Electron | 44 (fetched on first use, not by `bun install`)            |
+| macOS    | 13 (Ventura) or later for release builds                   |
 
 ## Local development
 
-Sentinel repairs native Node dependencies before local dev, builds, preview, and start commands. It uses prebuilt binaries when available and falls back to a local source build for runtime, OS, or CPU combinations without matching prebuilds.
+Sentinel checks native Node dependencies before local dev, builds, preview, and start commands:
 
-Source builds need platform build tools:
+- `better-sqlite3` loads the N-API prebuild bundled for the current OS and CPU and is never compiled locally. The Linux prebuilds need glibc 2.34 and libstdc++ from GCC 11 or newer. `bun install` skips its lifecycle script (it is left out of `trustedDependencies` in `package.json`), so installs need no Python or C++ toolchain for it.
+- `node-pty` uses its prebuilt binary on macOS and Windows and is compiled by `bun install` on Linux. When its binary does not load, the startup script rebuilds it from source.
+
+`node-pty` source builds need platform build tools:
 
 - macOS: Xcode Command Line Tools
 - Linux: `build-essential`, `python3`, `make`, and `g++`
@@ -31,6 +49,8 @@ bun install
 cp .env.example .env
 bun run dev:desktop
 ```
+
+`bun install` does not download the Electron binary. `bun run dev:desktop` and the desktop build commands fetch it on first use, or you can run `bun run electron:install` ahead of time.
 
 ## Build commands
 

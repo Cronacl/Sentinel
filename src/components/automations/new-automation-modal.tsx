@@ -13,7 +13,7 @@ import {
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Time } from "@internationalized/date";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -25,19 +25,26 @@ import {
 import { upsertAutomationInList } from "@/components/automations/automation-list-cache";
 import { getErrorMessage } from "@/lib/errors";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import {
-  AUTOMATION_SCHEDULE_TYPES,
-  CHAT_ENGINES,
-  type ChatEngine,
-} from "@/server/db/enums";
+import { AUTOMATION_SCHEDULE_TYPES, type ChatEngine } from "@/server/db/enums";
 import type { AutomationTemplate } from "@/components/automations/automation-templates";
 import {
+  AutomationEngineFields,
+  AutomationModelOptionFields,
+} from "@/components/automations/automation-engine-fields";
+import {
+  AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE,
   getAvailableAutomationModels,
-  getAutomationEngineOptions,
+  getAutomationModelOptionDescriptors,
   getAutomationModelOptions,
-  getAutomationModelsForEngine,
+  getAutomationModelsForInstance,
   getAutomationReasoningOptions,
+  getAutomationUnattendedNotice,
+  pruneAutomationOptionValues,
+  resolveAutomationEngine,
+  resolveAutomationInstanceId,
+  resolveAutomationModelOptionsForSave,
   resolveAutomationSelection,
+  type AutomationEngineModel,
 } from "@/components/automations/automation-form-helpers";
 import {
   createAutomationSchema,
@@ -59,8 +66,11 @@ const automationFormSchema = z
     scheduleDayOfWeek: z.string(),
     scheduleTime: z.string(),
     scheduleCron: z.string(),
-    chatEngine: z.enum(CHAT_ENGINES),
+    /** The engine instance; its driver kind is sent as chatEngine. */
+    engineInstanceId: z.string().trim().min(1, "Engine is required."),
     modelId: z.string().trim().min(1, "Model is required."),
+    /** The selected model's option picks (agent, variant, …) by option id. */
+    modelOptionValues: z.record(z.string(), z.string()),
     reasoningEffort: z.string(),
   })
   .superRefine((data, ctx) => {
@@ -149,12 +159,12 @@ const DAY_OPTIONS = [
 function createDefaultValues(
   template?: AutomationTemplate,
   globalDefaults?: {
-    chatEngine?: ChatEngine | null;
+    engineInstanceId?: string | null;
     modelId?: string | null;
     reasoningEffort?: ReasoningEffort | null;
   },
 ): AutomationFormValues {
-  const defaultChatEngine = globalDefaults?.chatEngine ?? "sentinel";
+  const defaultInstanceId = globalDefaults?.engineInstanceId ?? "sentinel";
   const defaultModelId =
     globalDefaults?.modelId ?? template?.defaults.modelId ?? "__default__";
   const defaultReasoningEffort = globalDefaults?.reasoningEffort ?? "";
@@ -168,8 +178,9 @@ function createDefaultValues(
       scheduleDayOfWeek: String(template.defaults.scheduleDayOfWeek ?? 1),
       scheduleTime: template.defaults.scheduleTime ?? "09:00",
       scheduleCron: template.defaults.scheduleCron ?? "",
-      chatEngine: defaultChatEngine,
+      engineInstanceId: defaultInstanceId,
       modelId: defaultModelId,
+      modelOptionValues: {},
       reasoningEffort: defaultReasoningEffort,
     };
   }
@@ -182,14 +193,17 @@ function createDefaultValues(
     scheduleDayOfWeek: "1",
     scheduleTime: "09:00",
     scheduleCron: "",
-    chatEngine: defaultChatEngine,
+    engineInstanceId: defaultInstanceId,
     modelId: defaultModelId,
+    modelOptionValues: {},
     reasoningEffort: defaultReasoningEffort,
   };
 }
 
 function normalizeCreateInput(
   values: AutomationFormValues,
+  chatEngine: ChatEngine,
+  models: readonly AutomationEngineModel[],
 ): CreateAutomationInput {
   const scheduleTime =
     values.scheduleType === "daily" ||
@@ -212,7 +226,8 @@ function normalizeCreateInput(
   return {
     title: values.title,
     prompt: values.prompt,
-    chatEngine: values.chatEngine,
+    chatEngine,
+    chatEngineInstanceId: values.engineInstanceId,
     workspaceId:
       values.workspaceId === "__current__" ? null : values.workspaceId,
     scheduleType: values.scheduleType,
@@ -220,6 +235,12 @@ function normalizeCreateInput(
     scheduleTime,
     scheduleCron,
     modelId: values.modelId === "__default__" ? null : values.modelId,
+    modelOptions:
+      resolveAutomationModelOptionsForSave(
+        values.modelId,
+        values.modelOptionValues,
+        models,
+      ) ?? null,
     reasoningEffort: selectedReasoning,
   };
 }
@@ -250,134 +271,96 @@ export function NewAutomationModal({
   const workspacesQuery = api.workspaces.list.useQuery(undefined, {
     enabled: isOpen,
   });
-  const enginesQuery = api.engines.list.useQuery(undefined, {
+  const catalogQuery = api.engines.composerCatalog.useQuery(undefined, {
     enabled: isOpen,
   });
-  const sentinelModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "sentinel",
-    },
-    { enabled: isOpen },
-  );
-  const codexModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "codex",
-    },
-    { enabled: isOpen },
-  );
-  const claudeModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "claude",
-    },
-    { enabled: isOpen },
-  );
-  const copilotModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "copilot",
-    },
-    { enabled: isOpen },
-  );
-  const cursorModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "cursor",
-    },
-    { enabled: isOpen },
-  );
-  const openCodeModelsQuery = api.engines.models.useQuery(
-    {
-      engine: "opencode",
-    },
-    { enabled: isOpen },
-  );
+  const securityQuery = api.security.get.useQuery(undefined, {
+    enabled: isOpen,
+  });
   const chatPreferencesQuery = api.chatPreferences.get.useQuery(undefined, {
     enabled: isOpen,
   });
   const createMutation = api.automations.create.useMutation();
 
-  const availableSentinelModels = useMemo(
-    () => getAvailableAutomationModels(sentinelModelsQuery.data ?? []),
-    [sentinelModelsQuery.data],
+  const catalogOptions = useMemo(
+    () => catalogQuery.data?.options ?? [],
+    [catalogQuery.data?.options],
   );
-  const availableCodexModels = useMemo(
-    () => getAvailableAutomationModels(codexModelsQuery.data ?? []),
-    [codexModelsQuery.data],
+  const availableModelsByInstance = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(catalogQuery.data?.modelsByInstance ?? {}).map(
+          ([instanceId, models]) => [
+            instanceId,
+            getAvailableAutomationModels(models),
+          ],
+        ),
+      ),
+    [catalogQuery.data?.modelsByInstance],
   );
-  const availableClaudeModels = useMemo(
-    () => getAvailableAutomationModels(claudeModelsQuery.data ?? []),
-    [claudeModelsQuery.data],
-  );
-  const availableCopilotModels = useMemo(
-    () => getAvailableAutomationModels(copilotModelsQuery.data ?? []),
-    [copilotModelsQuery.data],
-  );
-  const availableCursorModels = useMemo(
-    () => getAvailableAutomationModels(cursorModelsQuery.data ?? []),
-    [cursorModelsQuery.data],
-  );
-  const availableOpenCodeModels = useMemo(
-    () => getAvailableAutomationModels(openCodeModelsQuery.data ?? []),
-    [openCodeModelsQuery.data],
+  const engineOf = useCallback(
+    (instanceId: string) =>
+      resolveAutomationEngine(instanceId, catalogOptions, {
+        chatEngine: chatPreferencesQuery.data?.engine,
+        chatEngineInstanceId: chatPreferencesQuery.data?.engineInstanceId,
+      }),
+    [
+      catalogOptions,
+      chatPreferencesQuery.data?.engine,
+      chatPreferencesQuery.data?.engineInstanceId,
+    ],
   );
   const globalDefaults = useMemo(() => {
-    const preferredEngine = chatPreferencesQuery.data?.engine ?? "sentinel";
+    const preferredInstanceId = resolveAutomationInstanceId({
+      chatEngine: chatPreferencesQuery.data?.engine,
+      chatEngineInstanceId: chatPreferencesQuery.data?.engineInstanceId,
+    });
     const preferredReasoningEffort =
       (chatPreferencesQuery.data?.reasoningEffort as ReasoningEffort | null) ??
       null;
     const preferredModelId = chatPreferencesQuery.data?.modelId ?? null;
 
-    const preferredModels = getAutomationModelsForEngine(preferredEngine, {
-      claude: availableClaudeModels,
-      copilot: availableCopilotModels,
-      codex: availableCodexModels,
-      cursor: availableCursorModels,
-      opencode: availableOpenCodeModels,
-      sentinel: availableSentinelModels,
-    });
+    const preferredModels = getAutomationModelsForInstance(
+      preferredInstanceId,
+      availableModelsByInstance,
+    );
 
-    const fallbackEngine: ChatEngine = "sentinel";
-    const engine =
-      preferredModels.length > 0 || preferredEngine === fallbackEngine
-        ? preferredEngine
-        : fallbackEngine;
-    const models = getAutomationModelsForEngine(engine, {
-      claude: availableClaudeModels,
-      copilot: availableCopilotModels,
-      codex: availableCodexModels,
-      cursor: availableCursorModels,
-      opencode: availableOpenCodeModels,
-      sentinel: availableSentinelModels,
-    });
+    const fallbackInstanceId = "sentinel";
+    const instanceId =
+      preferredModels.length > 0 || preferredInstanceId === fallbackInstanceId
+        ? preferredInstanceId
+        : fallbackInstanceId;
+    const models = getAutomationModelsForInstance(
+      instanceId,
+      availableModelsByInstance,
+    );
     const selection = resolveAutomationSelection(
       models,
-      engine === preferredEngine ? preferredModelId : null,
+      instanceId === preferredInstanceId ? preferredModelId : null,
       preferredReasoningEffort,
     );
 
     return {
-      chatEngine: engine,
+      engineInstanceId: instanceId,
       modelId: selection.modelId,
       reasoningEffort: selection.reasoningEffort,
     };
   }, [
-    availableClaudeModels,
-    availableCopilotModels,
-    availableCodexModels,
-    availableCursorModels,
-    availableOpenCodeModels,
-    availableSentinelModels,
+    availableModelsByInstance,
     chatPreferencesQuery.data?.engine,
+    chatPreferencesQuery.data?.engineInstanceId,
     chatPreferencesQuery.data?.modelId,
     chatPreferencesQuery.data?.reasoningEffort,
   ]);
   const initialValues = useMemo(
     () =>
       createDefaultValues(template, {
-        chatEngine: globalDefaults.chatEngine,
+        engineInstanceId: globalDefaults.engineInstanceId,
         modelId: globalDefaults.modelId,
         reasoningEffort: globalDefaults.reasoningEffort,
       }),
     [
-      globalDefaults.chatEngine,
+      globalDefaults.engineInstanceId,
       globalDefaults.modelId,
       globalDefaults.reasoningEffort,
       template,
@@ -392,7 +375,8 @@ export function NewAutomationModal({
   });
 
   const scheduleType = form.watch("scheduleType");
-  const selectedEngine = form.watch("chatEngine");
+  const selectedInstanceId = form.watch("engineInstanceId");
+  const selectedWorkspaceId = form.watch("workspaceId");
   const selectedModelKey = form.watch("modelId");
 
   useEffect(() => {
@@ -431,30 +415,33 @@ export function NewAutomationModal({
     ];
   }, [workspacesQuery.data]);
 
-  const engineOptions = useMemo(
-    () => getAutomationEngineOptions(enginesQuery.data ?? []),
-    [enginesQuery.data],
-  );
   const availableModels = useMemo(
     () =>
-      getAutomationModelsForEngine(selectedEngine, {
-        claude: availableClaudeModels,
-        copilot: availableCopilotModels,
-        codex: availableCodexModels,
-        cursor: availableCursorModels,
-        opencode: availableOpenCodeModels,
-        sentinel: availableSentinelModels,
-      }),
-    [
-      availableClaudeModels,
-      availableCopilotModels,
-      availableCodexModels,
-      availableCursorModels,
-      availableOpenCodeModels,
-      availableSentinelModels,
-      selectedEngine,
-    ],
+      getAutomationModelsForInstance(
+        selectedInstanceId,
+        availableModelsByInstance,
+      ),
+    [availableModelsByInstance, selectedInstanceId],
   );
+  const unattendedNotice = useMemo(() => {
+    const workspaces = workspacesQuery.data ?? [];
+    const workspace =
+      selectedWorkspaceId === "__current__"
+        ? workspaces.find((candidate) => candidate.isSelected)
+        : workspaces.find((candidate) => candidate.id === selectedWorkspaceId);
+    return getAutomationUnattendedNotice(
+      workspace?.permissionModeOverride ??
+        securityQuery.data?.permissionMode ??
+        null,
+      catalogOptions.find((option) => option.instanceId === selectedInstanceId),
+    );
+  }, [
+    catalogOptions,
+    securityQuery.data?.permissionMode,
+    selectedInstanceId,
+    selectedWorkspaceId,
+    workspacesQuery.data,
+  ]);
   const modelOptions = useMemo(() => {
     return getAutomationModelOptions(availableModels, selectedModelKey);
   }, [availableModels, selectedModelKey]);
@@ -476,6 +463,21 @@ export function NewAutomationModal({
     () => getAutomationReasoningOptions(supportedReasoningEfforts),
     [supportedReasoningEfforts],
   );
+  const optionDescriptors = useMemo(
+    () => getAutomationModelOptionDescriptors(selectedModel),
+    [selectedModel],
+  );
+
+  useEffect(() => {
+    if (!selectedModel) {
+      return;
+    }
+    const current = form.getValues("modelOptionValues");
+    const pruned = pruneAutomationOptionValues(current, optionDescriptors);
+    if (JSON.stringify(pruned) !== JSON.stringify(current)) {
+      form.setValue("modelOptionValues", pruned);
+    }
+  }, [form, optionDescriptors, selectedModel]);
 
   useEffect(() => {
     const currentModelKey = form.getValues("modelId");
@@ -530,19 +532,18 @@ export function NewAutomationModal({
     createMutation.isPending ||
     chatPreferencesQuery.isPending ||
     workspacesQuery.isLoading ||
-    enginesQuery.isLoading ||
-    sentinelModelsQuery.isLoading ||
-    codexModelsQuery.isLoading ||
-    claudeModelsQuery.isLoading ||
-    copilotModelsQuery.isLoading ||
-    cursorModelsQuery.isLoading ||
-    openCodeModelsQuery.isLoading;
+    catalogQuery.isLoading;
 
   const handleCreate = async (values: AutomationFormValues) => {
     setSubmitError("");
 
     try {
-      const input = normalizeCreateInput(values);
+      const chatEngine = engineOf(values.engineInstanceId);
+      if (!chatEngine) {
+        setSubmitError(AUTOMATION_ENGINE_UNAVAILABLE_MESSAGE);
+        return;
+      }
+      const input = normalizeCreateInput(values, chatEngine, availableModels);
       const validated = createAutomationSchema.safeParse(input);
       if (!validated.success) {
         setSubmitError(
@@ -632,12 +633,18 @@ export function NewAutomationModal({
                     options={SCHEDULE_OPTIONS}
                   />
 
-                  <ControlledSelectField
+                  <Controller
                     control={form.control}
-                    description="Choose which engine and runtime this automation should use."
-                    label="Engine"
-                    name="chatEngine"
-                    options={engineOptions}
+                    name="engineInstanceId"
+                    render={({ field }) => (
+                      <AutomationEngineFields
+                        catalogOptions={catalogOptions}
+                        driver={engineOf(field.value)}
+                        instanceId={field.value}
+                        notice={unattendedNotice}
+                        onInstanceChange={field.onChange}
+                      />
+                    )}
                   />
 
                   {scheduleType === "weekly" ? (
@@ -737,6 +744,18 @@ export function NewAutomationModal({
                     name="reasoningEffort"
                     options={reasoningOptions}
                     selectProps={{ isDisabled: reasoningOptions.length === 0 }}
+                  />
+
+                  <Controller
+                    control={form.control}
+                    name="modelOptionValues"
+                    render={({ field }) => (
+                      <AutomationModelOptionFields
+                        descriptors={optionDescriptors}
+                        onChange={field.onChange}
+                        values={field.value}
+                      />
+                    )}
                   />
                 </div>
               </Modal.Body>

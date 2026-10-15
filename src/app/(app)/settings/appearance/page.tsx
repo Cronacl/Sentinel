@@ -407,9 +407,11 @@ export default function AppearanceSettingsPage() {
                   isSelected={Boolean(appearanceValues.sidebarGlassEnabled)}
                   onChange={handleSidebarGlassChange}
                 >
-                  <Switch.Control>
-                    <Switch.Thumb />
-                  </Switch.Control>
+                  <Switch.Content>
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch.Content>
                 </Switch>
               </SettingsRowControl>
             </SettingsSectionRow>

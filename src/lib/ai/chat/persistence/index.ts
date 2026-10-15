@@ -4,7 +4,11 @@ import { db } from "@/server/db";
 import { threadFollowUps, threadMessages, threads } from "@/server/db/schema";
 import type { ThreadMode } from "@/lib/plan";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import type { ChatEngine, ThreadVisibility } from "@/server/db/enums";
+import type {
+  ChatEngine,
+  PermissionMode,
+  ThreadVisibility,
+} from "@/server/db/enums";
 import type {
   ClaudeThreadState,
   CopilotThreadState,
@@ -13,12 +17,21 @@ import type {
   OpenCodeThreadState,
   RepoThreadState,
   ThreadChatEngineState,
+  ThreadStateByDriver,
+  ThreadStateDriverKind,
+  ThreadStateInstanceRef,
 } from "@/lib/ai/chat/engines/types";
 import {
+  toStoredEngineInstanceId,
+  type EngineOptionSelection,
+} from "@/lib/ai/chat/engines/contract";
+import {
   buildThreadChatEngineState,
-  mergeThreadChatEngineState,
   parseThreadChatEngineState,
+  patchStoredThreadChatEngineState,
+  stampThreadState,
 } from "@/lib/ai/chat/engines/types";
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 
 import {
   buildActiveThreadMessages,
@@ -39,6 +52,8 @@ export type PersistedThreadFollowUpRecord = {
   createdAt: Date;
   id: string;
   modelId: string;
+  /** Engine option selections queued with the message (NULL before G7). */
+  modelOptions: EngineOptionSelection[] | null;
   parts: ThreadUIMessage["parts"];
   reasoningEffort: ReasoningEffort | null;
   status: "queued" | "processing";
@@ -65,6 +80,8 @@ export async function ensureThread(
   mode: ThreadMode = "chat",
   engine: ChatEngine = "sentinel",
   chatEngineState?: ThreadChatEngineState | null,
+  /** The engine instance a new thread binds to; omit for the default. */
+  engineInstanceId?: string | null,
 ) {
   const existing = await db.query.threads.findFirst({
     where: eq(threads.id, threadId),
@@ -75,6 +92,10 @@ export async function ensureThread(
     db.insert(threads)
       .values({
         chatEngine: engine,
+        chatEngineInstanceId: toStoredEngineInstanceId(
+          engine,
+          engineInstanceId,
+        ),
         ...(chatEngineState ? { chatEngineState } : {}),
         id: threadId,
         mode,
@@ -95,6 +116,8 @@ export async function ensureVirtualThread(input: {
   chatEngineState?: ThreadChatEngineState | null;
   delegationId?: string | null;
   engine?: ChatEngine;
+  /** The engine instance a new virtual thread binds to; omit for the default. */
+  engineInstanceId?: string | null;
   mode?: ThreadMode;
   parentThreadId: string;
   title: string;
@@ -123,6 +146,10 @@ export async function ensureVirtualThread(input: {
     db.insert(threads)
       .values({
         chatEngine: input.engine ?? "sentinel",
+        chatEngineInstanceId: toStoredEngineInstanceId(
+          input.engine ?? "sentinel",
+          input.engineInstanceId,
+        ),
         ...(input.chatEngineState
           ? { chatEngineState: input.chatEngineState }
           : {}),
@@ -149,6 +176,7 @@ export async function loadThread(threadId: string) {
       activeStreamId: true,
       archivedAt: true,
       chatEngine: true,
+      chatEngineInstanceId: true,
       chatEngineState: true,
       delegationId: true,
       id: true,
@@ -199,8 +227,15 @@ export function updateThreadChatSettings(
   threadId: string,
   settings: {
     engine?: ChatEngine | null;
+    /**
+     * Rebinds the thread's instance; only applied together with `engine`.
+     * Omitted, the stored instance is kept while `engine` stays the same
+     * driver and cleared (default instance) when `engine` changes it.
+     */
+    engineInstanceId?: string | null;
     mode?: ThreadMode | null;
     modelId?: string | null;
+    modelOptions?: EngineOptionSelection[] | null;
     reasoningEffort?: string | null;
   },
 ) {
@@ -209,6 +244,19 @@ export function updateThreadChatSettings(
       ...(settings.engine === undefined
         ? {}
         : { chatEngine: settings.engine ?? "sentinel" }),
+      ...(settings.engine === undefined
+        ? {}
+        : {
+            chatEngineInstanceId: engineInstanceIdForEngineWrite({
+              engine: settings.engine ?? "sentinel",
+              engineColumn: threads.chatEngine,
+              instanceColumn: threads.chatEngineInstanceId,
+              instanceId: settings.engineInstanceId,
+            }),
+          }),
+      ...(settings.modelOptions === undefined
+        ? {}
+        : { chatModelOptions: settings.modelOptions ?? null }),
       ...(settings.modelId === undefined
         ? {}
         : { chatModelId: settings.modelId ?? null }),
@@ -235,8 +283,10 @@ export function updateThreadChatEngineState(
     .from(threads)
     .where(eq(threads.id, threadId))
     .get();
-  const nextState = mergeThreadChatEngineState(
-    parseThreadChatEngineState(existing?.chatEngineState),
+  // Patch the stored value, not a parse of it: entries this write does not
+  // touch are kept exactly as stored, even ones this build cannot parse.
+  const nextState = patchStoredThreadChatEngineState(
+    existing?.chatEngineState,
     engineState,
   );
 
@@ -286,54 +336,81 @@ export function updateThreadRepoState(
   });
 }
 
-export function updateCodexThreadState(
+/**
+ * Sets (or with null clears) the thread's own permission mode, which wins
+ * over the workspace override and the user default. Every other key in
+ * chat_engine_state is kept.
+ */
+export function updateThreadPermissionModeOverride(
   threadId: string,
-  state: CodexThreadState | null,
+  permissionModeOverride: PermissionMode | null,
+) {
+  updateThreadChatEngineState(threadId, { permissionModeOverride });
+}
+
+/**
+ * Sets (or with null clears) one driver's entry in chat_engine_state,
+ * keeping every other key: repo, permissionModeOverride and other drivers.
+ */
+export function updateDriverThreadState<K extends ThreadStateDriverKind>(
+  threadId: string,
+  kind: K,
+  state: ThreadStateByDriver[K] | null,
+  /**
+   * The instance the state was produced on: stamps it with the instance id
+   * and continuation key, so another instance (or home) never resumes it.
+   */
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
   updateThreadChatEngineState(
     threadId,
-    buildThreadChatEngineState("codex", state),
+    buildThreadChatEngineState(
+      kind,
+      state && instance
+        ? (stampThreadState(state, instance) as ThreadStateByDriver[K])
+        : state,
+    ),
   );
+}
+
+export function updateCodexThreadState(
+  threadId: string,
+  state: CodexThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
+) {
+  updateDriverThreadState(threadId, "codex", state, instance);
 }
 
 export function updateClaudeThreadState(
   threadId: string,
   state: ClaudeThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("claude", state),
-  );
+  updateDriverThreadState(threadId, "claude", state, instance);
 }
 
 export function updateCopilotThreadState(
   threadId: string,
   state: CopilotThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("copilot", state),
-  );
+  updateDriverThreadState(threadId, "copilot", state, instance);
 }
 
 export function updateCursorThreadState(
   threadId: string,
   state: CursorThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("cursor", state),
-  );
+  updateDriverThreadState(threadId, "cursor", state, instance);
 }
 
 export function updateOpenCodeThreadState(
   threadId: string,
   state: OpenCodeThreadState | null,
+  instance?: Pick<ThreadStateInstanceRef, "continuationKey" | "id"> | null,
 ) {
-  updateThreadChatEngineState(
-    threadId,
-    buildThreadChatEngineState("opencode", state),
-  );
+  updateDriverThreadState(threadId, "opencode", state, instance);
 }
 
 export async function loadThreadMessages(threadId: string) {
@@ -407,6 +484,7 @@ function getJsonParts(parts: ThreadUIMessage["parts"]) {
 export function enqueueThreadFollowUp(input: {
   id: string;
   modelId: string;
+  modelOptions?: EngineOptionSelection[] | null;
   parts: ThreadUIMessage["parts"];
   reasoningEffort?: ReasoningEffort | null;
   threadId: string;
@@ -416,6 +494,7 @@ export function enqueueThreadFollowUp(input: {
     .values({
       id: input.id,
       modelId: input.modelId,
+      modelOptions: input.modelOptions ?? null,
       parts: getJsonParts(input.parts),
       reasoningEffort: input.reasoningEffort ?? null,
       threadId: input.threadId,
@@ -432,6 +511,7 @@ export function enqueueThreadFollowUp(input: {
 export function enqueueThreadFollowUpAtFront(input: {
   id: string;
   modelId: string;
+  modelOptions?: EngineOptionSelection[] | null;
   parts: ThreadUIMessage["parts"];
   reasoningEffort?: ReasoningEffort | null;
   threadId: string;
@@ -453,6 +533,7 @@ export function enqueueThreadFollowUpAtFront(input: {
       createdAt,
       id: input.id,
       modelId: input.modelId,
+      modelOptions: input.modelOptions ?? null,
       parts: getJsonParts(input.parts),
       reasoningEffort: input.reasoningEffort ?? null,
       threadId: input.threadId,
@@ -827,8 +908,10 @@ export async function syncThreadFromThread(input: {
       columns: {
         activeStreamId: true,
         chatEngine: true,
+        chatEngineInstanceId: true,
         chatEngineState: true,
         chatModelId: true,
+        chatModelOptions: true,
         chatReasoningEffort: true,
         mode: true,
         status: true,
@@ -850,9 +933,12 @@ export async function syncThreadFromThread(input: {
     tx.update(threads)
       .set({
         activeStreamId: sourceThread.activeStreamId,
+        // The engine, its instance and the stamped state travel together.
         chatEngine: sourceThread.chatEngine,
+        chatEngineInstanceId: sourceThread.chatEngineInstanceId,
         chatEngineState: sourceThread.chatEngineState,
         chatModelId: sourceThread.chatModelId,
+        chatModelOptions: sourceThread.chatModelOptions,
         chatReasoningEffort: sourceThread.chatReasoningEffort,
         mode: sourceThread.mode,
         status: sourceThread.status,
@@ -906,6 +992,7 @@ export async function promoteVirtualThreadToVisibleChild(input: {
     db.insert(threads)
       .values({
         chatEngine: virtualThread.chatEngine,
+        chatEngineInstanceId: virtualThread.chatEngineInstanceId,
         chatEngineState: virtualThread.chatEngineState,
         id: childThreadId,
         mode: virtualThread.mode,
@@ -921,6 +1008,7 @@ export async function promoteVirtualThreadToVisibleChild(input: {
     db.update(threads)
       .set({
         chatEngine: virtualThread.chatEngine,
+        chatEngineInstanceId: virtualThread.chatEngineInstanceId,
         chatEngineState: virtualThread.chatEngineState,
         mode: virtualThread.mode,
         parentThreadId: input.parentThreadId,

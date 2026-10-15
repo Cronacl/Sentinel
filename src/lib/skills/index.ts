@@ -18,6 +18,7 @@ const SOURCE_PRECEDENCE = [
   { container: ".github/skills", scope: "workspace", sourceKind: "copilot" },
   { container: ".cursor/skills", scope: "workspace", sourceKind: "cursor" },
   { container: ".opencode/skills", scope: "workspace", sourceKind: "opencode" },
+  { container: ".pi/skills", scope: "workspace", sourceKind: "pi" },
   { container: ".sentinel/skills", scope: "global", sourceKind: "sentinel" },
   { container: ".agents/skills", scope: "global", sourceKind: "agents" },
   { container: ".claude/skills", scope: "global", sourceKind: "claude" },
@@ -28,20 +29,28 @@ const SOURCE_PRECEDENCE = [
     scope: "global",
     sourceKind: "opencode",
   },
+  // `<agent dir>/skills`; a Pi instance home (PI_CODING_AGENT_DIR) moves it.
+  { container: ".pi/agent/skills", scope: "global", sourceKind: "pi" },
 ] as const;
 
 export type SkillScope = (typeof SOURCE_PRECEDENCE)[number]["scope"];
+export type ConventionalSkillSourceKind =
+  (typeof SOURCE_PRECEDENCE)[number]["sourceKind"];
+
+/**
+ * Global skill folders that an engine instance moves (its home: Claude's
+ * CLAUDE_CONFIG_DIR, Copilot's COPILOT_HOME, Pi's PI_CODING_AGENT_DIR): the
+ * folder used for a source
+ * kind's global skills instead of `<base>/.claude/skills` and the like.
+ */
+export type SkillGlobalDirectories = Partial<
+  Record<ConventionalSkillSourceKind, string>
+>;
 export type SkillSourceKind =
-  | (typeof SOURCE_PRECEDENCE)[number]["sourceKind"]
-  | typeof CODEX_SOURCE_KIND;
+  (typeof SOURCE_PRECEDENCE)[number]["sourceKind"] | typeof CODEX_SOURCE_KIND;
 export type SkillInstallOrigin = "external" | "sentinel";
 export type SkillTarget =
-  | "claude"
-  | "codex"
-  | "copilot"
-  | "cursor"
-  | "opencode"
-  | "sentinel";
+  "claude" | "codex" | "copilot" | "cursor" | "opencode" | "pi" | "sentinel";
 
 export type SkillMetadata = {
   description: string;
@@ -76,13 +85,7 @@ export type SkillSnapshot = {
   updatedAt: number;
 };
 
-type SkillLookupTarget =
-  | "sentinel"
-  | "codex"
-  | "claude"
-  | "copilot"
-  | "cursor"
-  | "opencode";
+type SkillLookupTarget = SkillTarget;
 
 type ConventionalSkillRoot = {
   containerDirectory: string;
@@ -96,6 +99,7 @@ type SkillRegistryEntry = {
   disposed: boolean;
   fingerprint: string | null;
   globalBase: string | null;
+  globalDirectories: SkillGlobalDirectories;
   key: string;
   refreshPromise: Promise<SkillSnapshot> | null;
   snapshot: SkillSnapshot | null;
@@ -177,8 +181,33 @@ function stripSkillFrontmatter(content: string) {
   return match ? content.slice(match[0].length).trim() : content.trim();
 }
 
-function toRegistryKey(workspaceRoot: string | null | undefined) {
-  return workspaceRoot ? path.resolve(workspaceRoot) : GLOBAL_WORKSPACE_KEY;
+function normalizeGlobalDirectories(
+  directories: SkillGlobalDirectories | null | undefined,
+): SkillGlobalDirectories {
+  const normalized: SkillGlobalDirectories = {};
+  for (const [kind, directory] of Object.entries(directories ?? {})) {
+    if (directory?.trim()) {
+      normalized[kind as ConventionalSkillSourceKind] = path.resolve(
+        directory.trim(),
+      );
+    }
+  }
+  return normalized;
+}
+
+function toRegistryKey(
+  workspaceRoot: string | null | undefined,
+  globalDirectories: SkillGlobalDirectories = {},
+) {
+  const workspaceKey = workspaceRoot
+    ? path.resolve(workspaceRoot)
+    : GLOBAL_WORKSPACE_KEY;
+  const overrides = Object.entries(globalDirectories).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  return overrides.length > 0
+    ? `${workspaceKey}\u0000${JSON.stringify(overrides)}`
+    : workspaceKey;
 }
 
 async function pathExists(candidatePath: string) {
@@ -192,6 +221,7 @@ async function safeRealpath(candidatePath: string) {
 function buildConventionalRoots(
   workspaceRoot: string | null,
   globalBase?: string | null,
+  globalDirectories: SkillGlobalDirectories = {},
 ) {
   const homeDirectory =
     globalBase?.trim() || process.env.HOME?.trim() || os.homedir();
@@ -204,8 +234,12 @@ function buildConventionalRoots(
       return null;
     }
 
+    const instanceDirectory =
+      entry.scope === "global" ? globalDirectories[entry.sourceKind] : null;
+
     return {
-      containerDirectory: path.join(baseDirectory, entry.container),
+      containerDirectory:
+        instanceDirectory ?? path.join(baseDirectory, entry.container),
       precedence: index,
       scope: entry.scope,
       sourceKind: entry.sourceKind,
@@ -234,6 +268,10 @@ function getTargetForSourceKind(sourceKind: SkillSourceKind): SkillTarget {
     return "opencode";
   }
 
+  if (sourceKind === "pi") {
+    return "pi";
+  }
+
   return "sentinel";
 }
 
@@ -251,8 +289,10 @@ function getSourceKindSortRank(sourceKind: SkillSourceKind) {
       return 4;
     case "opencode":
       return 5;
-    case "codex":
+    case "pi":
       return 6;
+    case "codex":
+      return 7;
     default:
       return 99;
   }
@@ -450,8 +490,13 @@ function toSkillSnapshot(
 async function discoverSkillState(
   workspaceRoot: string | null,
   globalBase?: string | null,
+  globalDirectories: SkillGlobalDirectories = {},
 ) {
-  const roots = buildConventionalRoots(workspaceRoot, globalBase);
+  const roots = buildConventionalRoots(
+    workspaceRoot,
+    globalBase,
+    globalDirectories,
+  );
   const allDiscovered: DiscoveredSkill[] = [];
   const seenRealFiles = new Set<string>();
 
@@ -547,10 +592,12 @@ async function nearestExistingDirectory(candidatePath: string) {
 async function buildWatchTargets(
   workspaceRoot: string | null,
   globalBase?: string | null,
+  globalDirectories: SkillGlobalDirectories = {},
 ) {
   const { effectiveSkills, roots } = await discoverSkillState(
     workspaceRoot,
     globalBase,
+    globalDirectories,
   );
   const targets = new Map<string, string>();
 
@@ -607,6 +654,7 @@ async function refreshEntry(entry: SkillRegistryEntry) {
     const { effectiveSkills } = await discoverSkillState(
       entry.workspaceRoot,
       entry.globalBase,
+      entry.globalDirectories,
     );
 
     if (entry.disposed) {
@@ -652,6 +700,7 @@ async function syncWatchers(entry: SkillRegistryEntry) {
   const { targets } = await buildWatchTargets(
     entry.workspaceRoot,
     entry.globalBase,
+    entry.globalDirectories,
   );
   const nextTargets = new Map<string, string>();
 
@@ -748,8 +797,10 @@ async function refreshWatchedEntry(entry: SkillRegistryEntry) {
 function getOrCreateEntry(
   workspaceRoot: string | null,
   globalBase?: string | null,
+  globalDirectories?: SkillGlobalDirectories | null,
 ) {
-  const key = toRegistryKey(workspaceRoot);
+  const directories = normalizeGlobalDirectories(globalDirectories);
+  const key = toRegistryKey(workspaceRoot, directories);
   const existing = skillRegistry.get(key);
 
   if (existing) {
@@ -764,6 +815,7 @@ function getOrCreateEntry(
     disposed: false,
     fingerprint: null,
     globalBase: globalBase || null,
+    globalDirectories: directories,
     key,
     refreshPromise: null,
     snapshot: null,
@@ -778,13 +830,16 @@ function getOrCreateEntry(
 export async function discoverSkills({
   workspaceRoot,
   globalBase,
+  globalDirectories,
 }: {
   workspaceRoot: string | null;
   globalBase?: string | null;
+  globalDirectories?: SkillGlobalDirectories | null;
 }) {
   const { effectiveSkills } = await discoverSkillState(
     workspaceRoot ? path.resolve(workspaceRoot) : null,
     globalBase,
+    normalizeGlobalDirectories(globalDirectories),
   );
 
   return effectiveSkills.map<SkillMetadata>((skill) => ({
@@ -857,13 +912,16 @@ export async function discoverCodexSkills({
 export async function watchSkillRoots({
   workspaceRoot,
   globalBase,
+  globalDirectories,
 }: {
   workspaceRoot: string | null;
   globalBase?: string | null;
+  globalDirectories?: SkillGlobalDirectories | null;
 }) {
   const entry = getOrCreateEntry(
     workspaceRoot ? path.resolve(workspaceRoot) : null,
     globalBase,
+    globalDirectories,
   );
   await refreshEntry(entry);
   await syncWatchers(entry);
@@ -873,17 +931,21 @@ export async function watchSkillRoots({
 export async function getSkillSnapshot({
   workspaceRoot,
   globalBase,
+  globalDirectories,
 }: {
   workspaceRoot: string | null;
   globalBase?: string | null;
+  globalDirectories?: SkillGlobalDirectories | null;
 }) {
   const entry = getOrCreateEntry(
     workspaceRoot ? path.resolve(workspaceRoot) : null,
     globalBase,
+    globalDirectories,
   );
   await watchSkillRoots({
     workspaceRoot: entry.workspaceRoot,
     globalBase: entry.globalBase,
+    globalDirectories: entry.globalDirectories,
   });
 
   if (!entry.snapshot) {
@@ -897,11 +959,13 @@ export async function loadSkillByName({
   name,
   workspaceRoot,
   globalBase,
+  globalDirectories,
   target = "sentinel",
 }: {
   name: string;
   workspaceRoot: string | null;
   globalBase?: string | null;
+  globalDirectories?: SkillGlobalDirectories | null;
   target?: SkillLookupTarget;
 }) {
   if (target === "codex") {
@@ -920,6 +984,7 @@ export async function loadSkillByName({
   const roots = buildConventionalRoots(
     workspaceRoot ? path.resolve(workspaceRoot) : null,
     globalBase,
+    normalizeGlobalDirectories(globalDirectories),
   );
   const allowedSourceKinds =
     target === "claude"
@@ -930,7 +995,9 @@ export async function loadSkillByName({
           ? new Set<SkillSourceKind>(["cursor"])
           : target === "opencode"
             ? new Set<SkillSourceKind>(["opencode"])
-            : new Set<SkillSourceKind>(["sentinel", "agents"]);
+            : target === "pi"
+              ? new Set<SkillSourceKind>(["pi"])
+              : new Set<SkillSourceKind>(["sentinel", "agents"]);
   const seenRealFiles = new Set<string>();
   let bestMatch: LoadedSkill | null = null;
 

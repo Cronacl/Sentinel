@@ -77,6 +77,7 @@ import {
   type ThemePreference,
 } from "@/lib/appearance";
 import type { RepoLastPullRequest } from "@/lib/ai/chat/engines/types";
+import type { PermissionMode } from "@/lib/security";
 import {
   useShortcutAction,
   useShortcutLabel,
@@ -142,7 +143,7 @@ function toCurrentWorkspace(
         isExpanded?: boolean;
         kind?: "project" | "quick_chat";
         name: string;
-        permissionModeOverride?: "default" | "full" | null;
+        permissionModeOverride?: PermissionMode | null;
         rootPath: string | null;
         sortOrder?: number;
         updatedAt: Date;
@@ -856,7 +857,7 @@ const WorkspaceHeader = memo(function WorkspaceHeader({
     <div className="group relative">
       {hasLinkedFolder ? (
         <Tooltip.Root delay={1200}>
-          <Tooltip.Trigger>{workspaceRow}</Tooltip.Trigger>
+          <Tooltip.Trigger className="block">{workspaceRow}</Tooltip.Trigger>
           <Tooltip.Content
             className={WORKSPACE_TOOLTIP_CLASSNAME}
             offset={12}

@@ -134,6 +134,29 @@ EOF`,
     expect(result.directory).toBe(`${root}/.copilot/skills/copilot-skill`);
   });
 
+  it("installs global skills into an instance's own skills folder", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+    const claudeSkills = path.join(root, "claude-work", "skills");
+
+    const result = await executeInstallSteps({
+      destRoot: root,
+      globalSkillsDirectory: claudeSkills,
+      installSteps: [
+        `mkdir -p "{{DEST}}"`,
+        `printf -- '---\\nname: work-skill\\ndescription: Helpful\\n---\\n' > "{{DEST}}/SKILL.md"`,
+      ],
+      name: "work-skill",
+      scope: "global",
+      target: "claude",
+    });
+
+    expect(result.directory).toBe(path.join(claudeSkills, "work-skill"));
+    expect(
+      await readFile(path.join(claudeSkills, "work-skill", "SKILL.md"), "utf8"),
+    ).toContain("name: work-skill");
+  });
+
   it("installs Copilot skills into the workspace .github/skills directory", async () => {
     const root = await createTempRoot("sentinel-skill-install-");
     tempRoots.push(root);
@@ -202,6 +225,42 @@ EOF`,
     expect(globalResult.directory).toBe(`${root}/.cursor/skills/cursor-skill`);
     expect(workspaceResult.directory).toBe(
       `${root}/.cursor/skills/workspace-cursor-skill`,
+    );
+  });
+
+  it("installs Pi skills into the agent directory or .pi/skills", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+    const skillFile = (dir: string, name: string) => [
+      `mkdir -p "${dir}/${name}"`,
+      `cat <<'EOF' > "${dir}/${name}/SKILL.md"
+---
+name: ${name}
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+    ];
+
+    const globalResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: skillFile(`${root}/.pi/agent/skills`, "pi-skill"),
+      name: "pi-skill",
+      scope: "global",
+      target: "pi",
+    });
+    const workspaceResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: skillFile(`${root}/.pi/skills`, "workspace-pi-skill"),
+      name: "workspace-pi-skill",
+      scope: "workspace",
+      target: "pi",
+    });
+
+    expect(globalResult.directory).toBe(`${root}/.pi/agent/skills/pi-skill`);
+    expect(workspaceResult.directory).toBe(
+      `${root}/.pi/skills/workspace-pi-skill`,
     );
   });
 

@@ -1,5 +1,4 @@
 import {
-  createAgentUIStream,
   createUIMessageStream,
   generateId,
   readUIMessageStream,
@@ -21,6 +20,7 @@ import * as persist from "../../persistence";
 import { createReasoningMetadataTracker } from "../reasoning";
 import { getSystemPrompt } from "../system-prompt";
 import { createThreadAgent } from "../../agent";
+import { createThreadAgentUIStream } from "../../agent/ui-stream";
 import {
   buildThreadPromptContext,
   createMcpPromptNamespace,
@@ -605,6 +605,8 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
     const normalizedModelTranscript = await normalizedModelTranscriptPromise;
 
     const stream = createUIMessageStream({
+      // AI SDK 7 redacts errors to "An error occurred." unless onError is set.
+      onError: (error) => getErrorMessage(error, "Unknown error"),
       originalMessages: normalizedModelTranscript,
       execute: async ({ writer }) => {
         try {
@@ -771,12 +773,12 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               : baseSystemPrompt;
           const agentMessages = compactionResult.transcript;
 
-          const result = await createAgentUIStream({
+          const result = await createThreadAgentUIStream({
             agent,
             abortSignal: abortController.signal,
             experimental_transform: smoothStream(),
             generateMessageId: () => assistantId,
-            onStepFinish: async ({ usage }) => {
+            onStepEnd: async ({ usage }) => {
               latestInputTokens = usage.inputTokens;
             },
             messageMetadata: ({ part }) => tracker.getMessageMetadata(part),
@@ -791,9 +793,18 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
               globalSkillsBasePath: skillsBasePath,
               imageGenerationRuntime,
               integrationTools,
+              ...(run.request.interactive === false
+                ? { interactive: false }
+                : {}),
               mcpTools: mcpRuntime.tools,
               memoryRuntime,
               permissionMode,
+              planTasks: (planState.plan?.tasks ?? []).map(
+                ({ id, status }) => ({
+                  id,
+                  status,
+                }),
+              ),
               promptContext,
               preferredProjectRoot: projectAwareness.preferredProjectRoot,
               resolvedModelId: resolvedModel.responseModelId,
@@ -831,7 +842,7 @@ async function executeBootstrappedThreadRun(run: BootstrappedThreadRun) {
           throw error;
         }
       },
-      onFinish: async ({ responseMessage }) => {
+      onEnd: async ({ responseMessage }) => {
         await closeMcpTools();
         if (!(await streamStillOwnsThread(run.request.threadId, run.runId))) {
           await clearThreadRepoCheckpointRun(run.runId);
@@ -1057,11 +1068,11 @@ export async function runParsedThreadChat(
     timingStartedAt,
   );
   const existingThread = await persist.loadThread(request.threadId);
-  const engine = resolveThreadEngine(request, existingThread);
+  const engineTarget = resolveThreadEngine(request, existingThread);
 
   if (request.trigger === "stop-stream") {
     const engineStopResponse = await stopThreadEngine(
-      engine,
+      engineTarget,
       request,
       existingThread,
     );
@@ -1084,13 +1095,16 @@ export async function runParsedThreadChat(
   }
 
   const externalEngineResponse = await runExternalThreadEngine(
-    engine,
+    engineTarget,
     request,
     existingThread,
   );
   if (externalEngineResponse) {
     return externalEngineResponse;
   }
+  // Only the built-in engine reaches the orchestrator: every other driver
+  // runs through its thread handlers or is rejected by the dispatcher.
+  const engine = "sentinel" as const;
 
   const allRecords = await persist.loadThreadMessages(request.threadId);
   const checkpointAnchorMessageId =
@@ -1161,6 +1175,7 @@ export async function runParsedThreadChat(
     await persist.updateThreadChatSettings(request.threadId, {
       engine,
       ...(request.modelId ? { modelId: request.modelId } : {}),
+      ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
       ...(request.reasoningEffort !== undefined
         ? { reasoningEffort: request.reasoningEffort ?? null }
         : {}),

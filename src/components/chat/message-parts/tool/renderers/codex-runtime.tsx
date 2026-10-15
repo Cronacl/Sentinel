@@ -32,8 +32,6 @@ export const CodexRuntimeTool = memo(function CodexRuntimeTool({
 
   const hasInput = part.input !== undefined;
   const hasOutput = part.output !== undefined;
-  const partErrorText =
-    "errorText" in part ? (part.errorText as string) : undefined;
   const approvalId =
     part.approval &&
     typeof part.approval === "object" &&
@@ -41,6 +39,18 @@ export const CodexRuntimeTool = memo(function CodexRuntimeTool({
     typeof part.approval.id === "string"
       ? part.approval.id
       : null;
+  // A denied part carries its reason on the approval (for example an MCP
+  // request Sentinel could not complete and declined).
+  const deniedReason =
+    part.state === "output-denied" &&
+    part.approval &&
+    typeof part.approval === "object" &&
+    "reason" in part.approval &&
+    typeof part.approval.reason === "string"
+      ? part.approval.reason
+      : undefined;
+  const partErrorText =
+    "errorText" in part ? (part.errorText as string) : deniedReason;
   const showApprovalActions =
     part.state === "approval-requested" && approvalId && onApprove && onDeny;
   const isRunning =

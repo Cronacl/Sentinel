@@ -20,6 +20,8 @@ const {
   buildImageGenerationProviderEntries,
   buildImageGenerationRuntime,
   getImageModelMeta,
+  getImageModelsForProvider,
+  getRetiredImageModelReplacement,
 } = await import("./images");
 
 afterEach(() => {
@@ -50,13 +52,13 @@ describe("image generation provider runtime", () => {
         {
           isCustom: false,
           isEnabled: true,
-          modelId: "gpt-image-1",
+          modelId: "gpt-image-2.5-flare",
           provider: "openai",
         },
         {
-          isCustom: true,
+          isCustom: false,
           isEnabled: true,
-          modelId: "imagen-4.0-generate-001",
+          modelId: "gemini-3-pro-image",
           provider: "google",
         },
       ],
@@ -102,13 +104,13 @@ describe("image generation provider runtime", () => {
         {
           isCustom: false,
           isEnabled: true,
-          modelId: "gpt-image-1",
+          modelId: "gpt-image-2.5-flare",
           provider: "openai",
         },
         {
           isCustom: false,
           isEnabled: true,
-          modelId: "imagen-4.0-generate-001",
+          modelId: "gemini-nano-banana-2.1",
           provider: "google_vertex",
         },
         {
@@ -181,5 +183,90 @@ describe("image generation provider runtime", () => {
       getImageModelMeta("xai", "grok-imagine-image")?.capabilities
         .supportsReferenceImages,
     ).toBe(true);
+    expect(getImageModelMeta("black_forest_labs", "flux-3-image")).toEqual(
+      expect.objectContaining({
+        capabilities: expect.objectContaining({
+          supportsReferenceImages: true,
+          supportsSeed: false,
+        }),
+      }),
+    );
+  });
+});
+
+describe("image model catalog", () => {
+  it("starts each provider with a model its AI SDK provider still serves", () => {
+    expect(getImageModelsForProvider("openai")[0]?.id).toBe(
+      "gpt-image-2.5-sunburst",
+    );
+    // @ai-sdk/google and @ai-sdk/google-vertex reject non-Gemini image ids.
+    for (const provider of ["google", "google_vertex"] as const) {
+      const ids = getImageModelsForProvider(provider).map((model) => model.id);
+      expect(ids[0]).toBe("gemini-nano-banana-2.1");
+      expect(ids.every((id) => id.startsWith("gemini-"))).toBe(true);
+    }
+    expect(getImageModelMeta("openai", "dall-e-3")).toBe(undefined);
+  });
+
+  it("moves stored retired image models to their replacement", () => {
+    const providerEntries = buildImageGenerationProviderEntries({
+      credentials: [
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "openai-key" }),
+          isEnabled: true,
+          provider: "openai",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "vertex-key" }),
+          isEnabled: true,
+          provider: "google_vertex",
+        },
+        {
+          encryptedConfig: JSON.stringify({ apiKey: "google-key" }),
+          isEnabled: true,
+          provider: "google",
+        },
+      ],
+      providerSettings: [
+        {
+          isCustom: false,
+          isEnabled: true,
+          modelId: "dall-e-3",
+          provider: "openai",
+        },
+        {
+          isCustom: false,
+          isEnabled: true,
+          modelId: "imagen-3.0-generate-002",
+          provider: "google_vertex",
+        },
+        {
+          isCustom: false,
+          isEnabled: true,
+          modelId: "not-a-model",
+          provider: "google",
+        },
+      ],
+    });
+
+    expect(
+      providerEntries.map(({ hasValidModel, modelId, provider }) => ({
+        hasValidModel,
+        modelId,
+        provider,
+      })),
+    ).toEqual([
+      { hasValidModel: true, modelId: "gpt-image-2", provider: "openai" },
+      {
+        hasValidModel: true,
+        modelId: "gemini-nano-banana-2.1",
+        provider: "google_vertex",
+      },
+      { hasValidModel: false, modelId: null, provider: "google" },
+    ]);
+    expect(getRetiredImageModelReplacement("openai", "gpt-image-1")).toBe(
+      "gpt-image-2.5-sunburst",
+    );
+    expect(getRetiredImageModelReplacement("openai", "toString")).toBe(null);
   });
 });

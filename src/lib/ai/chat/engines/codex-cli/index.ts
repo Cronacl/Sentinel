@@ -1,396 +1,197 @@
+import { type ChildProcessWithoutNullStreams } from "node:child_process";
+
 import {
-  execFile,
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
-import { access, readdir } from "node:fs/promises";
-import { constants as fsConstants } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-
-import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+  findExecutableInPath,
+  getConfiguredBinaryOverride,
+  getInstanceProcessEnv,
+  getInstanceRuntimeKey,
+  listWindowsWhereCandidates,
+  recordResolvedBinary,
+  resolveFromLoginShellLookup,
+  resolveRunnablePath,
+  type EngineBinaryInstance,
+} from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
 import {
-  buildManagedExecutablePathValue,
-  buildPreferredExecutablePathValue,
-  getPlatformHomeDirectory,
-} from "@/lib/runtime/platform-paths";
+  lookupInLoginShell,
+  parseLoginShellLookupOutput,
+  type LoginShellMarkers,
+} from "@/lib/ai/chat/engines/platform/runtime/login-shell";
+import { runCommandProbe } from "@/lib/ai/chat/engines/platform/runtime/version-probe";
+import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
+import {
+  buildSpawnInvocation,
+  spawnManagedProcess,
+  type SpawnInvocation,
+} from "@/lib/runtime/process/spawn";
+import { buildManagedExecutablePathValue } from "@/lib/runtime/platform-paths";
 
-const CODEX_PATH_START_MARKER = "__SENTINEL_CODEX_PATH_START__";
-const CODEX_PATH_END_MARKER = "__SENTINEL_CODEX_PATH_END__";
-const SHELL_PATH_START_MARKER = "__SENTINEL_PATH_START__";
-const SHELL_PATH_END_MARKER = "__SENTINEL_PATH_END__";
-const CODEX_RESOLUTION_CACHE_TTL_MS = 15_000;
-const SHELL_LOOKUP_TIMEOUT_MS = 1_200;
-const CLI_VERSION_TIMEOUT_MS = 1_200;
-
-type ShellLookupResult = {
-  codexPath: string | null;
-  pathValue: string | null;
+const CODEX_LOGIN_SHELL_MARKERS: LoginShellMarkers = {
+  commandEnd: "__SENTINEL_CODEX_PATH_END__",
+  commandStart: "__SENTINEL_CODEX_PATH_START__",
+  pathEnd: "__SENTINEL_PATH_END__",
+  pathStart: "__SENTINEL_PATH_START__",
 };
+const CODEX_LEGACY_ENV_KEYS = ["SENTINEL_CODEX_PATH", "CODEX_PATH"] as const;
+const CODEX_RESOLUTION_CACHE_TTL_MS = 15_000;
+const CLI_VERSION_TIMEOUT_MS = 1_200;
 
 export type ResolvedCodexCli = {
   command: string;
   env: NodeJS.ProcessEnv;
+  /** How the binary was found. */
+  source: EngineInstallSource;
 };
 
-let cachedResolution: {
-  expiresAt: number;
-  promise: Promise<ResolvedCodexCli | null>;
-} | null = null;
+export type CodexCliInstance = EngineBinaryInstance;
 
-function setProcessCodexPath(command: string | null) {
-  if (command?.trim()) {
-    process.env.SENTINEL_CODEX_PATH = command;
-    return;
-  }
+// One cached resolution per instance (and per configuration of it).
+const cachedResolutions = new Map<
+  string,
+  { expiresAt: number; promise: Promise<ResolvedCodexCli | null> }
+>();
 
-  delete process.env.SENTINEL_CODEX_PATH;
+/** The Windows candidates for `codex` are only names Node can spawn. */
+const CODEX_NAME_OPTIONS = { strategy: "spawnable" } as const;
+
+export function parseShellLookupOutput(stdout: string) {
+  const { commandPath, pathValue } = parseLoginShellLookupOutput(stdout, {
+    commandBasenamePrefix: "codex",
+    markers: CODEX_LOGIN_SHELL_MARKERS,
+  });
+  return { codexPath: commandPath, pathValue };
 }
 
-function isPersistableCodexPath(command: string) {
-  const normalized = command.replaceAll("\\", "/");
-  return !normalized.includes("/fnm_multishells/");
-}
-
-async function persistResolvedCodexCli(
-  command: string | null,
-  options?: { persist?: boolean },
-) {
-  const persist = options?.persist ?? Boolean(command?.trim());
-
-  try {
-    if (persist) {
-      await setLocalRuntimeEnvValue("SENTINEL_CODEX_PATH", command);
-      return;
-    }
-
-    if (command) {
-      setProcessCodexPath(command);
-    }
-  } catch {
-    if (command) {
-      setProcessCodexPath(command);
-    }
-  }
-}
-
-function getExecutableNames(command: string) {
-  if (process.platform !== "win32") {
-    return [command];
-  }
-
-  const pathExt = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-    .split(";")
-    .map((extension) => extension.trim())
-    .filter(Boolean);
-
-  const names = new Set<string>([command]);
-  const lowerCommand = command.toLowerCase();
-  for (const extension of pathExt) {
-    if (lowerCommand.endsWith(extension.toLowerCase())) {
-      continue;
-    }
-
-    names.add(`${command}${extension}`);
-  }
-
-  return [...names];
-}
-
-async function isExecutable(candidatePath: string) {
-  try {
-    await access(
-      candidatePath,
-      process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK,
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function findExecutableInPath(
-  command: string,
-  pathValue?: string | null,
-) {
-  if (!pathValue) {
-    return null;
-  }
-
-  const searchPaths = pathValue
-    .split(path.delimiter)
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-
-  for (const directory of searchPaths) {
-    for (const executableName of getExecutableNames(command)) {
-      const candidatePath = path.join(directory, executableName);
-      if (await isExecutable(candidatePath)) {
-        return candidatePath;
-      }
-    }
-  }
-
-  return null;
-}
-
-function getPreferredPathValue(pathValue?: string | null) {
-  return buildPreferredExecutablePathValue(pathValue);
-}
-
-async function listSubdirectories(rootPath: string) {
-  try {
-    const entries = await readdir(rootPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => path.join(rootPath, entry.name));
-  } catch {
-    return [];
-  }
-}
-
-async function getManagedPathValue(pathValue?: string | null) {
-  return buildManagedExecutablePathValue(pathValue);
-}
-
-function buildLoginShellLookupArgs(script: string) {
-  return ["-l", "-c", script];
-}
-
-function buildPosixShellLookupScript() {
-  return [
-    "if ! command -v codex >/dev/null 2>&1; then",
-    "  exit 1",
-    "fi",
-    `printf '%s\\n' '${CODEX_PATH_START_MARKER}'`,
-    "command -v codex",
-    `printf '%s\\n' '${CODEX_PATH_END_MARKER}'`,
-    `printf '%s\\n' '${SHELL_PATH_START_MARKER}'`,
-    `printf '%s\\n' \"$PATH\"`,
-    `printf '%s\\n' '${SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
-function buildFishShellLookupScript() {
-  return [
-    "if not command -v codex >/dev/null 2>/dev/null",
-    "  exit 1",
-    "end",
-    `printf '%s\\n' '${CODEX_PATH_START_MARKER}'`,
-    "command -v codex",
-    `printf '%s\\n' '${CODEX_PATH_END_MARKER}'`,
-    `printf '%s\\n' '${SHELL_PATH_START_MARKER}'`,
-    "printf '%s\\n' (string join : -- $PATH)",
-    `printf '%s\\n' '${SHELL_PATH_END_MARKER}'`,
-  ].join("\n");
-}
-
-export function parseShellLookupOutput(stdout: string): ShellLookupResult {
-  const lines = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const readBlock = (startMarker: string, endMarker: string) => {
-    const startIndex = lines.indexOf(startMarker);
-    const endIndex = lines.indexOf(endMarker);
-
-    if (startIndex === -1 || endIndex === -1 || endIndex <= startIndex) {
-      return [];
-    }
-
-    return lines.slice(startIndex + 1, endIndex);
-  };
-
-  const codexPathBlock = readBlock(
-    CODEX_PATH_START_MARKER,
-    CODEX_PATH_END_MARKER,
-  );
-  const pathBlock = readBlock(SHELL_PATH_START_MARKER, SHELL_PATH_END_MARKER);
-
-  const codexPath =
-    codexPathBlock.find((line) => path.basename(line).startsWith("codex")) ??
-    null;
-  const pathValue = pathBlock.find(Boolean) ?? null;
-
-  return {
-    codexPath,
-    pathValue,
-  };
-}
-
-async function resolveCodexCliFromWindowsWhere() {
-  if (process.platform !== "win32") {
-    return null;
-  }
-
-  const stdout = await new Promise<string>((resolve, reject) => {
-    execFile("where", ["codex"], { env: process.env }, (error, output) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-
-      resolve(output.trim());
-    });
-  }).catch(() => null);
-
-  if (!stdout) {
-    return null;
-  }
-
-  const candidates = stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  for (const candidatePath of candidates) {
-    if (await isExecutable(candidatePath)) {
-      return {
-        command: candidatePath,
-        env: process.env,
-      } satisfies ResolvedCodexCli;
-    }
-  }
-
-  return null;
-}
-
-async function resolveCodexCliFromShell() {
-  if (process.platform === "win32") {
-    return null;
-  }
-
-  const shellPath = process.env.SHELL?.trim() || "/bin/zsh";
-  const shellName = path.basename(shellPath).toLowerCase();
-  const shellLookupScript =
-    shellName === "fish"
-      ? buildFishShellLookupScript()
-      : buildPosixShellLookupScript();
-
-  const stdout = await new Promise<string>((resolve, reject) => {
-    execFile(
-      shellPath,
-      buildLoginShellLookupArgs(shellLookupScript),
+/**
+ * Resolution order: the instance's binaryPath, else (default instance)
+ * SENTINEL_CODEX_PATH or CODEX_PATH; then the managed PATH, `where` on
+ * Windows and the login shell. Without an instance this is the default
+ * instance on process.env, exactly as before instances existed.
+ */
+async function resolveCodexCliUncached(
+  instance: CodexCliInstance | null | undefined,
+): Promise<ResolvedCodexCli | null> {
+  const baseEnv = getInstanceProcessEnv(instance);
+  const preferredPath = await buildManagedExecutablePathValue(baseEnv.PATH, {
+    env: baseEnv,
+  });
+  const managedEnv = { ...baseEnv, PATH: preferredPath };
+  const isDefault = !instance || instance.isDefault;
+  const remember = async (resolved: ResolvedCodexCli) => {
+    await recordResolvedBinary(
+      { path: resolved.command, source: resolved.source, version: null },
       {
-        env: {
-          ...process.env,
-          HOME: getPlatformHomeDirectory(),
-          TERM: process.env.TERM ?? "dumb",
-        },
-        timeout: SHELL_LOOKUP_TIMEOUT_MS,
-      },
-      (error, shellStdout) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(shellStdout.trim());
+        instanceId: instance?.id ?? "codex",
+        legacyEnvKey: isDefault ? "SENTINEL_CODEX_PATH" : null,
       },
     );
-  }).catch(() => null);
+    return resolved;
+  };
 
-  if (!stdout) {
-    return null;
+  const override = getConfiguredBinaryOverride(
+    instance,
+    baseEnv,
+    CODEX_LEGACY_ENV_KEYS,
+  );
+  const overrideCommand = override
+    ? await resolveRunnablePath(override.path, CODEX_NAME_OPTIONS)
+    : null;
+  if (override && overrideCommand) {
+    return await remember({
+      command: overrideCommand,
+      env: managedEnv,
+      source: override.source,
+    });
+  }
+  // A configured path that cannot run is kept (not erased): a transient
+  // launch or filesystem failure should not lose the user's choice.
+
+  const directCommand = await findExecutableInPath(
+    "codex",
+    preferredPath,
+    CODEX_NAME_OPTIONS,
+  );
+  if (directCommand) {
+    return await remember({
+      command: directCommand,
+      env: managedEnv,
+      source: "managed-path",
+    });
   }
 
-  const { codexPath, pathValue } = parseShellLookupOutput(stdout);
-  const resolvedCommand =
-    (codexPath && (await isExecutable(codexPath)) ? codexPath : null) ??
-    (await findExecutableInPath("codex", pathValue));
-
-  if (!resolvedCommand) {
-    return null;
+  for (const candidate of await listWindowsWhereCandidates("codex", {
+    env: baseEnv,
+  })) {
+    const command = await resolveRunnablePath(candidate, CODEX_NAME_OPTIONS);
+    if (command) {
+      return await remember({ command, env: baseEnv, source: "login-shell" });
+    }
   }
 
-  return {
-    command: resolvedCommand,
-    env: pathValue
-      ? {
-          ...process.env,
-          PATH: pathValue,
-        }
-      : process.env,
-  } satisfies ResolvedCodexCli;
+  const shellResolved = await resolveFromLoginShellLookup(
+    await lookupInLoginShell({
+      command: "codex",
+      commandBasenamePrefix: "codex",
+      env: baseEnv,
+      markers: CODEX_LOGIN_SHELL_MARKERS,
+    }),
+    {
+      ...CODEX_NAME_OPTIONS,
+      accept: async (path, env) => ({
+        env,
+        path,
+        source: "login-shell",
+        version: null,
+      }),
+      baseEnv,
+      command: "codex",
+    },
+  );
+  return shellResolved
+    ? await remember({
+        command: shellResolved.path,
+        env: shellResolved.env as NodeJS.ProcessEnv,
+        source: shellResolved.source,
+      })
+    : null;
 }
 
-export async function resolveCodexCli(options?: { forceRefresh?: boolean }) {
-  const forceRefresh = options?.forceRefresh ?? false;
+export async function resolveCodexCli(options?: {
+  forceRefresh?: boolean;
+  instance?: CodexCliInstance | null;
+}) {
+  const key = getInstanceRuntimeKey(options?.instance);
   const now = Date.now();
+  const cached = cachedResolutions.get(key);
 
-  if (!forceRefresh && cachedResolution && cachedResolution.expiresAt > now) {
-    return await cachedResolution.promise;
+  if (!options?.forceRefresh && cached && cached.expiresAt > now) {
+    return await cached.promise;
   }
 
-  const promise = (async () => {
-    const preferredPath = await getManagedPathValue(process.env.PATH);
-    const overridePath =
-      process.env.SENTINEL_CODEX_PATH?.trim() || process.env.CODEX_PATH?.trim();
-    if (overridePath && (await isExecutable(overridePath))) {
-      const resolvedCli = {
-        command: overridePath,
-        env: {
-          ...process.env,
-          PATH: preferredPath,
-        },
-      } satisfies ResolvedCodexCli;
-      await persistResolvedCodexCli(resolvedCli.command, {
-        persist: isPersistableCodexPath(resolvedCli.command),
-      });
-      return resolvedCli;
-    }
-
-    if (
-      process.env.SENTINEL_CODEX_PATH?.trim() &&
-      process.env.SENTINEL_CODEX_PATH?.trim() === overridePath
-    ) {
-      // Keep the retained path hint; a transient launch or filesystem failure
-      // should not erase the user's last-known runtime path.
-    }
-
-    const directCommand = await findExecutableInPath("codex", preferredPath);
-    if (directCommand) {
-      const resolvedCli = {
-        command: directCommand,
-        env: {
-          ...process.env,
-          PATH: preferredPath,
-        },
-      } satisfies ResolvedCodexCli;
-      await persistResolvedCodexCli(resolvedCli.command, {
-        persist: isPersistableCodexPath(resolvedCli.command),
-      });
-      return resolvedCli;
-    }
-
-    const windowsWhereCommand = await resolveCodexCliFromWindowsWhere();
-    if (windowsWhereCommand) {
-      await persistResolvedCodexCli(windowsWhereCommand.command, {
-        persist: isPersistableCodexPath(windowsWhereCommand.command),
-      });
-      return windowsWhereCommand;
-    }
-
-    const shellResolution = await resolveCodexCliFromShell();
-    if (shellResolution?.command) {
-      await persistResolvedCodexCli(shellResolution.command, {
-        persist: isPersistableCodexPath(shellResolution.command),
-      });
-    }
-    return shellResolution;
-  })();
-
-  cachedResolution = {
+  const promise = resolveCodexCliUncached(options?.instance);
+  cachedResolutions.set(key, {
     expiresAt: now + CODEX_RESOLUTION_CACHE_TTL_MS,
     promise,
-  };
+  });
 
   return await promise;
 }
 
 export function resetCodexCliResolutionCache() {
-  cachedResolution = null;
+  cachedResolutions.clear();
+}
+
+export type CodexCliInvocation = SpawnInvocation;
+
+/**
+ * npm installs Codex on Windows as a `codex.cmd` shim, which runs through
+ * `cmd.exe /d /s /c` with every argument quoted (see buildSpawnInvocation).
+ */
+export function buildCodexCliInvocation(
+  command: string,
+  args: string[],
+  options?: { comSpec?: string; platform?: NodeJS.Platform },
+): CodexCliInvocation {
+  return buildSpawnInvocation(command, args, options);
 }
 
 export async function readCodexCliVersion(
@@ -401,41 +202,44 @@ export async function readCodexCliVersion(
     return null;
   }
 
-  return await new Promise<string>((resolve, reject) => {
-    execFile(
-      resolvedCli.command,
-      ["--version"],
-      { env: resolvedCli.env, timeout: CLI_VERSION_TIMEOUT_MS },
-      (error, stdout) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-
-        resolve(stdout.trim());
-      },
-    );
-  }).catch(() => null);
+  const result = await runCommandProbe({
+    command: resolvedCli.command,
+    env: resolvedCli.env,
+    timeoutMs: CLI_VERSION_TIMEOUT_MS,
+  });
+  return result.error ? null : result.stdout.trim();
 }
 
+/**
+ * Starts Codex as a managed agent process: its own process group on POSIX,
+ * the .cmd shim through cmd.exe on Windows, kill() ending the whole tree
+ * (taskkill /T /F on Windows) and the pid recorded for shutdown.
+ */
 export async function spawnCodexCli(
   args: string[],
   options?: {
     cwd?: string;
     env?: NodeJS.ProcessEnv;
+    instance?: CodexCliInstance | null;
   },
 ) {
-  const resolvedCli = await resolveCodexCli();
+  const resolvedCli = await resolveCodexCli({ instance: options?.instance });
   if (!resolvedCli) {
     throw new Error("Codex CLI is not installed or not available on PATH.");
   }
 
-  return spawn(resolvedCli.command, args, {
+  return spawnManagedProcess({
+    args,
+    command: resolvedCli.command,
     cwd: options?.cwd,
     env: {
       ...resolvedCli.env,
       ...(options?.env ?? {}),
     },
+    // resolvedCli.env already starts from process.env.
+    extendEnv: false,
+    instanceId: options?.instance?.id ?? "codex",
+    label: `codex ${args[0] ?? ""}`.trim(),
     stdio: ["pipe", "pipe", "pipe"],
   }) as ChildProcessWithoutNullStreams;
 }

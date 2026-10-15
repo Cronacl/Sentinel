@@ -4,11 +4,27 @@ on:
   pull_request:
     paths:
       - "src/**"
+      - "scripts/**"
+      - "desktop/**"
+      - "manifests/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - "next.config.js"
+      - ".github/**"
   push:
     branches:
       - main
     paths:
       - "src/**"
+      - "scripts/**"
+      - "desktop/**"
+      - "manifests/**"
+      - "package.json"
+      - "bun.lock"
+      - "tsconfig.json"
+      - "next.config.js"
+      - ".github/**"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -25,16 +41,24 @@ jobs:
     outputs:
       source: ${{ steps.filter.outputs.source }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - id: filter
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             source:
               - 'src/**'
+              - 'scripts/**'
+              - 'desktop/**'
+              - 'manifests/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'tsconfig.json'
+              - 'next.config.js'
+              - '.github/**'
 
   pr-metadata:
     if: github.event_name == 'pull_request'
@@ -45,7 +69,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Validate semantic pull request title
-        uses: amannn/action-semantic-pull-request@v5
+        uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -72,7 +96,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-bun
 
@@ -88,7 +112,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-bun
 
@@ -112,9 +136,64 @@ jobs:
       SENTINEL_STATE_PATH: ${{ github.workspace }}/.sentinel-ci/state.json
       ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-bun
 
       - name: Run tests
-        run: bun run test
+        run: node scripts/run-tests.mjs --jobs 3
+
+  test-platforms:
+    # The engine platform spawns, resolves and kills agent processes with
+    # per-OS code paths (.cmd shims, process groups, taskkill), so its
+    # suites also run on Linux and Windows.
+    name: test-${{ matrix.os }}
+    needs: changes
+    if: ${{ needs.changes.outputs.source == 'true' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    env:
+      SKIP_ENV_VALIDATION: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      SENTINEL_SKIP_STARTUP_TASKS: "1"
+      ENCRYPTION_KEY: "1111111111111111111111111111111111111111111111111111111111111111"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Run engine platform tests
+        shell: bash
+        run: >-
+          node scripts/run-tests.mjs --jobs 3
+          --filter src/lib/runtime/
+          --filter src/lib/ai/chat/engines/
+
+  build:
+    name: build
+    needs: changes
+    if: ${{ needs.changes.outputs.source == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SKIP_ENV_VALIDATION: "1"
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      SENTINEL_SKIP_STARTUP_TASKS: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Build
+        run: bun run build
+
+      - name: Tripwires
+        run: node scripts/verify/tripwires.mjs

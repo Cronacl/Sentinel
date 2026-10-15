@@ -1,6 +1,11 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  getNodeModulesPackageName,
+  isExcludedServerPackage,
+} from "./excluded-server-packages.mjs";
+
 const projectRoot = process.cwd();
 const serverRoot = path.join(projectRoot, "desktop", "dist", "server");
 
@@ -91,9 +96,11 @@ async function pruneDirectory(dirPath) {
     const isServerRootEntry = dirPath === serverRoot;
 
     if (entry.isDirectory()) {
+      const packageName = getNodeModulesPackageName(dirPath, entry.name);
       if (
         (isServerRootEntry && PRUNE_ROOT_ENTRIES.has(entry.name)) ||
-        shouldPruneDir(entry.name)
+        shouldPruneDir(entry.name) ||
+        (packageName !== null && isExcludedServerPackage(packageName))
       ) {
         await rm(fullPath, { force: true, recursive: true });
         removedCount++;

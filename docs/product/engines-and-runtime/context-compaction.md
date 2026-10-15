@@ -104,11 +104,13 @@ const result = await applyContextCompaction({
 There is also a direct Codex thread action for compaction:
 
 ```ts
-codexCompact: protectedProcedure
-  .input(z.object({ threadId: z.string() }))
+compact: protectedProcedure
+  .input(threadInputSchema)
   .mutation(async ({ ctx, input }) => {
-    const codexThreadId = await resolveCodexThreadId(ctx, input.threadId);
-    const codex = getCodexAppServerManager();
+    const { codex, codexThreadId } = await resolveCodexThread(
+      ctx,
+      input.threadId,
+    );
     return codex.compactThread(codexThreadId);
   }),
 ```
@@ -120,4 +122,4 @@ One useful detail from the test coverage is that prompt assembly and context com
 - [`context-compaction-refresh.ts`](../../../src/lib/ai/chat/runtime/context-compaction-refresh.ts)
 - [`run-thread-chat.ts`](../../../src/lib/ai/chat/runtime/run-thread-chat.ts)
 - [`schema.ts`](../../../src/server/db/schema.ts)
-- [`engines.ts`](../../../src/server/api/routers/engines.ts)
+- [`routers/engines/codex.ts`](../../../src/server/api/routers/engines/codex.ts)

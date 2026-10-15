@@ -139,6 +139,38 @@ describe("generateCodexCommitMessage", () => {
     expect(result.body).toBe("- add migration\n- update tests");
   });
 
+  it("sends max as Codex's xhigh effort", async () => {
+    let receivedArgs: string[] = [];
+    const fakeProcess = createFakeChildProcess();
+
+    await generateCodexCommitMessage(
+      {
+        context: {
+          branch: "feature/codex-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "gpt-5.4",
+        reasoningEffort: "max",
+      },
+      {
+        createProcess: async ({ args }) => {
+          receivedArgs = args;
+          const outputPath = args[args.indexOf("--output-last-message") + 1]!;
+          await writeFile(
+            outputPath,
+            JSON.stringify({ body: "", subject: "Tidy up" }),
+            "utf8",
+          );
+          return fakeProcess.child;
+        },
+      },
+    );
+
+    expect(receivedArgs).toContain('model_reasoning_effort="xhigh"');
+  });
+
   it("throws when codex returns invalid structured output", async () => {
     const fakeProcess = createFakeChildProcess();
 
@@ -202,6 +234,18 @@ describe("generateClaudeCommitMessage", () => {
     expect(receivedArgs).toContain("--json-schema");
     expect(receivedArgs).toContain("--effort");
     expect(receivedArgs).toContain("high");
+    // The diff in the prompt is untrusted: no tools, MCP servers, skills or
+    // hooks, and nothing approved without asking.
+    expect(receivedArgs).not.toContain("--dangerously-skip-permissions");
+    expect(receivedArgs[receivedArgs.indexOf("--tools") + 1]).toBe("");
+    expect(receivedArgs[receivedArgs.indexOf("--permission-mode") + 1]).toBe(
+      "dontAsk",
+    );
+    expect(receivedArgs).toContain("--strict-mcp-config");
+    expect(receivedArgs).toContain("--disable-slash-commands");
+    expect(
+      JSON.parse(receivedArgs[receivedArgs.indexOf("--settings") + 1]!),
+    ).toEqual({ disableAllHooks: true });
     expect(receivedEnv?.CLAUDE_AGENT_SDK_CLIENT_APP).toBe("sentinel");
     expect(fakeProcess.getInput()).toContain("Branch: feature/claude-commit");
     expect(result).toEqual({
@@ -209,6 +253,36 @@ describe("generateClaudeCommitMessage", () => {
       message: "Improve orchestration flow\n\nBody",
       subject: "Improve orchestration flow",
     });
+  });
+
+  it("sends max as Claude's high effort", async () => {
+    let receivedArgs: string[] = [];
+    const fakeProcess = createFakeChildProcess({
+      stdout: JSON.stringify({
+        structured_output: { body: "", subject: "Tidy up" },
+      }),
+    });
+
+    await generateClaudeCommitMessage(
+      {
+        context: {
+          branch: "feature/claude-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "claude-sonnet-4-5",
+        reasoningEffort: "max",
+      },
+      {
+        spawnProcess: ({ args }) => {
+          receivedArgs = args;
+          return fakeProcess.child;
+        },
+      },
+    );
+
+    expect(receivedArgs[receivedArgs.indexOf("--effort") + 1]).toBe("high");
   });
 
   it("throws when claude returns invalid json output", async () => {
@@ -237,6 +311,38 @@ describe("generateClaudeCommitMessage", () => {
 });
 
 describe("generateCopilotCommitMessage", () => {
+  it("sends max as Copilot's high effort", async () => {
+    let receivedEffort: string | undefined;
+
+    await generateCopilotCommitMessage(
+      {
+        context: {
+          branch: "feature/copilot-commit",
+          patch: "diff --git a/file.ts b/file.ts",
+          repoRoot: globalThis.process.cwd(),
+          summary: "M file.ts",
+        },
+        modelId: "gpt-5.1-copilot",
+        reasoningEffort: "max",
+      },
+      {
+        createSession: async (config) => {
+          receivedEffort = config.reasoningEffort;
+          return {
+            disconnect: async () => {},
+            sendAndWait: async () => ({
+              data: {
+                content: JSON.stringify({ body: "", subject: "Tidy up" }),
+              },
+            }),
+          };
+        },
+      },
+    );
+
+    expect(receivedEffort).toBe("high");
+  });
+
   it("creates a tool-free Copilot session, maps reasoning effort, and parses JSON output", async () => {
     let receivedConfig:
       | Pick<
@@ -296,13 +402,11 @@ describe("generateCopilotCommitMessage", () => {
       workingDirectory: globalThis.process.cwd(),
     });
     expect(
-      receivedConfig?.onPermissionRequest(
-        { kind: "read" },
+      receivedConfig?.onPermissionRequest?.(
+        { intention: "Read file.ts", kind: "read", path: "file.ts" },
         { sessionId: "copilot-session" },
       ),
-    ).toEqual({
-      kind: "denied-no-approval-rule-and-could-not-request-from-user",
-    });
+    ).toEqual({ kind: "user-not-available" });
     expect(didDisconnect).toBe(true);
     expect(result).toEqual({
       body: "- update commit flow",

@@ -376,8 +376,7 @@ export function upsertMemory(input: UpsertMemoryInput) {
           AND fingerprint = ?`,
     )
     .get(input.userId, input.kind, workspaceId ?? "", fingerprint) as
-    | { id: string }
-    | undefined;
+    { id: string } | undefined;
   const semanticDuplicate = existing
     ? null
     : ((

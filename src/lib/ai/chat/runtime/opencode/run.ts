@@ -1,21 +1,21 @@
 import "server-only";
 
-import { generateId } from "ai";
-import type {
-  Part,
-  PermissionRequest,
-  QuestionRequest,
-} from "@opencode-ai/sdk/v2";
+import { pathToFileURL } from "node:url";
 
+import { generateId } from "ai";
+
+import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
+import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import {
   buildOpenCodeThreadState,
-  openCodeQuestionId,
   parseOpenCodeModelSlug,
   startOpenCodeSession,
-  toOpenCodePermissionReply,
-  toOpenCodeQuestionAnswers,
-  type OpenCodeSession,
+  type OpenCodePermissionReply,
+  type OpenCodePromptFile,
+  type OpenCodeRunEvent,
+  type OpenCodeTurnSession,
 } from "@/lib/ai/chat/engines/opencode-sdk";
+import type { OpenCodeThreadState } from "@/lib/ai/chat/engines/state/opencode";
 import { getOpenCodeThreadState } from "@/lib/ai/chat/engines/types";
 import {
   mergeThreadMessageMetadata,
@@ -23,7 +23,9 @@ import {
 } from "@/lib/ai/messages/types";
 import { createLogger } from "@/lib/logger";
 import { normalizeThreadMode } from "@/lib/plan";
+import { resolveSupportedPermissionMode } from "@/lib/security";
 import { streamContext } from "@/lib/streams";
+import type { PermissionMode } from "@/server/db/enums";
 
 import {
   normalizeThreadChatErrorMessage,
@@ -33,6 +35,30 @@ import * as persist from "../../persistence";
 import { getThreadCheckpointAnchorMessageId } from "../../repo/checkpoints";
 import { loadThreadSessionSnapshot } from "../../session/server";
 import type { ThreadChatRequest } from "../../types";
+import { MISSED_TURNS_HEADING, planAcpHistory } from "../acp/history";
+import { loadAttachment } from "../acp/prompt";
+import {
+  getFollowUpModelRequestOptions,
+  resolveThreadEngineInstance,
+} from "../engine-instance";
+import { createMirrorEmitter, type MirrorEmitter } from "../external/emitter";
+import {
+  loadForwardedMcpServers,
+  logSkippedMcpServers,
+} from "../external/mcp-servers";
+import {
+  buildQuestionInput,
+  parseQuestionResponse,
+  type ExternalQuestion,
+} from "../external/user-input";
+import {
+  beginExternalRuntimeRepoCheckpoint,
+  buildExternalRuntimePromptText,
+  clearExternalRuntimeRepoCheckpoint,
+  finalizeExternalRuntimeRepoCheckpoint,
+  shouldAutoApproveExternalPermission,
+  shouldAutoDenyExternalPermission,
+} from "../external-runtime";
 import {
   createThreadEventChannel,
   type ThreadEventChannel,
@@ -45,84 +71,87 @@ import {
   getUserParentMessageId,
   truncateTranscriptAtMessage,
 } from "../transcript";
+import { UNATTENDED_DECLINE_MESSAGE } from "../unattended";
+import { getToolPermissionMode, getWorkspaceRootPath } from "../workspace";
 import {
   resolveOpenCodePromptResponse,
   type OpenCodePromptResponse,
 } from "./event-helpers";
 import {
-  beginExternalRuntimeRepoCheckpoint,
-  buildExternalRuntimePromptText,
-  clearExternalRuntimeRepoCheckpoint,
-  finalizeExternalRuntimeRepoCheckpoint,
-  shouldAutoApproveExternalPermission,
-  shouldAutoDenyExternalPermission,
-} from "../external-runtime";
-import { getToolPermissionMode, getWorkspaceRootPath } from "../workspace";
-import type { PermissionMode } from "@/server/db/enums";
+  createOpenCodeMirror,
+  normalizeOpenCodeToolName,
+  type OpenCodeMirror,
+} from "./mirror";
 import {
   activeOpenCodeRunControls,
   resolveActiveOpenCodeRunControl,
 } from "./state";
 
-type OpenCodeMirrorToolState =
-  | "approval-requested"
-  | "approval-responded"
-  | "input-available"
-  | "input-streaming"
-  | "output-available"
-  | "output-denied"
-  | "output-error";
-
-type OpenCodeMirrorTool = {
-  approval?: {
-    approved?: boolean;
-    decision?: string;
-    id: string;
-    reason?: string;
-    response?: string;
-  };
-  errorText?: string;
-  id: string;
-  input?: unknown;
-  name: string;
-  order: number;
-  output?: unknown;
-  state: OpenCodeMirrorToolState;
-};
-
-type OpenCodeMirrorState = {
-  assistantId: string;
-  messageRoleById: Map<string, "assistant" | "user">;
-  nextOrder: number;
-  partById: Map<string, Part>;
-  requestedModelId: string | null;
-  responseModelId: string | null;
-  sessionId: string;
-  text: string;
-  textOrder: number;
-  threadId: string;
-  tools: Map<string, OpenCodeMirrorTool>;
-};
+// One OpenCode turn (design acp-and-agents §5). The instance's long-lived
+// `opencode serve` (engines/opencode-sdk/server-pool.ts) holds the thread's
+// session between turns:
+// - a persisted session of the same generation that still holds the
+//   thread's last answered turn is prompted directly, with only the turns
+//   it missed (another engine answered) and no transcript replay;
+// - otherwise a new session gets the whole transcript.
+// Events of both generations arrive normalized (OpenCodeRunEvent). A 1.x
+// turn ends on `session.idle`, a 2.x one on `session.execution.*`.
 
 type PendingOpenCodeApproval = {
-  request: PermissionRequest;
+  /** Mirror entry (the asking tool call, or the request itself). */
+  key: string;
+  sessionId: string;
 };
 
 type PendingOpenCodeQuestion = {
-  request: QuestionRequest;
+  key: string;
+  questions: ExternalQuestion[];
+  sessionId: string;
+};
+
+// A ContextOverflowError (1.x) held back until OpenCode shows whether it
+// recovered by compacting (a new assistant message appears) or gave up
+// (session.idle).
+type DeferredOpenCodeSessionError = {
+  knownMessageIds: ReadonlySet<string>;
+  message: string;
 };
 
 export type ActiveOpenCodeRunControl = {
   abortController: AbortController;
   assistantId: string;
+  baseState: OpenCodeThreadState;
+  // Subagent (task tool) sessions spawned under this run's session; their
+  // permission and question requests must be answered too or the run hangs.
+  childSessionIds: Set<string>;
+  deferredSessionError: DeferredOpenCodeSessionError | null;
+  emitter: MirrorEmitter;
   eventChannel: ThreadEventChannel;
+  /** 2.x: the execution failed with this message (step.failed). */
+  executionError: string | null;
+  /**
+   * 2.x: this turn's `session.execution.started` arrived. Until then an
+   * end event on the reused session is a late one of the execution before
+   * (`session.interrupt` returns before it is published).
+   */
+  executionStarted: boolean;
   finished: boolean;
+  instance: ResolvedEngineInstance | null;
+  /**
+   * False in unattended runs (automations): permission requests and
+   * questions are declined unless full access approves them.
+   */
+  interactive?: boolean;
+  /** 2.x: a step ended as interrupted. */
+  interrupted: boolean;
+  knownMessageIds: Set<string>;
+  mirror: OpenCodeMirror;
   permissionMode: PermissionMode;
   pendingApprovals: Map<string, PendingOpenCodeApproval>;
   pendingQuestions: Map<string, PendingOpenCodeQuestion>;
+  requestedModelId: string | null;
   runId: string;
-  session: OpenCodeSession;
-  state: OpenCodeMirrorState;
+  session: OpenCodeTurnSession;
   threadId: string;
   toolsEnabled: boolean;
   userId: string;
@@ -131,188 +160,63 @@ export type ActiveOpenCodeRunControl = {
 
 const log = createLogger("ThreadChatOpenCode");
 
-function logRuntimeTiming(
-  phase: "session_start_ready" | "session_start_started",
-  startedAt: number,
-  context: {
-    runId: string;
-    threadId: string;
-    userId: string;
-    workspaceId: string;
-  },
+const STOPPED_MESSAGE = "Generation stopped.";
+
+/** How long a turn that ends early waits for OpenCode to stop its run. */
+const OPENCODE_ABORT_TIMEOUT_MS = 5_000;
+
+function persistAssistantMessage(
+  control: Pick<
+    ActiveOpenCodeRunControl,
+    "assistantId" | "mirror" | "requestedModelId" | "runId" | "threadId"
+  >,
+  status: "cancelled" | "completed" | "error" | "pending" | "streaming",
+  extra: {
+    errorMessage?: string | null;
+    finishReason?: string | null;
+    repoCheckpointId?: string | null;
+  } = {},
 ) {
-  if (process.env.NODE_ENV !== "development") {
-    return;
-  }
-
-  log.debug(`timing:${phase}`, {
-    elapsedMs: Date.now() - startedAt,
-    phase,
-    ...context,
-  });
-}
-
-function getNextOrder(state: OpenCodeMirrorState) {
-  const order = state.nextOrder;
-  state.nextOrder += 1;
-  return order;
-}
-
-function getToolOrder(state: OpenCodeMirrorState, toolId: string) {
-  const existing = state.tools.get(toolId);
-  if (existing) return existing.order;
-  return getNextOrder(state);
-}
-
-function normalizeOpenCodeToolName(toolName: string) {
-  return `opencode_${toolName
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")}`;
-}
-
-function createOpenCodeMirrorState(input: {
-  assistantId: string;
-  requestedModelId?: string | null;
-  sessionId: string;
-  threadId: string;
-}) {
-  return {
-    assistantId: input.assistantId,
-    messageRoleById: new Map(),
-    nextOrder: 0,
-    partById: new Map(),
-    requestedModelId: input.requestedModelId ?? null,
-    responseModelId: input.requestedModelId ?? null,
-    sessionId: input.sessionId,
-    text: "",
-    textOrder: 0,
-    threadId: input.threadId,
-    tools: new Map(),
-  } satisfies OpenCodeMirrorState;
-}
-
-function messageRoleForPart(state: OpenCodeMirrorState, part: Part) {
-  return state.messageRoleById.get(part.messageID) ?? null;
-}
-
-function textFromPart(part: Part) {
-  if ((part.type === "text" || part.type === "reasoning") && part.text) {
-    return part.text;
-  }
-  return "";
-}
-
-function upsertOpenCodeTool(
-  state: OpenCodeMirrorState,
-  input: Omit<OpenCodeMirrorTool, "order"> & { order?: number },
-) {
-  const existing = state.tools.get(input.id);
-  const order = input.order ?? getToolOrder(state, input.id);
-
-  state.tools.set(input.id, {
-    approval: input.approval ?? existing?.approval,
-    errorText: input.errorText ?? existing?.errorText,
-    id: input.id,
-    input: input.input ?? existing?.input,
-    name: input.name,
-    order,
-    output: input.output ?? existing?.output,
-    state: input.state,
-  });
-}
-
-function buildAssistantParts(state: OpenCodeMirrorState) {
-  const parts: ThreadUIMessage["parts"] = [];
-  const orderedTools = [...state.tools.values()].sort(
-    (left, right) => left.order - right.order,
-  );
-
-  type OrderedItem =
-    | { kind: "text"; order: number; text: string }
-    | { kind: "tool"; order: number; tool: OpenCodeMirrorTool };
-
-  const items: OrderedItem[] = orderedTools.map((tool) => ({
-    kind: "tool",
-    order: tool.order,
-    tool,
-  }));
-
-  if (state.text.trim()) {
-    items.push({
-      kind: "text",
-      order: state.textOrder,
-      text: state.text.trim(),
-    });
-  }
-
-  items.sort((a, b) => a.order - b.order);
-
-  for (const item of items) {
-    if (item.kind === "text") {
-      parts.push({ text: item.text, type: "text" });
-      continue;
-    }
-
-    parts.push({
-      ...(item.tool.approval ? { approval: item.tool.approval } : {}),
-      ...(item.tool.errorText ? { errorText: item.tool.errorText } : {}),
-      ...(item.tool.input === undefined ? {} : { input: item.tool.input }),
-      ...(item.tool.output === undefined ? {} : { output: item.tool.output }),
-      state: item.tool.state,
-      toolCallId: item.tool.id,
-      toolName: item.tool.name,
-      type: "dynamic-tool",
-    } as ThreadUIMessage["parts"][number]);
-  }
-
-  return parts.length > 0 ? parts : [{ text: " ", type: "text" as const }];
-}
-
-async function emitAssistantMessageUpdate(
-  state: OpenCodeMirrorState,
-  runId: string,
-  status: "pending" | "streaming" | "completed" | "error" | "cancelled",
-  finishReason?: string | null,
-  errorMessage?: string | null,
-  eventChannel?: ThreadEventChannel | null,
-  options?: { repoCheckpointId?: string | null },
-) {
-  const message = persist.upsertMessage(state.threadId, {
-    id: state.assistantId,
+  const usage = control.mirror.usageMetadata();
+  return persist.upsertMessage(control.threadId, {
+    id: control.assistantId,
     metadata: {
-      branchId: state.assistantId,
-      ...(errorMessage ? { errorMessage } : {}),
-      ...(finishReason ? { finishReason } : {}),
+      branchId: control.assistantId,
+      ...(extra.errorMessage ? { errorMessage: extra.errorMessage } : {}),
+      ...(extra.finishReason ? { finishReason: extra.finishReason } : {}),
       isActive: true,
       model: {
-        requestedModelId: state.requestedModelId ?? undefined,
-        responseModelId: state.responseModelId ?? undefined,
+        requestedModelId: control.requestedModelId ?? undefined,
+        responseModelId:
+          control.mirror.getResponseModelId() ??
+          control.requestedModelId ??
+          undefined,
       },
-      ...(options?.repoCheckpointId
-        ? { repoCheckpointId: options.repoCheckpointId }
+      ...(extra.repoCheckpointId
+        ? { repoCheckpointId: extra.repoCheckpointId }
         : {}),
-      runId,
+      runId: control.runId,
       status,
       statusLabel: null,
+      ...(usage ? { usage } : {}),
     },
-    parts: buildAssistantParts(state),
+    parts: control.mirror.toParts({ streaming: status === "streaming" }),
     role: "assistant",
   });
+}
 
-  eventChannel?.emit({
-    message,
-    runId,
-    type: "message.upsert",
-  });
-  eventChannel?.emit({
+function emitMessage(
+  eventChannel: ThreadEventChannel,
+  runId: string,
+  message: ThreadUIMessage,
+) {
+  eventChannel.emit({ message, runId, type: "message.upsert" });
+  eventChannel.emit({
     messageId: message.id,
     runId,
     status: message.metadata?.status,
     type: "message.status",
   });
-
-  return message;
 }
 
 async function emitThreadSnapshot(
@@ -332,6 +236,17 @@ async function emitThreadSnapshot(
     });
   }
   return snapshot;
+}
+
+function writeThreadState(
+  control: Pick<ActiveOpenCodeRunControl, "instance" | "threadId">,
+  state: OpenCodeThreadState,
+) {
+  persist.updateOpenCodeThreadState(
+    control.threadId,
+    buildOpenCodeThreadState(state),
+    control.instance,
+  );
 }
 
 async function drainQueuedOpenCodeFollowUp(
@@ -356,6 +271,7 @@ async function drainQueuedOpenCodeFollowUp(
           role: "user",
         },
         modelId: nextFollowUp.modelId,
+        ...getFollowUpModelRequestOptions(nextFollowUp),
         threadId: request.threadId,
         threadMode: nextFollowUp.threadMode,
         trigger: "submit-user-message",
@@ -363,6 +279,8 @@ async function drainQueuedOpenCodeFollowUp(
         workspaceId: request.workspaceId,
       },
       thread,
+      // Queued turns run on the instance the thread is bound to.
+      await resolveThreadEngineInstance(request.userId, thread),
     );
     persist.deleteThreadFollowUp(request.threadId, nextFollowUp.id);
   } catch (error) {
@@ -371,18 +289,48 @@ async function drainQueuedOpenCodeFollowUp(
   }
 }
 
+/**
+ * Stops the session's execution when the turn ends before OpenCode said it
+ * did (Stop, a dropped or silent event stream, a failed prompt): the pooled
+ * server outlives the turn, so a run left going would keep using tools and
+ * settle the next turn. A server that does not answer is ended.
+ */
+async function stopOpenCodeExecution(control: ActiveOpenCodeRunControl) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const outcome = await Promise.race([
+    control.session.abort().then(
+      () => "stopped" as const,
+      (error: unknown) =>
+        error instanceof Error ? error.message : String(error),
+    ),
+    new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), OPENCODE_ABORT_TIMEOUT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (outcome === "stopped") return;
+  log.warn("opencode_abort_failed", {
+    error: outcome,
+    runId: control.runId,
+    threadId: control.threadId,
+  });
+  await control.session.discardServer().catch(() => undefined);
+}
+
 async function finishOpenCodeRun(
   control: ActiveOpenCodeRunControl,
   input: {
     errorMessage?: string | null;
+    /** OpenCode reported the run over (or its server is gone). */
+    executionEnded?: boolean;
     finishReason?: string | null;
     status: "cancelled" | "completed" | "error";
-    threadStatus: "idle" | "streaming" | "awaiting_approval";
   },
 ) {
   if (control.finished) return;
 
   control.finished = true;
+  control.emitter.close();
   const errorMessage =
     input.status === "error"
       ? normalizeThreadChatErrorMessage(
@@ -390,25 +338,33 @@ async function finishOpenCodeRun(
           "OpenCode run failed.",
         )
       : (input.errorMessage ?? null);
+  control.mirror.finishDanglingTools(
+    input.status === "cancelled" ? STOPPED_MESSAGE : "Tool did not finish.",
+  );
   const repoCheckpointId =
-    input.status === "completed" && input.threadStatus === "idle"
+    input.status === "completed"
       ? await finalizeExternalRuntimeRepoCheckpoint({
           assistantMessageId: control.assistantId,
           runId: control.runId,
           threadId: control.threadId,
         })
       : (await clearExternalRuntimeRepoCheckpoint(control.runId), null);
-  control.abortController.abort();
+  try {
+    // Ends the event stream; a fetch reader can rethrow the abort here.
+    control.abortController.abort();
+  } catch {
+    // Already ended.
+  }
   persist.clearActiveStream(control.threadId);
-  persist.setThreadStatus(control.threadId, input.threadStatus);
-  await emitAssistantMessageUpdate(
-    control.state,
-    control.runId,
-    input.status,
-    input.finishReason,
-    errorMessage,
+  persist.setThreadStatus(control.threadId, "idle");
+  emitMessage(
     control.eventChannel,
-    { repoCheckpointId },
+    control.runId,
+    persistAssistantMessage(control, input.status, {
+      errorMessage,
+      finishReason: input.finishReason,
+      repoCheckpointId,
+    }),
   );
   await emitThreadSnapshot(
     control.threadId,
@@ -420,7 +376,7 @@ async function finishOpenCodeRun(
     control.eventChannel.emit({
       messageId: control.assistantId,
       runId: control.runId,
-      threadStatus: input.threadStatus,
+      threadStatus: "idle",
       type: "run.cancelled",
     });
   } else if (input.status === "error") {
@@ -435,457 +391,388 @@ async function finishOpenCodeRun(
       error: errorMessage ?? "OpenCode run failed.",
       messageId: control.assistantId,
       runId: control.runId,
-      threadStatus: input.threadStatus,
+      threadStatus: "idle",
       type: "run.failed",
     });
   } else {
     control.eventChannel.emit({
       runId: control.runId,
-      threadStatus: input.threadStatus,
+      threadStatus: "idle",
       type: "run.finished",
     });
   }
 
   control.eventChannel.close();
   activeOpenCodeRunControls.delete(control.runId);
-  control.session.server.close();
-
-  if (input.threadStatus === "idle") {
-    await drainQueuedOpenCodeFollowUp({
-      threadId: control.threadId,
-      userId: control.userId,
-      workspaceId: control.workspaceId,
-    });
+  if (input.status !== "completed" && !input.executionEnded) {
+    await stopOpenCodeExecution(control);
   }
-}
+  // The server stays up for the thread's next turn; only the plan agent a
+  // 2.x turn switched to is put back.
+  await control.session.finishTurn().catch(() => undefined);
+  control.session.release();
 
-function getEventSessionId(event: unknown) {
-  if (!event || typeof event !== "object" || !("properties" in event)) {
-    return null;
-  }
-  const properties = (event as { properties?: unknown }).properties;
-  if (
-    !properties ||
-    typeof properties !== "object" ||
-    !("sessionID" in properties)
-  ) {
-    return null;
-  }
-  const sessionID = (properties as { sessionID?: unknown }).sessionID;
-  return typeof sessionID === "string" ? sessionID : null;
-}
-
-function getToolState(part: Extract<Part, { type: "tool" }>) {
-  if (part.state.status === "error") return "output-error";
-  if (part.state.status === "completed") return "output-available";
-  if (part.state.status === "running") return "input-streaming";
-  return "input-available";
-}
-
-function updateToolFromPart(
-  state: OpenCodeMirrorState,
-  part: Extract<Part, { type: "tool" }>,
-) {
-  const id = part.callID || part.id;
-  upsertOpenCodeTool(state, {
-    errorText: part.state.status === "error" ? part.state.error : undefined,
-    id,
-    input: "input" in part.state ? part.state.input : undefined,
-    name: normalizeOpenCodeToolName(part.tool),
-    output: part.state.status === "completed" ? part.state.output : undefined,
-    state: getToolState(part),
+  await drainQueuedOpenCodeFollowUp({
+    threadId: control.threadId,
+    userId: control.userId,
+    workspaceId: control.workspaceId,
   });
+}
+
+function isOpenCodeRunSettled(control: ActiveOpenCodeRunControl) {
+  return control.finished || control.abortController.signal.aborted;
+}
+
+function eventSessionId(event: OpenCodeRunEvent) {
+  return "sessionId" in event ? event.sessionId : null;
+}
+
+// Only requests are taken from subagent sessions: their messages, idle and
+// errors belong to the task tool call the parent session is already showing.
+const CHILD_SESSION_EVENT_TYPES = new Set<OpenCodeRunEvent["type"]>([
+  "permission.asked",
+  "permission.replied",
+  "question.asked",
+  "question.settled",
+]);
+
+// The task tool creates subagent sessions with `parentID` set. Adapted from
+// t3code OpenCodeAdapterV2.ts (relatedSessionOwners, MIT), which routes
+// their requests to the parent.
+function isEventForRun(
+  control: ActiveOpenCodeRunControl,
+  event: OpenCodeRunEvent,
+) {
+  const sessionId = eventSessionId(event);
+  if (sessionId === control.session.sessionId) return true;
+  return (
+    sessionId !== null &&
+    control.childSessionIds.has(sessionId) &&
+    CHILD_SESSION_EVENT_TYPES.has(event.type)
+  );
+}
+
+function setAwaiting(control: ActiveOpenCodeRunControl) {
+  persist.setThreadStatus(control.threadId, "awaiting_approval");
+  control.emitter.flush();
+  void emitThreadSnapshot(
+    control.threadId,
+    control.eventChannel,
+    control.runId,
+  );
+}
+
+function resumeStreaming(control: ActiveOpenCodeRunControl) {
+  if (
+    control.pendingApprovals.size === 0 &&
+    control.pendingQuestions.size === 0
+  ) {
+    persist.setThreadStatus(control.threadId, "streaming");
+  }
+  control.emitter.flush();
+}
+
+function toPermissionReply(response: {
+  approved?: boolean;
+  decision?: string;
+}): OpenCodePermissionReply {
+  if (response.approved === false) return "reject";
+  return response.decision === "acceptForSession" ||
+    response.decision === "always"
+    ? "always"
+    : "once";
+}
+
+async function handlePermissionAsked(
+  control: ActiveOpenCodeRunControl,
+  event: Extract<OpenCodeRunEvent, { type: "permission.asked" }>,
+) {
+  const key = control.mirror.requestApproval({
+    input: {
+      ...event.metadata,
+      patterns: event.patterns,
+      permission: event.permission,
+    },
+    name: normalizeOpenCodeToolName(event.permission || "permission"),
+    requestId: event.requestId,
+    toolCallId: event.toolCallId,
+  });
+  const autoApprove = shouldAutoApproveExternalPermission({
+    permissionMode: control.permissionMode,
+    toolsEnabled: control.toolsEnabled,
+  });
+  if (
+    autoApprove ||
+    shouldAutoDenyExternalPermission({
+      interactive: control.interactive,
+      toolsEnabled: control.toolsEnabled,
+    })
+  ) {
+    // Full access approves even when nobody could be asked.
+    control.mirror.respondToApproval(key, {
+      approved: autoApprove,
+      decision: autoApprove ? "accept" : "decline",
+      ...(autoApprove
+        ? {}
+        : {
+            reason: control.toolsEnabled
+              ? UNATTENDED_DECLINE_MESSAGE
+              : "Tools are disabled for this thread.",
+          }),
+    });
+    control.emitter.flush();
+    await control.session.replyPermission(
+      event.requestId,
+      autoApprove ? "once" : "reject",
+      event.sessionId,
+    );
+    return;
+  }
+  control.pendingApprovals.set(event.requestId, {
+    key,
+    sessionId: event.sessionId,
+  });
+  setAwaiting(control);
+}
+
+async function handleQuestionAsked(
+  control: ActiveOpenCodeRunControl,
+  event: Extract<OpenCodeRunEvent, { type: "question.asked" }>,
+) {
+  const key = control.mirror.askQuestion({
+    input: buildQuestionInput({
+      questions: event.questions,
+      title: event.title,
+    }),
+    requestId: event.requestId,
+    toolCallId: event.toolCallId,
+  });
+  if (!control.toolsEnabled || control.interactive === false) {
+    control.mirror.declineQuestion(
+      key,
+      control.toolsEnabled
+        ? UNATTENDED_DECLINE_MESSAGE
+        : "Tools are disabled for this thread.",
+    );
+    control.emitter.flush();
+    await control.session.rejectQuestion(event.requestId, event.sessionId);
+    return;
+  }
+  control.pendingQuestions.set(event.requestId, {
+    key,
+    questions: event.questions,
+    sessionId: event.sessionId,
+  });
+  setAwaiting(control);
 }
 
 async function handleOpenCodeEvent(
   control: ActiveOpenCodeRunControl,
-  event: any,
+  event: OpenCodeRunEvent,
 ) {
-  if (getEventSessionId(event) !== control.session.sessionId) {
+  if (event.type === "session.child") {
+    if (
+      event.parentId === control.session.sessionId ||
+      control.childSessionIds.has(event.parentId)
+    ) {
+      control.childSessionIds.add(event.sessionId);
+    }
     return;
   }
+  if (!isEventForRun(control, event)) return;
 
   switch (event.type) {
-    case "message.updated": {
-      control.state.messageRoleById.set(
-        event.properties.info.id,
-        event.properties.info.role,
-      );
-      if (event.properties.info.role !== "assistant") break;
-      for (const part of control.state.partById.values()) {
-        if (part.messageID === event.properties.info.id) {
-          const text = textFromPart(part);
-          if (text) {
-            control.state.text = text;
-            await emitAssistantMessageUpdate(
-              control.state,
-              control.runId,
-              "streaming",
-              null,
-              null,
-              control.eventChannel,
-            );
-          }
-        }
-      }
-      break;
-    }
-    case "message.removed": {
-      control.state.messageRoleById.delete(event.properties.messageID);
-      break;
-    }
-    case "message.part.delta": {
-      const existingPart = control.state.partById.get(event.properties.partID);
-      const role =
-        event.properties.messageID &&
-        control.state.messageRoleById.get(event.properties.messageID);
+    case "message": {
+      // A new assistant message after a ContextOverflowError means OpenCode
+      // compacted the session and carried on, so the error was not final.
       if (
-        role !== "assistant" &&
-        (!existingPart ||
-          messageRoleForPart(control.state, existingPart) !== "assistant")
+        event.role === "assistant" &&
+        control.deferredSessionError &&
+        !control.deferredSessionError.knownMessageIds.has(event.messageId)
       ) {
-        break;
+        control.deferredSessionError = null;
       }
-      if (
-        existingPart &&
-        existingPart.type !== "text" &&
-        existingPart.type !== "reasoning"
-      ) {
-        break;
-      }
-      if (
-        !existingPart &&
-        event.properties.field !== "text" &&
-        event.properties.field !== "message"
-      ) {
-        break;
-      }
-      const delta = String(event.properties.delta ?? "");
-      if (!delta) break;
-      control.state.text += delta;
-      if (!existingPart) {
-        control.state.partById.set(event.properties.partID, {
-          id: event.properties.partID,
-          messageID: event.properties.messageID,
-          sessionID: event.properties.sessionID,
-          text: control.state.text,
-          type: "text",
-        });
-      }
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      break;
+      control.knownMessageIds.add(event.messageId);
+      if (control.mirror.apply(event)) control.emitter.schedule();
+      return;
     }
-    case "message.part.updated": {
-      const part = event.properties.part as Part;
-      control.state.partById.set(part.id, part);
-      const role = messageRoleForPart(control.state, part);
-      if (role === "assistant") {
-        const text = textFromPart(part);
-        if (text && text.length >= control.state.text.length) {
-          control.state.text = text;
-        }
-      }
-      if (part.type === "tool") {
-        updateToolFromPart(control.state, part);
-      }
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      break;
+    case "message.removed":
+    case "part.text":
+    case "part.delta":
+    case "tool":
+    case "usage": {
+      const change = control.mirror.apply(event);
+      if (change === "structural") control.emitter.flush();
+      else if (change === "delta") control.emitter.schedule();
+      return;
     }
-    case "permission.asked": {
-      const request = event.properties as PermissionRequest;
-      const shouldAutoApprove = shouldAutoApproveExternalPermission({
-        permissionMode: control.permissionMode,
-        toolsEnabled: control.toolsEnabled,
-      });
-      const shouldAutoDeny = shouldAutoDenyExternalPermission({
-        toolsEnabled: control.toolsEnabled,
-      });
-      if (shouldAutoApprove || shouldAutoDeny) {
-        const approved = shouldAutoApprove && !shouldAutoDeny;
-        upsertOpenCodeTool(control.state, {
-          approval: {
-            approved,
-            decision: approved ? "accept" : "decline",
-            id: request.id,
-            reason:
-              request.patterns.length > 0
-                ? request.patterns.join("\n")
-                : request.permission,
-          },
-          id: request.id,
-          input: request.metadata,
-          name: normalizeOpenCodeToolName(request.permission || "permission"),
-          state: approved ? "approval-responded" : "output-denied",
-        });
-        await control.session.client.permission.reply({
-          reply: toOpenCodePermissionReply(approved),
-          requestID: request.id,
-        });
-        persist.setThreadStatus(control.threadId, "streaming");
-        await emitAssistantMessageUpdate(
-          control.state,
-          control.runId,
-          "streaming",
-          null,
-          null,
-          control.eventChannel,
-        );
-        break;
-      }
-      control.pendingApprovals.set(request.id, { request });
-      upsertOpenCodeTool(control.state, {
-        approval: {
-          id: request.id,
-          reason:
-            request.patterns.length > 0
-              ? request.patterns.join("\n")
-              : request.permission,
-        },
-        id: request.id,
-        input: request.metadata,
-        name: normalizeOpenCodeToolName(request.permission || "permission"),
-        state: "approval-requested",
-      });
-      persist.setThreadStatus(control.threadId, "awaiting_approval");
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      await emitThreadSnapshot(
-        control.threadId,
-        control.eventChannel,
-        control.runId,
-      );
-      break;
-    }
+    case "permission.asked":
+      await handlePermissionAsked(control, event);
+      return;
     case "permission.replied": {
-      control.pendingApprovals.delete(event.properties.requestID);
-      const approved = event.properties.reply !== "reject";
-      upsertOpenCodeTool(control.state, {
-        approval: {
+      const pending = control.pendingApprovals.get(event.requestId);
+      control.pendingApprovals.delete(event.requestId);
+      const key = pending?.key ?? event.requestId;
+      if (control.mirror.getTool(key)?.state === "approval-requested") {
+        const approved = event.reply !== "reject";
+        control.mirror.respondToApproval(key, {
           approved,
           decision: approved ? "accept" : "decline",
-          id: event.properties.requestID,
-        },
-        id: event.properties.requestID,
-        name:
-          control.state.tools.get(event.properties.requestID)?.name ??
-          "opencode_permission",
-        state: approved ? "approval-responded" : "output-denied",
-      });
-      persist.setThreadStatus(control.threadId, "streaming");
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      break;
-    }
-    case "question.asked": {
-      const request = event.properties as QuestionRequest;
-      if (!control.toolsEnabled) {
-        const firstQuestion = request.questions[0];
-        upsertOpenCodeTool(control.state, {
-          approval: {
-            id: request.id,
-            reason: firstQuestion?.question ?? "OpenCode requested input.",
-          },
-          id: request.id,
-          input: {
-            questions: request.questions.map((question, index) => ({
-              header: question.header,
-              id: openCodeQuestionId(index, question),
-              options: question.options,
-              question: question.question,
-            })),
-          },
-          name: "opencode_ask_question",
-          state: "output-denied",
         });
-        const questionClient = control.session.client.question as {
-          reject?: (input: { requestID: string }) => Promise<unknown>;
-          reply: (input: {
-            answers?: unknown[];
-            requestID: string;
-          }) => Promise<unknown>;
-        };
-        if (typeof questionClient.reject === "function") {
-          await questionClient.reject({ requestID: request.id });
-        } else {
-          await questionClient.reply({ answers: [], requestID: request.id });
-        }
-        persist.setThreadStatus(control.threadId, "streaming");
-        await emitAssistantMessageUpdate(
-          control.state,
-          control.runId,
-          "streaming",
-          null,
-          null,
-          control.eventChannel,
-        );
-        break;
       }
-      control.pendingQuestions.set(request.id, { request });
-      const firstQuestion = request.questions[0];
-      upsertOpenCodeTool(control.state, {
-        approval: {
-          id: request.id,
-          reason: firstQuestion?.question ?? "OpenCode is requesting input.",
-        },
-        id: request.id,
-        input: {
-          questions: request.questions.map((question, index) => ({
-            header: question.header,
-            id: openCodeQuestionId(index, question),
-            options: question.options,
-            question: question.question,
-          })),
-        },
-        name: "opencode_ask_question",
-        state: "approval-requested",
-      });
-      persist.setThreadStatus(control.threadId, "awaiting_approval");
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      await emitThreadSnapshot(
-        control.threadId,
-        control.eventChannel,
-        control.runId,
-      );
-      break;
+      resumeStreaming(control);
+      return;
     }
-    case "question.replied": {
-      control.pendingQuestions.delete(event.properties.requestID);
-      upsertOpenCodeTool(control.state, {
-        approval: {
-          id: event.properties.requestID,
-          response: (event.properties.answers ?? []).flat().join(", "),
-        },
-        id: event.properties.requestID,
-        name: "opencode_ask_question",
-        state: "input-available",
-      });
-      persist.setThreadStatus(control.threadId, "streaming");
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      break;
-    }
-    case "question.rejected": {
-      control.pendingQuestions.delete(event.properties.requestID);
-      upsertOpenCodeTool(control.state, {
-        approval: {
-          id: event.properties.requestID,
-          response: "",
-        },
-        id: event.properties.requestID,
-        name: "opencode_ask_question",
-        state: "output-denied",
-      });
-      persist.setThreadStatus(control.threadId, "streaming");
-      await emitAssistantMessageUpdate(
-        control.state,
-        control.runId,
-        "streaming",
-        null,
-        null,
-        control.eventChannel,
-      );
-      break;
+    case "question.asked":
+      await handleQuestionAsked(control, event);
+      return;
+    case "question.settled": {
+      const pending = control.pendingQuestions.get(event.requestId);
+      control.pendingQuestions.delete(event.requestId);
+      const key = pending?.key ?? event.requestId;
+      if (control.mirror.getTool(key)?.state === "approval-requested") {
+        if (event.outcome === "replied") {
+          control.mirror.answerQuestion(key, {
+            response: event.response ?? "",
+          });
+        } else {
+          control.mirror.declineQuestion(key, "Declined");
+        }
+      }
+      resumeStreaming(control);
+      return;
     }
     case "session.idle": {
       if (
-        control.pendingApprovals.size === 0 &&
-        control.pendingQuestions.size === 0
+        control.pendingApprovals.size > 0 ||
+        control.pendingQuestions.size > 0
       ) {
-        await finishOpenCodeRun(control, {
-          finishReason: "stop",
-          status: "completed",
-          threadStatus: "idle",
-        });
+        return;
       }
-      break;
+      const deferred = control.deferredSessionError;
+      await finishOpenCodeRun(
+        control,
+        deferred
+          ? {
+              errorMessage: deferred.message,
+              executionEnded: true,
+              status: "error",
+            }
+          : { finishReason: "stop", status: "completed" },
+      );
+      return;
     }
     case "session.error": {
-      await finishOpenCodeRun(control, {
-        errorMessage:
-          event.properties?.error?.message ??
-          event.properties?.message ??
-          "OpenCode run failed.",
-        finishReason: null,
-        status: "error",
-        threadStatus: "idle",
-      });
-      break;
+      if (event.contextOverflow) {
+        // Keep the run alive: OpenCode has just started compacting.
+        // session.idle settles the outcome.
+        control.deferredSessionError = {
+          knownMessageIds: new Set(control.knownMessageIds),
+          message: event.message,
+        };
+        return;
+      }
+      // 1.x ends the prompt loop on session.error.
+      await finishOpenCodeRun(
+        control,
+        event.aborted
+          ? {
+              errorMessage: STOPPED_MESSAGE,
+              executionEnded: true,
+              status: "cancelled",
+            }
+          : {
+              errorMessage: event.message,
+              executionEnded: true,
+              status: "error",
+            },
+      );
+      return;
+    }
+    // t3code provider-opencode v2/adapter.ts (awaitingStart, MIT): what
+    // arrives before this turn's execution started belongs to the last one.
+    case "step.failed":
+      if (!control.executionStarted) return;
+      if (event.aborted) control.interrupted = true;
+      else if (event.message) control.executionError = event.message;
+      return;
+    case "execution.started":
+      control.executionStarted = true;
+      return;
+    case "execution.ended": {
+      if (!control.executionStarted) return;
+      if (event.outcome === "interrupted" || control.interrupted) {
+        await finishOpenCodeRun(control, {
+          errorMessage: STOPPED_MESSAGE,
+          executionEnded: true,
+          status: "cancelled",
+        });
+        return;
+      }
+      await finishOpenCodeRun(
+        control,
+        event.outcome === "succeeded"
+          ? { finishReason: "stop", status: "completed" }
+          : {
+              errorMessage: event.error ?? control.executionError,
+              executionEnded: true,
+              status: "error",
+            },
+      );
+      return;
     }
   }
 }
 
-async function startOpenCodeEventPump(control: ActiveOpenCodeRunControl) {
-  try {
-    const subscription = await control.session.client.event.subscribe(
-      undefined,
-      {
-        signal: control.abortController.signal,
-      },
-    );
-    void (async () => {
-      try {
-        for await (const event of subscription.stream) {
-          if (control.finished) return;
-          await handleOpenCodeEvent(control, event);
-        }
-      } catch (error) {
-        if (control.finished || control.abortController.signal.aborted) return;
-        await finishOpenCodeRun(control, {
-          errorMessage: error instanceof Error ? error.message : String(error),
-          finishReason: null,
-          status: "error",
-          threadStatus: "idle",
-        });
-      }
-    })();
-  } catch (error) {
-    if (control.finished || control.abortController.signal.aborted) return;
+// Without this a crashed server leaves the thread "streaming" forever: the
+// 1.x SDK's SSE reader retries a dead connection indefinitely.
+function watchOpenCodeServerExit(control: ActiveOpenCodeRunControl) {
+  void control.session.serverExited.then(async ({ code, signal }) => {
+    if (isOpenCodeRunSettled(control)) return;
     await finishOpenCodeRun(control, {
-      errorMessage: error instanceof Error ? error.message : String(error),
-      finishReason: null,
+      errorMessage: `OpenCode server exited unexpectedly (${
+        signal ?? `code ${code ?? "unknown"}`
+      }).`,
+      executionEnded: true,
       status: "error",
-      threadStatus: "idle",
     });
-  }
+  });
+}
+
+/** Subscribes (before the prompt is sent) and pumps events in order. */
+async function startOpenCodeEventPump(control: ActiveOpenCodeRunControl) {
+  const events = await control.session.events(control.abortController.signal);
+  void (async () => {
+    try {
+      for await (const event of events) {
+        if (control.finished) return;
+        await handleOpenCodeEvent(control, event);
+      }
+      // The stream ended (the server closed it); no turn end can follow.
+      if (isOpenCodeRunSettled(control)) return;
+      await Promise.race([
+        control.session.serverExited,
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+      if (isOpenCodeRunSettled(control)) return;
+      await finishOpenCodeRun(control, {
+        errorMessage: "OpenCode event stream ended unexpectedly.",
+        status: "error",
+      });
+    } catch (error) {
+      if (isOpenCodeRunSettled(control)) return;
+      // A dying server drops the stream first; its exit explains more.
+      await Promise.race([
+        control.session.serverExited,
+        new Promise((resolve) => setTimeout(resolve, 500)),
+      ]);
+      if (isOpenCodeRunSettled(control)) return;
+      await finishOpenCodeRun(control, {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        status: "error",
+      });
+    }
+  })();
 }
 
 async function applyOpenCodePromptResponse(
@@ -893,67 +780,42 @@ async function applyOpenCodePromptResponse(
   response: OpenCodePromptResponse,
 ) {
   if (response.kind === "user-input") {
-    const pendingQuestion = control.pendingQuestions.get(response.approvalId);
-    if (!pendingQuestion) return false;
+    const pending = control.pendingQuestions.get(response.approvalId);
+    if (!pending) return false;
 
     control.pendingQuestions.delete(response.approvalId);
-    upsertOpenCodeTool(control.state, {
-      approval: {
-        id: response.approvalId,
-        response: response.response,
-      },
-      id: response.approvalId,
-      name: "opencode_ask_question",
-      state: "input-available",
+    const parsed = parseQuestionResponse(pending.questions, response.response);
+    control.mirror.answerQuestion(pending.key, {
+      answers: parsed.answers,
+      ...(parsed.additionalContext
+        ? { additionalContext: parsed.additionalContext }
+        : {}),
+      response: response.response,
     });
-    await control.session.client.question.reply({
-      answers: toOpenCodeQuestionAnswers(
-        pendingQuestion.request,
-        response.response,
-      ),
-      requestID: response.approvalId,
-    });
-    await emitAssistantMessageUpdate(
-      control.state,
-      control.runId,
-      "streaming",
-      null,
-      null,
-      control.eventChannel,
+    resumeStreaming(control);
+    await control.session.answerQuestion(
+      response.approvalId,
+      response.response,
+      pending.sessionId,
     );
     return true;
   }
 
-  const pendingApproval = control.pendingApprovals.get(response.approvalId);
-  if (!pendingApproval) return false;
+  const pending = control.pendingApprovals.get(response.approvalId);
+  if (!pending) return false;
 
   control.pendingApprovals.delete(response.approvalId);
   const approved = response.approved !== false;
-  upsertOpenCodeTool(control.state, {
-    approval: {
-      approved,
-      ...(response.decision ? { decision: response.decision } : {}),
-      id: response.approvalId,
-      ...(response.reason ? { reason: response.reason } : {}),
-      ...(response.response ? { response: response.response } : {}),
-    },
-    id: response.approvalId,
-    name:
-      control.state.tools.get(response.approvalId)?.name ??
-      "opencode_permission",
-    state: approved ? "approval-responded" : "output-denied",
+  control.mirror.respondToApproval(pending.key, {
+    approved,
+    ...(response.decision ? { decision: response.decision } : {}),
+    ...(response.reason ? { reason: response.reason } : {}),
   });
-  await control.session.client.permission.reply({
-    reply: toOpenCodePermissionReply(approved),
-    requestID: response.approvalId,
-  });
-  await emitAssistantMessageUpdate(
-    control.state,
-    control.runId,
-    "streaming",
-    null,
-    null,
-    control.eventChannel,
+  resumeStreaming(control);
+  await control.session.replyPermission(
+    response.approvalId,
+    toPermissionReply(response),
+    pending.sessionId,
   );
   return true;
 }
@@ -973,75 +835,134 @@ export async function stopOpenCodeThreadRun(
     return new Response(null, { status: 204 });
   }
 
-  await activeControl.session.client.session
-    .abort({ sessionID: activeControl.session.sessionId })
-    .catch(() => undefined);
+  // finishOpenCodeRun stops the session's execution.
   await finishOpenCodeRun(activeControl, {
-    errorMessage: "Generation stopped.",
-    finishReason: null,
+    errorMessage: STOPPED_MESSAGE,
     status: "cancelled",
-    threadStatus: "idle",
   });
 
   return new Response(null, { status: 204 });
 }
 
-export async function runOpenCodeThreadChat(
+async function handleToolApprovalTrigger(
   request: ThreadChatRequest,
   existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
 ) {
-  const timingStartedAt = Date.now();
+  const latestAssistant = request.messages
+    ? [...request.messages]
+        .reverse()
+        .find((message) => message.role === "assistant")
+    : null;
+  if (latestAssistant) {
+    persist.upsertMessage(request.threadId, latestAssistant);
+  }
 
+  const activeControl = resolveActiveOpenCodeRunControl({
+    activeRunId: existingThread?.activeStreamId ?? null,
+    threadId: request.threadId,
+  });
+  const pendingKind = request.toolApprovalResponse
+    ? activeControl?.pendingQuestions.has(request.toolApprovalResponse.id)
+      ? "user-input"
+      : activeControl?.pendingApprovals.has(request.toolApprovalResponse.id)
+        ? "approval"
+        : undefined
+    : undefined;
+  const response = resolveOpenCodePromptResponse({
+    messages: request.messages,
+    pendingKind,
+    toolApprovalResponse: request.toolApprovalResponse,
+  });
+
+  if (!response || !activeControl) {
+    if (
+      existingThread?.activeStreamId ||
+      existingThread?.status === "awaiting_approval"
+    ) {
+      persist.clearActiveStream(request.threadId);
+      persist.setThreadStatus(request.threadId, "idle");
+    }
+    throw new ThreadChatConflictError(
+      "That OpenCode approval request is no longer active.",
+    );
+  }
+
+  const applied = await applyOpenCodePromptResponse(activeControl, response);
+  if (!applied) {
+    throw new ThreadChatConflictError(
+      "That OpenCode approval request is no longer active.",
+    );
+  }
+  return new Response(null, { status: 204 });
+}
+
+type FilePart = Extract<ThreadUIMessage["parts"][number], { type: "file" }>;
+
+/**
+ * Attachments as OpenCode file inputs: images inline (data: URL), other
+ * files by their stored path. Ones that cannot be passed are listed in a
+ * note instead of being dropped silently.
+ */
+async function buildOpenCodePromptFiles(message: ThreadUIMessage | null) {
+  const files: OpenCodePromptFile[] = [];
+  const notes: string[] = [];
+  for (const part of message?.parts ?? []) {
+    if (part.type !== "file") continue;
+    const file = part as FilePart;
+    const name = file.filename ?? file.mediaType;
+    const loaded = await loadAttachment(file).catch(() => null);
+    if (file.mediaType.startsWith("image/") && loaded) {
+      files.push({
+        ...(file.filename ? { filename: file.filename } : {}),
+        mediaType: file.mediaType,
+        path: loaded.path,
+        url: file.url.startsWith("data:")
+          ? file.url
+          : `data:${file.mediaType};base64,${loaded.data.toString("base64")}`,
+      });
+    } else if (loaded?.path) {
+      files.push({
+        filename: name,
+        mediaType: file.mediaType,
+        path: loaded.path,
+        url: pathToFileURL(loaded.path).toString(),
+      });
+    } else {
+      notes.push(`Attachment ${name} could not be passed to OpenCode.`);
+    }
+  }
+  return { files, notes };
+}
+
+function getUserText(message: ThreadUIMessage | null | undefined) {
+  return (message?.parts ?? [])
+    .flatMap((part) => (part.type === "text" ? [part.text] : []))
+    .join("\n")
+    .trim();
+}
+
+/** `/name args` when `name` is one of the session's commands. */
+async function matchOpenCodeCommand(
+  session: OpenCodeTurnSession,
+  text: string,
+) {
+  const match = /^\/([A-Za-z0-9][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(text);
+  if (!match) return null;
+  const commands = await session.listCommands().catch(() => [] as string[]);
+  const name = match[1]!;
+  return commands.includes(name)
+    ? { arguments: (match[2] ?? "").trim(), name }
+    : null;
+}
+
+export async function runOpenCodeThreadChat(
+  request: ThreadChatRequest,
+  existingThread: Awaited<ReturnType<typeof persist.loadThread>>,
+  /** The thread's engine instance (the dispatcher resolves it). */
+  instance?: ResolvedEngineInstance | null,
+) {
   if (request.trigger === "submit-tool-approval") {
-    const latestAssistant = request.messages
-      ? [...request.messages]
-          .reverse()
-          .find((message) => message.role === "assistant")
-      : null;
-    if (latestAssistant) {
-      persist.upsertMessage(request.threadId, latestAssistant);
-    }
-
-    const activeControl = resolveActiveOpenCodeRunControl({
-      activeRunId: existingThread?.activeStreamId ?? null,
-      threadId: request.threadId,
-    });
-    const pendingKind = request.toolApprovalResponse
-      ? activeControl?.pendingQuestions.has(request.toolApprovalResponse.id)
-        ? "user-input"
-        : activeControl?.pendingApprovals.has(request.toolApprovalResponse.id)
-          ? "approval"
-          : undefined
-      : undefined;
-    const response = resolveOpenCodePromptResponse({
-      messages: request.messages,
-      pendingKind,
-      toolApprovalResponse: request.toolApprovalResponse,
-    });
-
-    if (!response || !activeControl) {
-      if (
-        existingThread?.activeStreamId ||
-        existingThread?.status === "awaiting_approval"
-      ) {
-        persist.clearActiveStream(request.threadId);
-        persist.setThreadStatus(request.threadId, "idle");
-      }
-
-      throw new ThreadChatConflictError(
-        "That OpenCode approval request is no longer active.",
-      );
-    }
-
-    const applied = await applyOpenCodePromptResponse(activeControl, response);
-    if (!applied) {
-      throw new ThreadChatConflictError(
-        "That OpenCode approval request is no longer active.",
-      );
-    }
-
-    persist.setThreadStatus(request.threadId, "streaming");
-    return new Response(null, { status: 204 });
+    return await handleToolApprovalTrigger(request, existingThread);
   }
 
   if (
@@ -1088,6 +1009,7 @@ export async function runOpenCodeThreadChat(
     threadMode,
     "opencode",
     request.draftRepoState ? { repo: request.draftRepoState } : null,
+    instance?.id,
   );
 
   if (request.message) {
@@ -1132,17 +1054,12 @@ export async function runOpenCodeThreadChat(
     engine: "opencode",
     modelId: request.modelId ?? null,
     mode: threadMode,
+    ...(request.modelOptions ? { modelOptions: request.modelOptions } : {}),
     reasoningEffort: null,
   });
   await emitThreadSnapshot(request.threadId, eventChannel, runId);
   eventChannel.emit({ message: placeholder, runId, type: "message.upsert" });
   eventChannel.emit({ runId, type: "run.started" });
-  logRuntimeTiming("session_start_started", timingStartedAt, {
-    runId,
-    threadId: request.threadId,
-    userId: request.userId,
-    workspaceId: request.workspaceId,
-  });
 
   void beginExternalRuntimeRepoCheckpoint({
     projectPath: workspaceRoot,
@@ -1150,26 +1067,71 @@ export async function runOpenCodeThreadChat(
     thread: existingThread,
   });
   const toolsEnabled = request.toolsEnabled !== false;
-  const existingOpenCodeState = getOpenCodeThreadState(
+  const existingState = getOpenCodeThreadState(
     existingThread?.chatEngineState,
+    instance,
   );
+  // Only an agent the user picked is kept; plan mode picks `plan` for its
+  // turns alone. State from older builds could hold a stale `plan`.
   const selectedAgent =
     request.openCode?.agent ??
-    existingOpenCodeState?.selectedAgent ??
-    (threadMode === "plan" ? "plan" : null);
+    (existingState?.selectedAgent === "plan"
+      ? null
+      : (existingState?.selectedAgent ?? null));
+  const turnAgent = threadMode === "plan" ? "plan" : selectedAgent;
   const selectedVariant =
-    request.openCode?.variant ?? existingOpenCodeState?.selectedVariant ?? null;
+    request.openCode?.variant ?? existingState?.selectedVariant ?? null;
+
+  // What the persisted session is missing. State without the sync mark
+  // comes from builds that made a new session per turn: never continued.
+  const history = planAcpHistory({
+    currentMessageId: request.message?.id ?? null,
+    state:
+      existingState?.syncedMessageId && existingState.cwd === workspaceRoot
+        ? {
+            historyDelivered: true,
+            sessionId: existingState.sessionId,
+            syncedMessageId: existingState.syncedMessageId,
+          }
+        : null,
+    transcript: modelTranscript,
+  });
+  const canResume = history.type === "none" || history.type === "since";
+
   let permissionMode: PermissionMode;
-  let session: OpenCodeSession;
+  let session: OpenCodeTurnSession;
   try {
-    permissionMode = await getToolPermissionMode(
-      request.userId,
-      request.workspaceId,
-      request.threadId,
+    permissionMode = resolveSupportedPermissionMode(
+      await getToolPermissionMode(
+        request.userId,
+        request.workspaceId,
+        request.threadId,
+      ),
+      DRIVER_CATALOG.opencode.capabilities.permissionModes,
     );
+    // The user's MCP servers, under prefixed names; their tools ask through
+    // the session's rules.
+    const forwardedMcp = await loadForwardedMcpServers({
+      env: instance?.env ?? process.env,
+      prefixNames: true,
+      userId: request.userId,
+    });
+    logSkippedMcpServers("opencode", forwardedMcp.skipped);
     session = await startOpenCodeSession({
       cwd: workspaceRoot,
-      fullAccess: permissionMode === "full" && toolsEnabled,
+      instance: instance ?? null,
+      mcp: forwardedMcp,
+      model: { ...parsedModel, variant: selectedVariant },
+      // Without tools every request is asked (and declined here).
+      permissionMode: toolsEnabled ? permissionMode : "default",
+      planMode: threadMode === "plan",
+      resume:
+        canResume && existingState
+          ? {
+              generation: existingState.generation ?? null,
+              sessionId: existingState.sessionId,
+            }
+          : null,
       title: fallbackTitle,
     });
   } catch (error) {
@@ -1179,88 +1141,127 @@ export async function runOpenCodeThreadChat(
     eventChannel.close();
     throw error;
   }
-  logRuntimeTiming("session_start_ready", timingStartedAt, {
-    runId,
-    threadId: request.threadId,
-    userId: request.userId,
-    workspaceId: request.workspaceId,
+
+  const mirror = createOpenCodeMirror({
+    assumeAssistant: session.generation === "v2",
   });
-  const state = createOpenCodeMirrorState({
-    assistantId,
-    requestedModelId: request.modelId,
+  const baseState: OpenCodeThreadState = {
+    cwd: workspaceRoot,
+    generation: session.generation,
+    modelId: request.modelId ?? null,
+    selectedAgent,
+    selectedVariant,
     sessionId: session.sessionId,
-    threadId: request.threadId,
-  });
-  const abortController = new AbortController();
+    // Until this turn's prompt is accepted the session holds what it held.
+    syncedMessageId: session.resumed
+      ? (existingState?.syncedMessageId ?? null)
+      : null,
+  };
   const control: ActiveOpenCodeRunControl = {
-    abortController,
+    abortController: new AbortController(),
     assistantId,
+    baseState,
+    childSessionIds: new Set(),
+    deferredSessionError: null,
+    emitter: createMirrorEmitter({
+      emit: (message) => emitMessage(eventChannel, runId, message),
+      persist: () => persistAssistantMessage(control, "streaming"),
+    }),
     eventChannel,
+    executionError: null,
+    executionStarted: false,
     finished: false,
+    instance: instance ?? null,
+    interactive: request.interactive !== false,
+    interrupted: false,
+    knownMessageIds: new Set(),
+    mirror,
     permissionMode,
     pendingApprovals: new Map(),
     pendingQuestions: new Map(),
+    requestedModelId: request.modelId ?? null,
     runId,
     session,
-    state,
     threadId: request.threadId,
     toolsEnabled,
     userId: request.userId,
     workspaceId: request.workspaceId,
   };
   activeOpenCodeRunControls.set(runId, control);
+  writeThreadState(control, baseState);
 
-  persist.updateOpenCodeThreadState(
-    request.threadId,
-    buildOpenCodeThreadState({
-      cwd: workspaceRoot,
-      modelId: request.modelId ?? null,
-      selectedAgent,
-      selectedVariant,
-      sessionId: session.sessionId,
-    }),
+  // A continued session already holds the turns up to the sync mark.
+  const historyMessages = !session.resumed
+    ? modelTranscript
+    : history.type === "since"
+      ? history.messages
+      : [];
+  const promptMessage =
+    request.message ??
+    ({
+      id: request.threadId,
+      metadata: {},
+      parts: [{ text: "", type: "text" }],
+      role: "user",
+    } satisfies ThreadUIMessage);
+  const { files, notes } = await buildOpenCodePromptFiles(
+    request.message ?? null,
   );
+  const promptText = [
+    buildExternalRuntimePromptText({
+      ...(session.resumed && history.type === "since"
+        ? { historyHeading: MISSED_TURNS_HEADING }
+        : {}),
+      includeHistory: historyMessages.length > 0,
+      message: promptMessage,
+      threadMode,
+      transcript: historyMessages,
+      workspaceRoot,
+    }),
+    ...notes,
+  ].join("\n\n");
 
-  await startOpenCodeEventPump(control);
-
-  const promptText = buildExternalRuntimePromptText({
-    message:
-      request.message ??
-      ({
-        id: request.threadId,
-        metadata: {},
-        parts: [{ text: "", type: "text" }],
-        role: "user",
-      } satisfies ThreadUIMessage),
-    threadMode,
-    transcript: modelTranscript,
-    workspaceRoot,
-  });
-
-  const promptInput = {
-    ...(selectedAgent ? { agent: selectedAgent } : {}),
-    model: parsedModel,
-    parts: [{ text: promptText, type: "text" as const }],
-    sessionID: session.sessionId,
-    ...(selectedVariant ? { variant: selectedVariant } : {}),
+  const send = async () => {
+    const command = await matchOpenCodeCommand(
+      session,
+      getUserText(request.message),
+    );
+    const base = {
+      agent: turnAgent,
+      files,
+      model: { ...parsedModel, variant: selectedVariant },
+    };
+    if (command) {
+      await session.command({ ...base, ...command });
+    } else {
+      await session.prompt({ ...base, text: promptText });
+    }
+    // The session now holds this turn and everything before it, except
+    // the history a command could not carry: it stays unsynced, so the
+    // next turn sends it (a new session without a mark gets a replay).
+    writeThreadState(control, {
+      ...baseState,
+      syncedMessageId:
+        command && historyMessages.length > 0
+          ? baseState.syncedMessageId
+          : assistantId,
+    });
   };
 
   try {
-    const promptPromise = session.client.session.promptAsync(promptInput);
-    void Promise.resolve(promptPromise).catch(async (error) => {
+    watchOpenCodeServerExit(control);
+    await startOpenCodeEventPump(control);
+    // Sent in the background: the response is the event stream.
+    void send().catch(async (error) => {
       await finishOpenCodeRun(control, {
         errorMessage: error instanceof Error ? error.message : String(error),
-        finishReason: null,
         status: "error",
-        threadStatus: "idle",
       });
     });
   } catch (error) {
-    void finishOpenCodeRun(control, {
+    await finishOpenCodeRun(control, {
       errorMessage: error instanceof Error ? error.message : String(error),
-      finishReason: null,
       status: "error",
-      threadStatus: "idle",
     });
   }
 

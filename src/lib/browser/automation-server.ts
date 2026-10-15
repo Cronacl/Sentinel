@@ -34,8 +34,7 @@ type BrowserAutomationUserState = {
 declare global {
   // eslint-disable-next-line no-var
   var __sentinelBrowserAutomationClients:
-    | Map<string, BrowserAutomationUserState>
-    | undefined;
+    Map<string, BrowserAutomationUserState> | undefined;
 }
 
 const clients =
@@ -83,8 +82,7 @@ function deliverCommand(
   command: BrowserAutomationCommandEnvelope,
 ) {
   const waiter = state.pollWaiters.values().next().value as
-    | ((command: BrowserAutomationCommandEnvelope | null) => void)
-    | undefined;
+    ((command: BrowserAutomationCommandEnvelope | null) => void) | undefined;
 
   if (waiter) {
     state.pollWaiters.delete(waiter);

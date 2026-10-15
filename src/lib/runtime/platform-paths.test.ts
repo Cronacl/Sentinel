@@ -38,9 +38,12 @@ describe("platform path helpers", () => {
       },
     );
 
-    expect(preferred).toContain("C:\\Users\\sentinel\\.bun\\bin");
-    expect(preferred).toContain("C:\\Users\\sentinel\\AppData\\Roaming\\npm");
-    expect(preferred).toContain(
+    // Joined with Windows' own delimiter whatever the host.
+    const entries = preferred.split(";");
+    expect(entries[0]).toBe("C:\\Windows\\System32");
+    expect(entries).toContain("C:\\Users\\sentinel\\.bun\\bin");
+    expect(entries).toContain("C:\\Users\\sentinel\\AppData\\Roaming\\npm");
+    expect(entries).toContain(
       "C:\\Users\\sentinel\\AppData\\Local\\Volta\\bin",
     );
   });
@@ -56,7 +59,35 @@ describe("platform path helpers", () => {
       platform: "linux",
     });
 
-    expect(preferred).toContain("/home/sentinel/.bun/bin");
-    expect(preferred).toContain("/usr/bin");
+    const entries = preferred.split(":");
+    expect(entries.slice(0, 2)).toEqual(["/usr/bin", "/bin"]);
+    expect(entries).toContain("/home/sentinel/.bun/bin");
+  });
+
+  it("adds the OpenCode install script directory ahead of Homebrew", () => {
+    const preferred = buildPreferredExecutablePathValue("", {
+      env: { HOME: "/Users/sentinel", NODE_ENV: "test" },
+      platform: "darwin",
+    }).split(":");
+
+    expect(preferred).toContain("/Users/sentinel/.opencode/bin");
+    expect(preferred.indexOf("/Users/sentinel/.opencode/bin")).toBeLessThan(
+      preferred.indexOf("/opt/homebrew/bin"),
+    );
+  });
+
+  it("adds OpenCode's Windows install locations", () => {
+    const preferred = buildPreferredExecutablePathValue("", {
+      env: {
+        ChocolateyInstall: "C:\\ProgramData\\chocolatey",
+        NODE_ENV: "test",
+        USERPROFILE: "C:\\Users\\sentinel",
+      },
+      platform: "win32",
+    });
+
+    expect(preferred).toContain("C:\\Users\\sentinel\\.opencode\\bin");
+    expect(preferred).toContain("C:\\Users\\sentinel\\scoop\\shims");
+    expect(preferred).toContain("C:\\ProgramData\\chocolatey\\bin");
   });
 });

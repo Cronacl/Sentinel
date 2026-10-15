@@ -324,6 +324,8 @@ export async function executeRunSubagent({
     {
       engine: "sentinel",
       id: virtualThreadId,
+      // A sub-agent of an unattended run cannot ask either.
+      ...(runtime.interactive === false ? { interactive: false } : {}),
       message: delegatedMessage,
       modelId: delegatedModelId,
       threadMode: "chat",

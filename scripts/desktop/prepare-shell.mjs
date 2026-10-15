@@ -19,7 +19,10 @@ for (const subdir of ["main", "preload", "shared"]) {
   );
 }
 
+// Everything desktop/main imports from scripts/desktop, transitively
+// (package-config.test.ts checks the list).
 const runtimeScripts = [
+  "agent-shutdown.mjs",
   "constants.mjs",
   "server-manager.mjs",
   "service-manager.mjs",

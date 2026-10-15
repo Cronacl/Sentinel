@@ -64,6 +64,9 @@ export function resolveThreadRouteData(
       ...baseThread.thread,
       activeRunId: liveSnapshot.activeRunId,
       chatEngine: liveSnapshot.chatEngine,
+      ...(liveSnapshot.chatEngineInstanceId
+        ? { chatEngineInstanceId: liveSnapshot.chatEngineInstanceId }
+        : {}),
       status: liveSnapshot.threadStatus,
       title: liveSnapshot.threadTitle,
     },

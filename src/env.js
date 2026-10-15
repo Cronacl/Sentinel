@@ -113,10 +113,25 @@ function writeLocalRuntimeEnvFile(content) {
 }
 
 /**
+ * An ENCRYPTION_KEY set in the environment. src/instrumentation.ts moves it
+ * out of process.env into server memory at start, so child processes never
+ * inherit it; bundles evaluated after that read the captured value.
+ *
+ * @returns {string | undefined}
+ */
+function getExplicitEncryptionKey() {
+  return (
+    process.env.ENCRYPTION_KEY ??
+    /** @type {{ __sentinelEncryptionKey?: string }} */ (globalThis)
+      .__sentinelEncryptionKey
+  );
+}
+
+/**
  * @param {Record<string, string>} localRuntimeEnv
  */
 function ensureLocalEncryptionKey(localRuntimeEnv) {
-  const explicitKey = process.env.ENCRYPTION_KEY?.trim();
+  const explicitKey = getExplicitEncryptionKey()?.trim();
   if (explicitKey) {
     return explicitKey;
   }
@@ -183,7 +198,7 @@ export const env = createEnv({
   client: {},
   runtimeEnv: {
     ENCRYPTION_KEY:
-      process.env.ENCRYPTION_KEY ??
+      getExplicitEncryptionKey() ??
       localRuntimeEnv.ENCRYPTION_KEY ??
       LEGACY_ENCRYPTION_KEY,
     NODE_ENV: process.env.NODE_ENV,

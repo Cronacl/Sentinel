@@ -476,8 +476,7 @@ export const GmailSearchSidebar = memo(function GmailSearchSidebar({
         );
 
         const data = (await response.json()) as
-          | ({ error?: string } & Partial<EmailDetail>)
-          | undefined;
+          ({ error?: string } & Partial<EmailDetail>) | undefined;
 
         if (!response.ok) {
           throw new Error(data?.error ?? "Unable to fetch Gmail message.");

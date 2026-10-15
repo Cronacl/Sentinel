@@ -1,4 +1,4 @@
-import type { SkillSourceKind } from "@/lib/skills";
+import type { SkillSourceKind, SkillTarget } from "@/lib/skills";
 import type { ChatEngine } from "@/server/db/enums";
 
 export type ComposerPathEntry = {
@@ -15,7 +15,7 @@ export type ComposerSkillEntry = {
   name: string;
   scope?: "global" | "workspace";
   sourceKind?: SkillSourceKind;
-  target?: "claude" | "codex" | "copilot" | "cursor" | "opencode" | "sentinel";
+  target?: SkillTarget;
 };
 
 export type ComposerContext = {

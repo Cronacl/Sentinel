@@ -18,6 +18,9 @@ const {
 } = await import("./shell.ts");
 
 const workspaceRoot = process.cwd();
+// Use the runtime executing the tests (bun) rather than whatever `node` the
+// host PATH resolves, so these tests do not depend on the machine setup.
+const JS_RUNTIME = JSON.stringify(process.execPath);
 const originalHome = process.env.HOME;
 const originalPath = process.env.PATH;
 const originalShell = process.env.SHELL;
@@ -86,6 +89,32 @@ describe("shell session manager", () => {
     }
   });
 
+  it("keeps Sentinel's own secrets out of the shell", async () => {
+    const previous = process.env.ENCRYPTION_KEY;
+    process.env.ENCRYPTION_KEY = "e".repeat(64);
+    try {
+      expect(
+        Object.keys(await __internal.buildShellSpawnEnv(process.env, "linux")),
+      ).not.toContain("ENCRYPTION_KEY");
+
+      const result = await executeShellCommand({
+        allowedRoot: workspaceRoot,
+        command: 'printf "${ENCRYPTION_KEY:-unset}"',
+        defaultDirectory: workspaceRoot,
+        permissionMode: "full",
+        threadId: "thread-shell-secrets",
+      });
+      expect(result.stdout).toBe("unset");
+    } finally {
+      await disposeShellSession("thread-shell-secrets");
+      if (previous === undefined) {
+        delete process.env.ENCRYPTION_KEY;
+      } else {
+        process.env.ENCRYPTION_KEY = previous;
+      }
+    }
+  });
+
   it("persists shell state across commands in the same thread", async () => {
     const first = await executeShellCommand({
       allowedRoot: workspaceRoot,
@@ -111,7 +140,7 @@ describe("shell session manager", () => {
   it("truncates oversized stdout", async () => {
     const result = await executeShellCommand({
       allowedRoot: workspaceRoot,
-      command: "node -e \"process.stdout.write('a'.repeat(70000))\"",
+      command: `${JS_RUNTIME} -e "process.stdout.write('a'.repeat(70000))"`,
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-truncation",
@@ -160,7 +189,7 @@ describe("shell session manager", () => {
       "share",
       "fnm",
       "node-versions",
-      "v21.7.3",
+      "v24.14.1",
       "installation",
       "bin",
     );
@@ -234,8 +263,7 @@ describe("shell session manager", () => {
 
     for await (const event of streamShellCommand({
       allowedRoot: workspaceRoot,
-      command:
-        "node -e \"process.stdout.write('a'.repeat(9000)); process.stdout.write('\\n')\"",
+      command: `${JS_RUNTIME} -e "process.stdout.write('a'.repeat(9000)); process.stdout.write('\\n')"`,
       defaultDirectory: workspaceRoot,
       permissionMode: "full",
       threadId: "thread-shell-tail",

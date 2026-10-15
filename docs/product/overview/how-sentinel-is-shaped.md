@@ -65,6 +65,6 @@ That shows up in:
 
 - desktop-first behavior
 - local repo awareness
-- local runtimes for Codex and Claude
+- local coding agents such as Claude, Codex, Copilot, Cursor, and OpenCode
 - local backups and local state
 - thread history tied to actual project work

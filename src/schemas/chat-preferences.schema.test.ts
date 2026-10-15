@@ -11,4 +11,13 @@ describe("chatSelectionSchema", () => {
       chatSelectionSchema.safeParse({ reasoningEffort: "xhigh" }).success,
     ).toBe(true);
   });
+
+  it("accepts the max reasoning effort", () => {
+    expect(
+      chatSelectionSchema.safeParse({ reasoningEffort: "max" }).success,
+    ).toBe(true);
+    expect(
+      chatSelectionSchema.safeParse({ reasoningEffort: "ultra" }).success,
+    ).toBe(false);
+  });
 });

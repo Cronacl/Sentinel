@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -38,6 +39,12 @@ import {
   THREAD_STATUSES,
   THREAD_VISIBILITIES,
 } from "./enums";
+import type {
+  CustomEngineModel,
+  DriverKind,
+  EngineOptionSelection,
+  StoredEngineEnvVar,
+} from "@/lib/ai/chat/engines/contract";
 import type { ShortcutOverrides } from "@/lib/shortcuts/schema";
 
 export const users = sqliteTable(
@@ -102,6 +109,8 @@ export const users = sqliteTable(
     uiFontSize: real("ui_font_size"),
     codeFontSize: real("code_font_size"),
     defaultChatEngine: text("default_chat_engine", { enum: CHAT_ENGINES }),
+    /** NULL: the default instance of defaultChatEngine. */
+    defaultChatEngineInstanceId: text("default_chat_engine_instance_id"),
     defaultChatModelId: text("default_chat_model_id"),
     defaultChatMode: text("default_chat_mode", { enum: THREAD_MODES }),
     defaultChatReasoningEffort: text("default_chat_reasoning_effort"),
@@ -160,6 +169,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   memorySettings: many(memorySettings),
   toolApprovalPolicies: many(toolApprovalPolicies),
   automations: many(automations),
+  engineInstances: many(engineInstances),
   integrations: many(integrations),
   integrationOAuthApps: many(integrationOAuthApps),
 }));
@@ -330,8 +340,13 @@ export const threads = sqliteTable(
     chatEngine: text("chat_engine", { enum: CHAT_ENGINES })
       .notNull()
       .default("sentinel"),
+    /** NULL: the default instance of chatEngine (its id is the driver kind). */
+    chatEngineInstanceId: text("chat_engine_instance_id"),
     chatEngineState: text("chat_engine_state", { mode: "json" }),
     chatModelId: text("chat_model_id"),
+    chatModelOptions: text("chat_model_options", {
+      mode: "json",
+    }).$type<EngineOptionSelection[] | null>(),
     chatReasoningEffort: text("chat_reasoning_effort"),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
@@ -380,6 +395,7 @@ export const threads = sqliteTable(
       table.updatedAt,
     ),
     index("thread_user_pinned_idx").on(table.userId, table.pinnedAt),
+    index("thread_engine_instance_idx").on(table.chatEngineInstanceId),
   ],
 );
 
@@ -391,6 +407,12 @@ export const threadsRelations = relations(threads, ({ one, many }) => ({
   user: one(users, {
     fields: [threads.userId],
     references: [users.id],
+  }),
+  // Persisted instances only: NULL and synthesized default instances have no
+  // row. Resolve a thread's instance through platform/instances.ts.
+  engineInstance: one(engineInstances, {
+    fields: [threads.userId, threads.chatEngineInstanceId],
+    references: [engineInstances.userId, engineInstances.id],
   }),
   followUps: many(threadFollowUps),
   messages: many(threadMessages),
@@ -406,6 +428,9 @@ export const threadFollowUps = sqliteTable(
     threadId: text("thread_id").notNull(),
     parts: text("parts", { mode: "json" }).notNull(),
     modelId: text("model_id").notNull(),
+    modelOptions: text("model_options", {
+      mode: "json",
+    }).$type<EngineOptionSelection[] | null>(),
     reasoningEffort: text("reasoning_effort"),
     threadMode: text("thread_mode", { enum: THREAD_MODES }).notNull(),
     status: text("status", { enum: THREAD_FOLLOW_UP_STATUSES })
@@ -1090,6 +1115,8 @@ export const automations = sqliteTable(
     chatEngine: text("chat_engine", { enum: CHAT_ENGINES })
       .notNull()
       .default("sentinel"),
+    /** NULL: the default instance of chatEngine. */
+    chatEngineInstanceId: text("chat_engine_instance_id"),
     status: text("status", { enum: AUTOMATION_STATUSES })
       .notNull()
       .default("paused"),
@@ -1100,6 +1127,9 @@ export const automations = sqliteTable(
     scheduleTime: text("schedule_time"),
     scheduleCron: text("schedule_cron"),
     modelId: text("model_id"),
+    modelOptions: text("model_options", {
+      mode: "json",
+    }).$type<EngineOptionSelection[] | null>(),
     reasoningEffort: text("reasoning_effort", {
       enum: AUTOMATION_REASONING_EFFORTS,
     }),
@@ -1117,6 +1147,7 @@ export const automations = sqliteTable(
     index("automation_user_id_idx").on(table.userId),
     index("automation_user_status_idx").on(table.userId, table.status),
     index("automation_next_run_idx").on(table.nextRunAt),
+    index("automation_engine_instance_idx").on(table.chatEngineInstanceId),
   ],
 );
 
@@ -1129,8 +1160,69 @@ export const automationsRelations = relations(automations, ({ one, many }) => ({
     fields: [automations.workspaceId],
     references: [workspaces.id],
   }),
+  // Persisted instances only (see threadsRelations.engineInstance).
+  engineInstance: one(engineInstances, {
+    fields: [automations.userId, automations.chatEngineInstanceId],
+    references: [engineInstances.userId, engineInstances.id],
+  }),
   runs: many(automationRuns),
 }));
+
+/**
+ * A configured engine instance, keyed by (user, id): default instances use
+ * the driver kind as id, so ids are only unique per user. `driver` is an
+ * open driver kind: rows for a driver this build does not know are kept and
+ * reported as unavailable. binary_path and home_path are the authoritative
+ * copies of those config keys; `config` holds the rest of the driver-owned
+ * config.
+ */
+export const engineInstances = sqliteTable(
+  "engine_instance",
+  {
+    id: text("id").notNull(),
+    userId: text("user_id").notNull(),
+    driver: text("driver").$type<DriverKind>().notNull(),
+    label: text("label"),
+    accentColor: text("accent_color"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    environment: text("environment", {
+      mode: "json",
+    }).$type<StoredEngineEnvVar[] | null>(),
+    binaryPath: text("binary_path"),
+    homePath: text("home_path"),
+    config: text("config", { mode: "json" }).$type<Record<
+      string,
+      unknown
+    > | null>(),
+    customModels: text("custom_models", {
+      mode: "json",
+    }).$type<CustomEngineModel[] | null>(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    updatedAt: integer("updated_at", { mode: "timestamp" })
+      .notNull()
+      .$defaultFn(() => new Date())
+      .$onUpdateFn(() => new Date()),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.id] }),
+    index("engine_instance_user_driver_idx").on(table.userId, table.driver),
+  ],
+);
+
+export const engineInstancesRelations = relations(
+  engineInstances,
+  ({ one, many }) => ({
+    automations: many(automations),
+    threads: many(threads),
+    user: one(users, {
+      fields: [engineInstances.userId],
+      references: [users.id],
+    }),
+  }),
+);
 
 export const automationRuns = sqliteTable(
   "automation_run",

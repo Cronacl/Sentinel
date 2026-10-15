@@ -9,6 +9,7 @@ import {
   threadGetSchema,
   threadQueuedFollowUpActionSchema,
   threadListSchema,
+  threadPermissionOverrideSchema,
   threadRenameSchema,
   threadSearchSchema,
   threadSetActiveBranchSchema,
@@ -19,14 +20,19 @@ import {
 import {
   getCodexThreadState,
   getRepoThreadState,
+  getThreadPermissionMode,
 } from "@/lib/ai/chat/engines/types";
 import { runThreadChat } from "@/lib/ai/chat";
+import { toStoredEngineInstanceId } from "@/lib/ai/chat/engines/contract/ids";
+import { parseEngineOptionSelections } from "@/lib/ai/chat/engines/model-options";
+import { engineInstanceIdForEngineWrite } from "@/lib/ai/chat/engines/platform/instance-columns";
 import {
   getLatestAssistantMessageId,
   listThreadFollowUps,
   moveThreadFollowUpToFront,
   removeThreadFollowUp,
   setActiveMessage,
+  updateThreadPermissionModeOverride,
 } from "@/lib/ai/chat/persistence";
 import { summarizeQueuedFollowUp } from "@/lib/ai/chat/session/server";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
@@ -45,6 +51,11 @@ import {
   getOrCreateQuickChatWorkspace,
   getThreadListSettings,
 } from "./workspace-thread-helpers";
+import {
+  assertEngineInstanceSelection,
+  assertThreadEngineKept,
+  isThreadEngineRebind,
+} from "./engines/selection";
 import {
   escapeThreadSearchLikePattern,
   sortThreadSearchResults,
@@ -119,7 +130,10 @@ async function buildThreadDetails(
       activeRunId: thread.activeStreamId,
       archivedAt: thread.archivedAt,
       chatEngine: thread.chatEngine,
+      // NULL is the engine's default instance, whose id is the engine.
+      chatEngineInstanceId: thread.chatEngineInstanceId ?? thread.chatEngine,
       chatModelId: thread.chatModelId,
+      chatModelOptions: parseEngineOptionSelections(thread.chatModelOptions),
       chatReasoningEffort: thread.chatReasoningEffort,
       createdAt: thread.createdAt,
       hasCodexThread: Boolean(
@@ -129,6 +143,8 @@ async function buildThreadDetails(
       linkedPullRequest:
         getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
       mode: thread.mode,
+      // The thread's own override; null falls back to the workspace's.
+      permissionModeOverride: getThreadPermissionMode(thread.chatEngineState),
       pinnedAt: thread.pinnedAt,
       status: thread.status,
       summary: thread.summary,
@@ -280,6 +296,11 @@ export const threadsRouter = createTRPCRouter({
         });
       }
 
+      await assertEngineInstanceSelection(
+        ctx.session.user.id,
+        input.engine,
+        input.engineInstanceId,
+      );
       const workspace = await getOwnedProjectWorkspaceOrThrow(ctx, workspaceId);
       if (workspace.isArchived) {
         throw new TRPCError({
@@ -292,6 +313,10 @@ export const threadsRouter = createTRPCRouter({
         .insert(threads)
         .values({
           chatEngine: input.engine,
+          chatEngineInstanceId: toStoredEngineInstanceId(
+            input.engine,
+            input.engineInstanceId,
+          ),
           ...(input.threadId ? { id: input.threadId } : {}),
           mode: input.mode,
           summary: input.summary.trim() || null,
@@ -318,11 +343,20 @@ export const threadsRouter = createTRPCRouter({
   createQuickChat: protectedProcedure
     .input(threadCreateSchema)
     .mutation(async ({ ctx, input }) => {
+      await assertEngineInstanceSelection(
+        ctx.session.user.id,
+        input.engine,
+        input.engineInstanceId,
+      );
       const workspace = await getOrCreateQuickChatWorkspace(ctx);
       const [thread] = ctx.db
         .insert(threads)
         .values({
           chatEngine: input.engine,
+          chatEngineInstanceId: toStoredEngineInstanceId(
+            input.engine,
+            input.engineInstanceId,
+          ),
           ...(input.threadId ? { id: input.threadId } : {}),
           mode: input.mode,
           summary: input.summary.trim() || null,
@@ -509,15 +543,49 @@ export const threadsRouter = createTRPCRouter({
   updateChatSettings: protectedProcedure
     .input(threadSettingsSchema)
     .mutation(async ({ ctx, input }) => {
-      await getOwnedThreadOrThrow(ctx, input.threadId);
+      const thread = await getOwnedThreadOrThrow(ctx, input.threadId);
+      if (input.engine !== undefined) {
+        await assertEngineInstanceSelection(
+          ctx.session.user.id,
+          input.engine,
+          input.engineInstanceId,
+        );
+        if (
+          isThreadEngineRebind(thread, input.engine, input.engineInstanceId)
+        ) {
+          const firstMessage = await ctx.db.query.threadMessages.findFirst({
+            columns: { id: true },
+            where: eq(threadMessages.threadId, input.threadId),
+          });
+          assertThreadEngineKept({
+            engine: input.engine,
+            hasMessages: Boolean(firstMessage),
+            instanceId: input.engineInstanceId,
+            thread,
+          });
+        }
+      }
 
       const [updated] = ctx.db
         .update(threads)
         .set({
-          ...(input.engine === undefined ? {} : { chatEngine: input.engine }),
+          ...(input.engine === undefined
+            ? {}
+            : {
+                chatEngine: input.engine,
+                chatEngineInstanceId: engineInstanceIdForEngineWrite({
+                  engine: input.engine,
+                  engineColumn: threads.chatEngine,
+                  instanceColumn: threads.chatEngineInstanceId,
+                  instanceId: input.engineInstanceId,
+                }),
+              }),
           ...(input.modelId === undefined
             ? {}
             : { chatModelId: input.modelId }),
+          ...(input.modelOptions === undefined
+            ? {}
+            : { chatModelOptions: input.modelOptions ?? null }),
           ...(input.reasoningEffort === undefined
             ? {}
             : { chatReasoningEffort: input.reasoningEffort ?? null }),
@@ -526,7 +594,9 @@ export const threadsRouter = createTRPCRouter({
         .where(eq(threads.id, input.threadId))
         .returning({
           chatEngine: threads.chatEngine,
+          chatEngineInstanceId: threads.chatEngineInstanceId,
           chatModelId: threads.chatModelId,
+          chatModelOptions: threads.chatModelOptions,
           chatReasoningEffort: threads.chatReasoningEffort,
           id: threads.id,
           mode: threads.mode,
@@ -535,10 +605,27 @@ export const threadsRouter = createTRPCRouter({
 
       return {
         engine: updated!.chatEngine,
+        engineInstanceId: updated!.chatEngineInstanceId ?? updated!.chatEngine,
         modelId: updated!.chatModelId,
+        modelOptions: parseEngineOptionSelections(updated!.chatModelOptions),
         mode: updated!.mode,
         reasoningEffort: updated!.chatReasoningEffort,
         threadId: updated!.id,
+      };
+    }),
+
+  updatePermissionOverride: protectedProcedure
+    .input(threadPermissionOverrideSchema)
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedThreadOrThrow(ctx, input.threadId);
+      updateThreadPermissionModeOverride(
+        input.threadId,
+        input.permissionModeOverride,
+      );
+
+      return {
+        permissionModeOverride: input.permissionModeOverride,
+        threadId: input.threadId,
       };
     }),
 

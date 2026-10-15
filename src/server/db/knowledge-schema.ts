@@ -15,10 +15,7 @@
  */
 
 export type KnowledgeSourceStatus =
-  | "pending"
-  | "processing"
-  | "ready"
-  | "error";
+  "pending" | "processing" | "ready" | "error";
 
 export type KnowledgeSource = {
   id: string;

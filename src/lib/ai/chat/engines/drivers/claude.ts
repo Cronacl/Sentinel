@@ -1,0 +1,101 @@
+import "server-only";
+
+import type { AccountInfo } from "@anthropic-ai/claude-agent-sdk";
+
+import {
+  buildClaudeFallbackModels,
+  getClaudeEngineStatus,
+  isClaudeEngineAvailable,
+  resetClaudeCodeRuntimeCache,
+  resetClaudeEngineStatusCache,
+  resolveClaudeCodeRuntime,
+  type ClaudeEngineStatus,
+} from "@/lib/ai/chat/engines/claude-sdk";
+import { readClaudeUsageLimits } from "@/lib/ai/chat/engines/claude-sdk/usage";
+
+import { DRIVER_CATALOG } from "../catalog";
+import { normalizeEngineSlashCommands } from "../slash-commands";
+import type { EngineInstallSource, EngineProbeResult } from "../contract";
+import { defineEngineDriver, legacyThreadHandlers } from "../platform/driver";
+import { claudeAuth } from "./auth/claude";
+import { fromLegacyStatus, NO_LEGACY_ACCOUNT } from "./legacy-status";
+
+function toClaudeAccount(account: AccountInfo | null) {
+  if (!account) {
+    return NO_LEGACY_ACCOUNT;
+  }
+
+  return {
+    email: account.email ?? null,
+    label: account.organization ?? null,
+    method: account.tokenSource ?? account.apiKeySource ?? null,
+    plan: account.subscriptionType ?? null,
+  };
+}
+
+export function fromClaudeStatus(
+  status: ClaudeEngineStatus,
+  source: EngineInstallSource | null,
+): EngineProbeResult {
+  const result = fromLegacyStatus(
+    {
+      account: toClaudeAccount(status.account),
+      authReady: status.authReady,
+      error: status.error,
+      installed: status.binaryDetected,
+      models: status.availableModels,
+      path: status.binaryPath,
+      source,
+      state: status.state,
+      version: status.binaryVersion,
+    },
+    {
+      available: isClaudeEngineAvailable(status),
+      fallbackModels: buildClaudeFallbackModels,
+    },
+  );
+  // The commands (skills included) the CLI's initialize response listed.
+  const slashCommands = normalizeEngineSlashCommands(
+    (status.commands ?? []).map((command) => ({
+      description: command.description,
+      inputHint: command.argumentHint,
+      name: command.name,
+    })),
+    "native",
+  );
+  return slashCommands.length > 0 ? { ...result, slashCommands } : result;
+}
+
+/** Claude Code through the Agent SDK. */
+export const claudeDriver = defineEngineDriver({
+  auth: claudeAuth,
+  capabilities: DRIVER_CATALOG.claude.capabilities,
+  invalidate() {
+    resetClaudeCodeRuntimeCache();
+    resetClaudeEngineStatusCache();
+  },
+  kind: "claude",
+  meta: DRIVER_CATALOG.claude,
+  async probe(instance, options) {
+    const status = await getClaudeEngineStatus({
+      forceRefresh: options.forceRefresh,
+      instance,
+    });
+    const runtime = status.binaryDetected
+      ? await resolveClaudeCodeRuntime({ instance })
+      : null;
+    return fromClaudeStatus(status, runtime?.source ?? null);
+  },
+  // Above the SDK initialize timeout plus binary verification.
+  probeTimeoutMs: 15_000,
+  usageLimits: {
+    read: (instance, { signal }) => readClaudeUsageLimits(instance, { signal }),
+  },
+  thread: legacyThreadHandlers(async () => {
+    const runtime = await import("@/lib/ai/chat/runtime/claude");
+    return {
+      run: runtime.runClaudeThreadChat,
+      stop: runtime.stopClaudeThreadRun,
+    };
+  }),
+});

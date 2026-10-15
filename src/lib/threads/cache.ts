@@ -1,5 +1,6 @@
 import type { ThreadListInput } from "@/schemas/workspace-thread.schema";
 import { api, type RouterOutputs } from "@/trpc/react";
+import type { EngineOptionSelection } from "@/lib/ai/chat/engines/contract";
 import type { ChatEngine } from "@/server/db/enums";
 
 type TrpcUtils = ReturnType<typeof api.useUtils>;
@@ -10,7 +11,10 @@ type ThreadGetThread = ThreadGetData["thread"];
 type ThreadGetWorkspace = ThreadGetData["workspace"];
 type ThreadSettingsPatch = {
   chatEngine?: ChatEngine;
+  /** Only the thread detail (threads.get) carries the instance and options. */
+  chatEngineInstanceId?: string;
   chatModelId?: string | null;
+  chatModelOptions?: EngineOptionSelection[] | null;
   chatReasoningEffort?: string | null;
   mode?: "chat" | "plan";
 };
@@ -567,7 +571,15 @@ export function applyThreadSettingsCacheUpdate({
     current
       ? {
           ...current,
-          thread: applyThreadSettingsPatch(current.thread, patch),
+          thread: {
+            ...applyThreadSettingsPatch(current.thread, patch),
+            ...(patch.chatEngineInstanceId === undefined
+              ? {}
+              : { chatEngineInstanceId: patch.chatEngineInstanceId }),
+            ...(patch.chatModelOptions === undefined
+              ? {}
+              : { chatModelOptions: patch.chatModelOptions }),
+          },
         }
       : current,
   );

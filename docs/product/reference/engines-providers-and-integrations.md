@@ -6,17 +6,26 @@ The deeper runtime mechanics live in `Engines and runtime`.
 
 ## Engines
 
-Sentinel currently supports three chat engines:
+Sentinel supports ten chat engines:
 
-| Engine     | Meaning                                                        |
-| ---------- | -------------------------------------------------------------- |
-| `sentinel` | Built-in harness and built-in engine path                      |
-| `codex`    | Local Codex runtime carried inside Sentinel thread state       |
-| `claude`   | Local Claude Code runtime carried inside Sentinel thread state |
+| Engine        | Meaning                                                               | Transport  |
+| ------------- | --------------------------------------------------------------------- | ---------- |
+| `sentinel`    | Built-in harness and built-in engine path                             | AI SDK     |
+| `claude`      | Local Claude Code, through the Claude Agent SDK                       | SDK        |
+| `codex`       | Local Codex CLI, through its app server                               | App server |
+| `copilot`     | GitHub Copilot, through the Copilot SDK and its bundled runtime       | SDK        |
+| `cursor`      | Local Cursor Agent                                                    | ACP        |
+| `opencode`    | Local OpenCode 1.x or 2.x, through its HTTP server                    | HTTP       |
+| `grok`        | Local Grok Build agent (experimental)                                 | ACP        |
+| `antigravity` | Google Antigravity's ACP server, installed by Sentinel (experimental) | ACP        |
+| `pi`          | Local Pi coding agent (experimental)                                  | RPC        |
+| `acp`         | Agents from the ACP Registry, or any ACP command (experimental)       | ACP        |
+
+Every engine except `sentinel` can have several instances. See [Engines by agent](../engines-and-runtime/agents.md) for what each one supports.
 
 ## Model providers
 
-Current AI provider support:
+Chat model providers for the `sentinel` engine:
 
 - OpenAI
 - Anthropic
@@ -28,10 +37,21 @@ Current AI provider support:
 - Groq
 - Cohere
 - Moonshot AI
-- Mistral
+- Mistral AI
+- DeepSeek
 - Ollama
 - OpenRouter
 - Vercel AI Gateway
+
+Image and video providers:
+
+- Black Forest Labs
+- Kling AI
+- ByteDance
+- Fal
+- Replicate
+
+OpenAI, Google, Vertex AI, and xAI also serve image or video models.
 
 ## Search providers
 
@@ -70,6 +90,8 @@ Current AI provider support:
 
 - [Sentinel engine](../engines-and-runtime/sentinel-engine.md)
 - [Thread state](../engines-and-runtime/thread-state.md)
+- [Engines by agent](../engines-and-runtime/agents.md)
+- [Engines settings](../configuration/engines.md)
 - [Codex runtime](../engines-and-runtime/codex-runtime.md)
 - [Claude Code](../engines-and-runtime/claude-code.md)
 - [Integrations and MCP](../configuration/integrations-and-mcp.md)

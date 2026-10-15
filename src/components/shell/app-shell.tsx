@@ -11,6 +11,7 @@ import { type PropsWithChildren, useEffect, useRef } from "react";
 import { NewThreadScreen } from "@/components/chat/new-thread-screen";
 import { BrowserAutomationBridge } from "@/components/browser/browser-automation-bridge";
 import { ComputerAutomationBridge } from "@/components/computer/computer-automation-bridge";
+import { EngineEventsBridge } from "@/components/engines/use-engine-snapshots";
 import { getDesktopApi } from "@/lib/desktop/client";
 import { ShortcutProvider, useShortcutAction } from "@/lib/shortcuts/provider";
 import { api } from "@/trpc/react";
@@ -231,6 +232,7 @@ export function AppShell({ children }: PropsWithChildren) {
       <ShellProvider>
         <ShellWarmCache />
         <AppWarmupCoordinator />
+        <EngineEventsBridge />
         <BrowserAutomationBridge />
         <ComputerAutomationBridge />
         <AppShellShortcutBindings />

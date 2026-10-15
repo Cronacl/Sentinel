@@ -195,4 +195,84 @@ describe("parseRequest", () => {
     expect(noneResult.reasoningEffort).toBe("none");
     expect(xhighResult.reasoningEffort).toBe("xhigh");
   });
+
+  it("carries the engine instance, model options and interactivity", async () => {
+    const result = await parseRequest(
+      {
+        engine: "opencode",
+        engineInstanceId: "opencode-work",
+        id: "thread-1",
+        interactive: false,
+        modelOptions: [
+          { id: "agent", value: "plan" },
+          { id: "variant", value: "high" },
+          { id: "fast", value: true },
+          { id: 42, value: "dropped" },
+        ],
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(result.engineInstanceId).toBe("opencode-work");
+    expect(result.interactive).toBe(false);
+    expect(result.modelOptions).toEqual([
+      { id: "agent", value: "plan" },
+      { id: "variant", value: "high" },
+      { id: "fast", value: true },
+    ]);
+    // Runtimes that read the legacy fields see the same selections.
+    expect(result.openCode).toEqual({ agent: "plan", variant: "high" });
+  });
+
+  it("folds legacy reasoning and OpenCode fields into model options", async () => {
+    const result = await parseRequest(
+      {
+        engine: "opencode",
+        id: "thread-1",
+        modelOptions: [{ id: "variant", value: "low" }],
+        openCode: { agent: "build", variant: "high" },
+        reasoningEffort: "max",
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(result.modelOptions).toEqual([
+      { id: "variant", value: "low" },
+      { id: "effort", value: "max" },
+      { id: "agent", value: "build" },
+    ]);
+    // An explicit legacy field keeps its own value.
+    expect(result.openCode).toEqual({ agent: "build", variant: "high" });
+    expect(result.reasoningEffort).toBe("max");
+  });
+
+  it("drops an invalid instance id, or one sent without an engine", async () => {
+    const invalid = await parseRequest(
+      {
+        engine: "claude",
+        engineInstanceId: "Claude Work!",
+        id: "thread-1",
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+    const withoutEngine = await parseRequest(
+      {
+        engineInstanceId: "claude-work",
+        id: "thread-1",
+        trigger: "stop-stream",
+        workspaceId: "workspace-1",
+      },
+      "user-1",
+    );
+
+    expect(invalid.engineInstanceId).toBeUndefined();
+    expect(withoutEngine.engineInstanceId).toBeUndefined();
+    expect(withoutEngine.modelOptions).toBeUndefined();
+  });
 });
