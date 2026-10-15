@@ -82,7 +82,7 @@ const SPA_HTML =
   '<!doctype html>\n<html lang="en" style="background-color: var(--v2-background-bg-deep, #fafafa)">\n';
 const encoder = new TextEncoder();
 
-type Subscriber = { write(text: string): void };
+type Subscriber = { close(): void; write(text: string): void };
 
 type PendingReply = {
   sessionID: string;
@@ -229,7 +229,12 @@ class FakeOpenCodeServer {
     this.log = createJsonlLog(logPath);
     for (const session of scenario.sessions ?? []) {
       this.createSession(
-        { id: session.id, title: session.title, directory: session.directory },
+        {
+          id: session.id,
+          title: session.title,
+          directory: session.directory,
+          agent: session.agent,
+        },
         false,
       );
     }
@@ -396,6 +401,8 @@ class FakeOpenCodeServer {
         return json(true);
       }
       if (method === "PATCH" && rest === "") {
+        const refused = this.scenario.rejectSessionUpdate;
+        if (refused) return json(refused.body, refused.status);
         // session.update: title and the permission ruleset.
         if (typeof input.title === "string") session.title = input.title;
         if (Array.isArray(input.permission))
@@ -554,6 +561,8 @@ class FakeOpenCodeServer {
         });
       }
       if (method === "PATCH" && rest === "") {
+        const refused = this.scenario.rejectSessionUpdate;
+        if (refused) return json(refused.body, refused.status);
         // session.update: title, metadata and the permission rules.
         if (typeof input.title === "string") session.title = input.title;
         if (Array.isArray(input.permissions))
@@ -744,6 +753,15 @@ class FakeOpenCodeServer {
     const stream = new ReadableStream<Uint8Array>({
       start: (controller) => {
         const current: Subscriber = {
+          close: () => {
+            if (timer) clearInterval(timer);
+            this.subscribers.delete(current);
+            try {
+              controller.close();
+            } catch {
+              // Already closed.
+            }
+          },
           write: (text) => {
             try {
               controller.enqueue(encoder.encode(text));
@@ -1131,6 +1149,8 @@ class FakeOpenCodeServer {
   ) {
     const sessionID = session.id;
     const legacyStatus = this.scenario.emitSessionStatus === true;
+    for (const event of pending.script.prelude ?? [])
+      this.publish(event.type, { sessionID, ...event.data });
     this.publish("session.execution.started", { sessionID });
     this.deliverV2(session, pending.userMessage);
     if (legacyStatus)
@@ -1650,6 +1670,9 @@ class FakeOpenCodeServer {
         );
       case "hang":
         await waitForAbort(ctx.signal);
+        return;
+      case "disconnect":
+        for (const subscriber of [...this.subscribers]) subscriber.close();
         return;
     }
   }

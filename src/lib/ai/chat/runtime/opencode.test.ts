@@ -97,6 +97,7 @@ const { runOpenCodeThreadChat, stopOpenCodeThreadRun } =
   await import("./opencode");
 const { resolveOpenCodeSessionError } =
   await import("./opencode/event-helpers");
+const { MISSED_TURNS_HEADING } = await import("./acp/history");
 const { disposeAllOpenCodeServers, getOpenCodeServerPool } =
   await import("@/lib/ai/chat/engines/opencode-sdk");
 const { stampThreadState } =
@@ -233,6 +234,60 @@ function threadWithState(fake: Fake, state: unknown, mode = "chat") {
 function nextThreadId() {
   threadCounter += 1;
   return `thread-${threadCounter}`;
+}
+
+/** A thread whose earlier turns `ses_id` already holds (synced at its answer). */
+function resumableThread(
+  fake: Fake,
+  threadId: string,
+  input: {
+    generation: "v1" | "v2";
+    mode?: string;
+    sessionId: string;
+    /** Turns another engine answered after the sync mark. */
+    missed?: boolean;
+  },
+) {
+  const seen = {
+    id: `${threadId}-seen`,
+    metadata: {},
+    parts: [{ text: "Seen answer", type: "text" }],
+    role: "assistant",
+  };
+  const missed = input.missed
+    ? [
+        userMessage(threadId, "Missed question", "missed"),
+        {
+          id: `${threadId}-missed-answer`,
+          metadata: {},
+          parts: [{ text: "Missed answer", type: "text" }],
+          role: "assistant",
+        },
+      ]
+    : [];
+  loadThreadMessages.mockImplementation(async () =>
+    records([
+      userMessage(threadId, "Seen question", "seen-q"),
+      seen,
+      ...missed,
+    ]),
+  );
+  return threadWithState(
+    fake,
+    {
+      cwd: tempRoot,
+      generation: input.generation,
+      sessionId: input.sessionId,
+      syncedMessageId: seen.id,
+    },
+    input.mode,
+  );
+}
+
+async function requestsTo(fake: Fake, method: string, pattern: RegExp) {
+  return (await fake.requests()).filter(
+    (request) => request.method === method && pattern.test(request.path),
+  );
 }
 
 async function promptBodies(fake: Fake, pattern: RegExp) {
@@ -656,6 +711,113 @@ describe("runOpenCodeThreadChat on OpenCode 1.x", () => {
   });
 });
 
+describe("runOpenCodeThreadChat on OpenCode 1.x (resume and teardown)", () => {
+  it("sends only the turns the resumed session missed", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 1,
+      scenario: { sessions: [{ id: "ses_seen" }] },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Next"),
+      resumableThread(fake, threadId, {
+        generation: "v1",
+        missed: true,
+        sessionId: "ses_seen",
+      }),
+      fake.instance,
+    );
+    await waitForFinal(threadId, "completed");
+
+    expect(await requestsTo(fake, "POST", /^\/session$/)).toHaveLength(0);
+    const [prompt] = await promptBodies(fake, /\/prompt_async$/);
+    expect(prompt.parts[0].text).toContain(MISSED_TURNS_HEADING);
+    expect(prompt.parts[0].text).toContain("Missed answer");
+    expect(prompt.parts[0].text).not.toContain("Seen answer");
+    expect(lastState(threadId).sessionId).toBe("ses_seen");
+  });
+
+  it("does not continue a session whose rules cannot be updated", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 1,
+      scenario: {
+        rejectSessionUpdate: { body: { name: "UnknownError" }, status: 500 },
+        sessions: [{ id: "ses_lax" }],
+      },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Next"),
+      resumableThread(fake, threadId, {
+        generation: "v1",
+        sessionId: "ses_lax",
+      }),
+      fake.instance,
+    );
+    await waitForFinal(threadId, "completed");
+
+    const [created] = await promptBodies(fake, /^\/session$/);
+    expect(created.permission).toContainEqual({
+      action: "ask",
+      pattern: "*",
+      permission: "bash",
+    });
+    const [prompt] = await promptBodies(fake, /\/prompt_async$/);
+    expect(prompt.parts[0].text).toContain("Seen answer");
+    expect(lastState(threadId).sessionId).not.toBe("ses_lax");
+  });
+
+  it("denies edits in plan turns even with full access", async () => {
+    getToolPermissionMode.mockImplementation(async () => "full");
+    const fake = await createFakeOpenCode({ generation: 1 });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Plan it", { threadMode: "plan" }),
+      null,
+      fake.instance,
+    );
+    await waitForFinal(threadId, "completed");
+    const [created] = await promptBodies(fake, /^\/session$/);
+    expect(created.permission.at(-1)).toEqual({
+      action: "deny",
+      pattern: "*",
+      permission: "edit",
+    });
+  });
+
+  it("aborts OpenCode's run when the event stream drops mid-turn", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 1,
+      scenario: {
+        prompts: [
+          {
+            steps: [
+              { text: "Working", type: "text" },
+              { type: "disconnect" },
+              { type: "hang" },
+            ],
+          },
+        ],
+      },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Go"),
+      null,
+      fake.instance,
+    );
+    const final = await waitForFinal(threadId, "error");
+    expect(final.metadata.errorMessage).toContain("event stream ended");
+    await waitUntil(
+      async () =>
+        (await requestsTo(fake, "POST", /^\/session\/[^/]+\/abort$/)).length,
+      "abort request",
+    );
+    // The server stays up for the next turn.
+    expect(getOpenCodeServerPool().peek(fake.instance.id)).not.toBeNull();
+  });
+});
+
 describe("runOpenCodeThreadChat on OpenCode 2.x", () => {
   it("settles on session.execution.succeeded and records the v2 session", async () => {
     const fake = await createFakeOpenCode({
@@ -934,6 +1096,143 @@ describe("runOpenCodeThreadChat on OpenCode 2.x", () => {
     );
     const final = await waitForFinal(threadId, "error");
     expect(final.metadata.errorMessage).toContain("Model overloaded");
+  });
+});
+
+describe("runOpenCodeThreadChat on OpenCode 2.x (resume and teardown)", () => {
+  it("puts a session left on the plan agent back on build in chat mode", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 2,
+      scenario: { sessions: [{ agent: "plan", id: "ses_plan" }] },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Build it"),
+      resumableThread(fake, threadId, {
+        generation: "v2",
+        sessionId: "ses_plan",
+      }),
+      fake.instance,
+    );
+    await waitForFinal(threadId, "completed");
+    expect(await promptBodies(fake, /\/agent$/)).toEqual([{ agent: "build" }]);
+    expect(lastState(threadId).sessionId).toBe("ses_plan");
+  });
+
+  it("denies edits in a resumed plan turn and restores the mode's rules after", async () => {
+    getToolPermissionMode.mockImplementation(async () => "full");
+    const fake = await createFakeOpenCode({
+      generation: 2,
+      scenario: { sessions: [{ id: "ses_rules" }] },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Plan it", { threadMode: "plan" }),
+      resumableThread(fake, threadId, {
+        generation: "v2",
+        mode: "plan",
+        sessionId: "ses_rules",
+      }),
+      fake.instance,
+    );
+    await waitForFinal(threadId, "completed");
+    const [update] = await requestsTo(fake, "PATCH", /^\/api\/session\//);
+    expect((update!.body as any).permissions).toEqual([
+      { action: "*", effect: "allow", resource: "*" },
+      { action: "edit", effect: "deny", resource: "*" },
+    ]);
+  });
+
+  it("does not continue a session whose rules cannot be updated", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 2,
+      scenario: {
+        rejectSessionUpdate: { body: { _tag: "Unknown" }, status: 500 },
+        sessions: [{ id: "ses_lax" }],
+      },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Next"),
+      resumableThread(fake, threadId, {
+        generation: "v2",
+        sessionId: "ses_lax",
+      }),
+      fake.instance,
+    );
+    await waitForFinal(threadId, "completed");
+    expect(await promptBodies(fake, /^\/api\/session$/)).toHaveLength(1);
+    const [prompt] = await promptBodies(fake, /\/prompt$/);
+    expect(prompt.text).toContain("Seen answer");
+    expect(lastState(threadId).sessionId).not.toBe("ses_lax");
+  });
+
+  it("ignores the last execution's late end events on a resumed session", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 2,
+      scenario: {
+        prompts: [
+          {
+            prelude: [
+              {
+                data: {
+                  error: { message: "Step interrupted", type: "aborted" },
+                },
+                type: "session.step.failed",
+              },
+              {
+                data: { reason: "user" },
+                type: "session.execution.interrupted",
+              },
+            ],
+            steps: [{ text: "Fresh answer", type: "text" }],
+          },
+        ],
+        sessions: [{ id: "ses_reused" }],
+      },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Again"),
+      resumableThread(fake, threadId, {
+        generation: "v2",
+        sessionId: "ses_reused",
+      }),
+      fake.instance,
+    );
+    const final = await waitForFinal(threadId);
+    expect(final.metadata.status).toBe("completed");
+    expect(final.parts).toContainEqual(
+      expect.objectContaining({ text: "Fresh answer" }),
+    );
+  });
+
+  it("interrupts OpenCode's run when the event stream drops mid-turn", async () => {
+    const fake = await createFakeOpenCode({
+      generation: 2,
+      scenario: {
+        prompts: [
+          {
+            steps: [
+              { text: "Working", type: "text" },
+              { type: "disconnect" },
+              { type: "hang" },
+            ],
+          },
+        ],
+      },
+    });
+    const threadId = nextThreadId();
+    await runOpenCodeThreadChat(
+      runRequest(threadId, "Go"),
+      null,
+      fake.instance,
+    );
+    await waitForFinal(threadId, "error");
+    await waitUntil(
+      async () => (await requestsTo(fake, "POST", /\/interrupt$/)).length,
+      "interrupt request",
+    );
   });
 });
 

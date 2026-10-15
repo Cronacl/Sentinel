@@ -125,6 +125,12 @@ export type ActiveOpenCodeRunControl = {
   eventChannel: ThreadEventChannel;
   /** 2.x: the execution failed with this message (step.failed). */
   executionError: string | null;
+  /**
+   * 2.x: this turn's `session.execution.started` arrived. Until then an
+   * end event on the reused session is a late one of the execution before
+   * (`session.interrupt` returns before it is published).
+   */
+  executionStarted: boolean;
   finished: boolean;
   instance: ResolvedEngineInstance | null;
   /**
@@ -151,6 +157,9 @@ export type ActiveOpenCodeRunControl = {
 const log = createLogger("ThreadChatOpenCode");
 
 const STOPPED_MESSAGE = "Generation stopped.";
+
+/** How long a turn that ends early waits for OpenCode to stop its run. */
+const OPENCODE_ABORT_TIMEOUT_MS = 5_000;
 
 function persistAssistantMessage(
   control: Pick<
@@ -276,10 +285,40 @@ async function drainQueuedOpenCodeFollowUp(
   }
 }
 
+/**
+ * Stops the session's execution when the turn ends before OpenCode said it
+ * did (Stop, a dropped or silent event stream, a failed prompt): the pooled
+ * server outlives the turn, so a run left going would keep using tools and
+ * settle the next turn. A server that does not answer is ended.
+ */
+async function stopOpenCodeExecution(control: ActiveOpenCodeRunControl) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const outcome = await Promise.race([
+    control.session.abort().then(
+      () => "stopped" as const,
+      (error: unknown) =>
+        error instanceof Error ? error.message : String(error),
+    ),
+    new Promise<"timeout">((resolve) => {
+      timer = setTimeout(() => resolve("timeout"), OPENCODE_ABORT_TIMEOUT_MS);
+    }),
+  ]);
+  clearTimeout(timer);
+  if (outcome === "stopped") return;
+  log.warn("opencode_abort_failed", {
+    error: outcome,
+    runId: control.runId,
+    threadId: control.threadId,
+  });
+  await control.session.discardServer().catch(() => undefined);
+}
+
 async function finishOpenCodeRun(
   control: ActiveOpenCodeRunControl,
   input: {
     errorMessage?: string | null;
+    /** OpenCode reported the run over (or its server is gone). */
+    executionEnded?: boolean;
     finishReason?: string | null;
     status: "cancelled" | "completed" | "error";
   },
@@ -361,6 +400,9 @@ async function finishOpenCodeRun(
 
   control.eventChannel.close();
   activeOpenCodeRunControls.delete(control.runId);
+  if (input.status !== "completed" && !input.executionEnded) {
+    await stopOpenCodeExecution(control);
+  }
   // The server stays up for the thread's next turn; only the plan agent a
   // 2.x turn switched to is put back.
   await control.session.finishTurn().catch(() => undefined);
@@ -607,7 +649,11 @@ async function handleOpenCodeEvent(
       await finishOpenCodeRun(
         control,
         deferred
-          ? { errorMessage: deferred.message, status: "error" }
+          ? {
+              errorMessage: deferred.message,
+              executionEnded: true,
+              status: "error",
+            }
           : { finishReason: "stop", status: "completed" },
       );
       return;
@@ -622,24 +668,39 @@ async function handleOpenCodeEvent(
         };
         return;
       }
+      // 1.x ends the prompt loop on session.error.
       await finishOpenCodeRun(
         control,
         event.aborted
-          ? { errorMessage: STOPPED_MESSAGE, status: "cancelled" }
-          : { errorMessage: event.message, status: "error" },
+          ? {
+              errorMessage: STOPPED_MESSAGE,
+              executionEnded: true,
+              status: "cancelled",
+            }
+          : {
+              errorMessage: event.message,
+              executionEnded: true,
+              status: "error",
+            },
       );
       return;
     }
+    // t3code provider-opencode v2/adapter.ts (awaitingStart, MIT): what
+    // arrives before this turn's execution started belongs to the last one.
     case "step.failed":
+      if (!control.executionStarted) return;
       if (event.aborted) control.interrupted = true;
       else if (event.message) control.executionError = event.message;
       return;
     case "execution.started":
+      control.executionStarted = true;
       return;
     case "execution.ended": {
+      if (!control.executionStarted) return;
       if (event.outcome === "interrupted" || control.interrupted) {
         await finishOpenCodeRun(control, {
           errorMessage: STOPPED_MESSAGE,
+          executionEnded: true,
           status: "cancelled",
         });
         return;
@@ -650,6 +711,7 @@ async function handleOpenCodeEvent(
           ? { finishReason: "stop", status: "completed" }
           : {
               errorMessage: event.error ?? control.executionError,
+              executionEnded: true,
               status: "error",
             },
       );
@@ -667,6 +729,7 @@ function watchOpenCodeServerExit(control: ActiveOpenCodeRunControl) {
       errorMessage: `OpenCode server exited unexpectedly (${
         signal ?? `code ${code ?? "unknown"}`
       }).`,
+      executionEnded: true,
       status: "error",
     });
   });
@@ -768,7 +831,7 @@ export async function stopOpenCodeThreadRun(
     return new Response(null, { status: 204 });
   }
 
-  await activeControl.session.abort().catch(() => undefined);
+  // finishOpenCodeRun stops the session's execution.
   await finishOpenCodeRun(activeControl, {
     errorMessage: STOPPED_MESSAGE,
     status: "cancelled",
@@ -848,6 +911,7 @@ async function buildOpenCodePromptFiles(message: ThreadUIMessage | null) {
       files.push({
         ...(file.filename ? { filename: file.filename } : {}),
         mediaType: file.mediaType,
+        path: loaded.path,
         url: file.url.startsWith("data:")
           ? file.url
           : `data:${file.mediaType};base64,${loaded.data.toString("base64")}`,
@@ -856,6 +920,7 @@ async function buildOpenCodePromptFiles(message: ThreadUIMessage | null) {
       files.push({
         filename: name,
         mediaType: file.mediaType,
+        path: loaded.path,
         url: pathToFileURL(loaded.path).toString(),
       });
     } else {
@@ -1046,6 +1111,7 @@ export async function runOpenCodeThreadChat(
       model: { ...parsedModel, variant: selectedVariant },
       // Without tools every request is asked (and declined here).
       permissionMode: toolsEnabled ? permissionMode : "default",
+      planMode: threadMode === "plan",
       resume:
         canResume && existingState
           ? {
@@ -1090,6 +1156,7 @@ export async function runOpenCodeThreadChat(
     }),
     eventChannel,
     executionError: null,
+    executionStarted: false,
     finished: false,
     instance: instance ?? null,
     interactive: request.interactive !== false,
@@ -1156,8 +1223,16 @@ export async function runOpenCodeThreadChat(
     } else {
       await session.prompt({ ...base, text: promptText });
     }
-    // The session now holds this turn and everything before it.
-    writeThreadState(control, { ...baseState, syncedMessageId: assistantId });
+    // The session now holds this turn and everything before it, except
+    // the history a command could not carry: it stays unsynced, so the
+    // next turn sends it (a new session without a mark gets a replay).
+    writeThreadState(control, {
+      ...baseState,
+      syncedMessageId:
+        command && historyMessages.length > 0
+          ? baseState.syncedMessageId
+          : assistantId,
+    });
   };
 
   try {

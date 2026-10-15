@@ -65,7 +65,9 @@ export type OpenCodeStep =
   /** Fail the run: 1.x `session.error`, 2.x `session.step.failed` + `session.execution.failed`. */
   | { type: "error"; message: string; name?: string }
   /** Never finish on its own; abort/interrupt still ends the run. */
-  | { type: "hang" };
+  | { type: "hang" }
+  /** End every open event stream; the server and the run keep going. */
+  | { type: "disconnect" };
 
 export type OpenCodePromptScript = {
   /** Picks this script when the prompt text contains `match`. */
@@ -83,6 +85,12 @@ export type OpenCodePromptScript = {
   cost?: number;
   /** Answer the prompt request with this HTTP status and JSON body instead. */
   reject?: { status: number; body: unknown };
+  /**
+   * 2.x: events published (with this session's `sessionID`) before this
+   * execution's `session.execution.started`, such as the late terminal event
+   * of an interrupted one: `session.interrupt` returns before it is out.
+   */
+  prelude?: Array<{ type: string; data?: JsonObject }>;
 };
 
 export type OpenCodeFakeScenario = {
@@ -99,7 +107,15 @@ export type OpenCodeFakeScenario = {
   /** Raw `GET /api/command` (2.x) or `GET /command` (1.x) body. */
   commands?: unknown;
   /** Sessions that already exist, by id. */
-  sessions?: Array<{ id: string; title?: string; directory?: string }>;
+  sessions?: Array<{
+    id: string;
+    title?: string;
+    directory?: string;
+    /** The session's stored agent (for example a stale `plan`). */
+    agent?: string;
+  }>;
+  /** Answer `PATCH` session (session.update) with this status and body. */
+  rejectSessionUpdate?: { status: number; body: unknown };
   /**
    * Turn scripts, picked by `match` then in order (the last repeats). 2.x
    * prompts go through the session inbox: `delivery:"steer"` (the default

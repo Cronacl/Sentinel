@@ -1,5 +1,7 @@
 import "server-only";
 
+import { pathToFileURL } from "node:url";
+
 import {
   createOpencodeClient,
   type OpencodeClient,
@@ -18,6 +20,8 @@ import type { OpenCodeServerExit } from "./server";
 import { openOpenCodeEventStream } from "./sse";
 import {
   acquireOpenCodeServer,
+  disposeOpenCodeServer,
+  getOpenCodeServerPool,
   type PooledOpenCodeServer,
 } from "./server-pool";
 import { normalizeV1Event } from "./v1/events";
@@ -37,8 +41,10 @@ import type { OpenCodeGeneration } from "./version";
 // Resume: a persisted session id of the same generation is looked up
 // (1.x session.get, 2.x GET /api/session/{id}); when it exists the turn
 // prompts it directly and the transcript is not replayed. Otherwise a new
-// session is created. Either way the session gets the rules of the
-// thread's current permission mode.
+// session is created. Either way the session gets this turn's rules (the
+// thread's permission mode, plus an edit deny in plan mode): a resumed
+// session whose rules cannot be updated is not continued, since it could
+// keep a laxer mode's rules.
 
 export type OpenCodeModelRef = {
   modelID: string;
@@ -49,6 +55,8 @@ export type OpenCodeModelRef = {
 export type OpenCodePromptFile = {
   filename?: string;
   mediaType: string;
+  /** The stored file, when there is one (2.x sends it as a file:// URI). */
+  path?: string | null;
   /** A data: URL (images) or a file:// URL. */
   url: string;
 };
@@ -71,6 +79,8 @@ export type OpenCodePermissionReply = "always" | "once" | "reject";
 export interface OpenCodeTurnSession {
   /** Asks the session to stop (1.x abort, 2.x interrupt). */
   abort(): Promise<void>;
+  /** Ends the instance's server (an execution that cannot be stopped). */
+  discardServer(): Promise<void>;
   /** `sessionId`: the asking (sub)session, default this one. */
   answerQuestion(
     requestId: string,
@@ -103,12 +113,20 @@ export interface OpenCodeTurnSession {
   sessionId: string;
 }
 
-/** 1.x ruleset (last matching rule wins). */
+/**
+ * 1.x ruleset (last matching rule wins). Session rules come after the
+ * agent's, so plan mode denies edits here too: otherwise full access or
+ * accept_edits would let the plan agent edit.
+ */
 export function buildOpenCodePermissionRules(
   mode: PermissionMode,
+  options: { plan?: boolean } = {},
 ): PermissionRuleset {
+  const plan: PermissionRuleset = options.plan
+    ? [{ action: "deny", pattern: "*", permission: "edit" }]
+    : [];
   if (mode === "full") {
-    return [{ action: "allow", pattern: "*", permission: "*" }];
+    return [{ action: "allow", pattern: "*", permission: "*" }, ...plan];
   }
   return [
     { action: "ask", pattern: "*", permission: "*" },
@@ -121,6 +139,7 @@ export function buildOpenCodePermissionRules(
     { action: "ask", pattern: "*", permission: "webfetch" },
     { action: "ask", pattern: "*", permission: "websearch" },
     { action: "allow", pattern: "*", permission: "question" },
+    ...plan,
   ];
 }
 
@@ -130,20 +149,29 @@ type OpenCode2Rule = {
   resource: string;
 };
 
-/** 2.x session rules (t3code OpenCode2AdapterV2.ts sessionRules, MIT). */
+/**
+ * 2.x session rules (t3code provider-opencode v2/adapter.ts sessionRules,
+ * MIT): the mode's, then an edit deny in plan mode (session rules override
+ * the agent's; shell and read are never denied).
+ */
 export function buildOpenCode2PermissionRules(
   mode: PermissionMode,
+  options: { plan?: boolean } = {},
 ): OpenCode2Rule[] {
   const rule = (action: string, effect: OpenCode2Rule["effect"]) => ({
     action,
     effect,
     resource: "*",
   });
-  if (mode === "full") return [rule("*", "allow")];
   return [
-    rule("shell", "ask"),
-    rule("edit", mode === "accept_edits" ? "allow" : "ask"),
-    rule("external_directory", "ask"),
+    ...(mode === "full"
+      ? [rule("*", "allow")]
+      : [
+          rule("shell", "ask"),
+          rule("edit", mode === "accept_edits" ? "allow" : "ask"),
+          rule("external_directory", "ask"),
+        ]),
+    ...(options.plan ? [rule("edit", "deny")] : []),
   ];
 }
 
@@ -152,6 +180,9 @@ export function buildOpenCode2PermissionRules(
  * OpenCode's "stop", which ends the whole execution (t3code).
  */
 const OPENCODE2_DECLINED_MESSAGE = "The user declined this request.";
+
+/** A persisted session that exists but is not continued. */
+class SessionNotContinued extends Error {}
 
 function isNotFound(error: unknown) {
   const record = error as {
@@ -195,6 +226,7 @@ function modelString(model: OpenCodeModelRef) {
 
 type SessionCommon = {
   directory: string;
+  discardServer(): Promise<void>;
   release(): void;
   server: PooledOpenCodeServer;
 };
@@ -209,7 +241,9 @@ async function openV1Session(
     headers: { Authorization: common.server.authorization },
     throwOnError: true,
   });
-  const rules = buildOpenCodePermissionRules(input.permissionMode);
+  const rules = buildOpenCodePermissionRules(input.permissionMode, {
+    plan: input.planMode,
+  });
   let sessionId: string | null = null;
   let resumed = false;
 
@@ -218,13 +252,19 @@ async function openV1Session(
       const existing = await client.session.get({
         sessionID: input.resumeSessionId,
       });
-      if (existing.data?.id) {
+      // The thread's mode may have changed since the session was made; a
+      // session that keeps its old rules is not continued.
+      if (
+        existing.data?.id &&
+        (await client.session
+          .update({ permission: rules, sessionID: existing.data.id })
+          .then(
+            () => true,
+            () => false,
+          ))
+      ) {
         sessionId = existing.data.id;
         resumed = true;
-        // The thread's mode may have changed since the session was made.
-        await client.session
-          .update({ permission: rules, sessionID: sessionId })
-          .catch(() => undefined);
       }
     } catch (error) {
       if (!isNotFound(error)) throw error;
@@ -255,6 +295,7 @@ async function openV1Session(
     async abort() {
       await client.session.abort({ sessionID: id });
     },
+    discardServer: common.discardServer,
     async answerQuestion(requestId, response) {
       await client.question.reply({
         answers: toOpenCodeQuestionAnswers(
@@ -346,7 +387,9 @@ async function openV2Session(
     baseUrl: common.server.url,
   });
   const location = { directory: common.directory };
-  const permissions = buildOpenCode2PermissionRules(input.permissionMode);
+  const permissions = buildOpenCode2PermissionRules(input.permissionMode, {
+    plan: input.planMode,
+  });
   let info: {
     agent?: string;
     id: string;
@@ -356,12 +399,20 @@ async function openV2Session(
 
   if (input.resumeSessionId) {
     try {
-      info = await client.session.get({ sessionID: input.resumeSessionId });
+      const existing = await client.session.get({
+        sessionID: input.resumeSessionId,
+      });
+      // The thread's mode may have changed since the session was made; a
+      // session that keeps its old rules is not continued.
+      const updated = await client.session
+        .update({ permissions, sessionID: existing.id })
+        .then(
+          () => true,
+          () => false,
+        );
+      if (!updated) throw new SessionNotContinued();
+      info = existing;
       resumed = true;
-      // The thread's mode may have changed since the session was made.
-      await client.session
-        .update({ permissions, sessionID: info.id })
-        .catch(() => undefined);
       // OpenCode keeps no request across its own restart, but a server
       // that outlived Sentinel's run may still wait on one nobody shows.
       const [pending, forms] = await Promise.all([
@@ -386,7 +437,9 @@ async function openV2Session(
         ),
       ]);
     } catch (error) {
-      if (!isNotFound(error)) throw error;
+      if (!(error instanceof SessionNotContinued) && !isNotFound(error)) {
+        throw error;
+      }
       info = null;
       resumed = false;
     }
@@ -424,24 +477,33 @@ async function openV2Session(
       await client.session.switchModel({ model, sessionID: id });
       currentModel = model;
     }
-    if (prompt.agent && prompt.agent !== currentAgent) {
-      // Plan mode is turn-scoped: the agent the session had comes back
-      // when the turn ends.
-      if (prompt.agent === "plan") restoreAgent = currentAgent ?? "build";
-      await client.session.switchAgent({ agent: prompt.agent, sessionID: id });
-      currentAgent = prompt.agent;
+    // Plan mode is turn-scoped: a session still on `plan` (a plan turn
+    // whose restore never ran: Sentinel quit, or the switch back failed)
+    // goes back to `build` on a turn that picks no agent.
+    const agent =
+      prompt.agent ?? (currentAgent === "plan" ? "build" : currentAgent);
+    if (agent && agent !== currentAgent) {
+      // The agent the session had comes back when the turn ends.
+      if (agent === "plan") {
+        restoreAgent =
+          currentAgent && currentAgent !== "plan" ? currentAgent : "build";
+      }
+      await client.session.switchAgent({ agent, sessionID: id });
+      currentAgent = agent;
     }
   };
+  // Stored files go by path: whether 2.x resolves data: URIs is unverified.
   const toFiles = (prompt: Pick<OpenCodePromptInput, "files">) =>
     prompt.files.map((file) => ({
       ...(file.filename ? { name: file.filename } : {}),
-      uri: file.url,
+      uri: file.path ? pathToFileURL(file.path).toString() : file.url,
     }));
 
   return {
     async abort() {
       await client.session.interrupt({ sessionID: id });
     },
+    discardServer: common.discardServer,
     async answerQuestion(requestId, response, sessionId) {
       await client.session.form.reply({
         answer: toFormAnswer(forms.get(requestId), response),
@@ -534,6 +596,8 @@ export type OpenOpenCodeSessionInput = {
   /** The model a new 2.x session starts on. */
   model: OpenCodeModelRef;
   permissionMode: PermissionMode;
+  /** A plan-mode turn: the session's rules also deny edits. */
+  planMode?: boolean;
   /** A persisted session of this server's generation to continue. */
   resumeSessionId: string | null;
   /** Only resume a session created on this generation. */
@@ -552,11 +616,12 @@ export type OpenOpenCodeSessionInput = {
 export async function openOpenCodeSession(
   input: OpenOpenCodeSessionInput,
 ): Promise<OpenCodeTurnSession> {
+  const instanceId = input.instance?.id ?? "opencode";
   const lease = await acquireOpenCodeServer(
     {
       binaryPath: input.binaryPath,
       env: input.env,
-      instanceId: input.instance?.id ?? "opencode",
+      instanceId,
       runtimeKey: getInstanceRuntimeKey(input.instance),
       version: input.cliVersion,
     },
@@ -565,6 +630,12 @@ export async function openOpenCodeSession(
   let released = false;
   const common: SessionCommon = {
     directory: input.cwd,
+    async discardServer() {
+      // Only the server this lease is on (a replacement keeps running).
+      if (getOpenCodeServerPool().peek(instanceId) === lease.server) {
+        await disposeOpenCodeServer(instanceId);
+      }
+    },
     release() {
       if (released) return;
       released = true;

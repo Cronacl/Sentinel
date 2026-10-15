@@ -1096,6 +1096,8 @@ export type StartOpenCodeSessionInput = {
   instance?: OpenCodeRuntimeInstance | null;
   model: OpenCodeModelRef;
   permissionMode: OpenCodeTurnSessionPermissionMode;
+  /** A plan-mode turn (its rules deny edits). */
+  planMode?: boolean;
   /** The thread's persisted session, continued when it still exists. */
   resume?: { generation: OpenCodeGeneration | null; sessionId: string } | null;
   signal?: AbortSignal;
@@ -1133,6 +1135,7 @@ export async function startOpenCodeSession(
     instance: input.instance ?? null,
     model: input.model,
     permissionMode: input.permissionMode,
+    planMode: input.planMode,
     resumeGeneration: input.resume?.generation ?? null,
     resumeSessionId: input.resume?.sessionId ?? null,
     signal: input.signal,
