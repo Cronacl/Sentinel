@@ -215,6 +215,8 @@ export type PiMockScenario = {
   hangCommands?: string[];
   /** `errorMessage` on the aborted assistant message. */
   abortErrorMessage?: string;
+  /** Never send `agent_settled`, like Pi 0.80.x (clients ask `get_state`). */
+  omitAgentSettled?: boolean;
   faults?: PiMockFaults;
 };
 

@@ -719,7 +719,7 @@ function startRun(input: QueuedInput, script: PiPromptScript): Run {
       willRetry: false,
     });
     if (run === current) run = undefined;
-    await output({ type: "agent_settled" });
+    if (!scenario.omitAgentSettled) await output({ type: "agent_settled" });
   })();
   return current;
 }
