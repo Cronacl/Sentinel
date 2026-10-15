@@ -75,7 +75,9 @@ describe("DRIVER_CATALOG", () => {
     expect(DRIVER_CATALOG.claude.homeEnvVar).toBe("CLAUDE_CONFIG_DIR");
     expect(DRIVER_CATALOG.copilot.homeEnvVar).toBe("COPILOT_HOME");
     expect(DRIVER_CATALOG.grok.homeEnvVar).toBe("GROK_HOME");
-    expect(DRIVER_CATALOG.antigravity.homeEnvVar).toBe("GEMINI_HOME");
+    // Antigravity isolates through its private per-instance profile instead
+    // (a user-chosen GEMINI_HOME would be rewritten and signed out).
+    expect(DRIVER_CATALOG.antigravity.homeEnvVar).toBeNull();
   });
 
   it("keeps today's permission modes for every existing driver", () => {

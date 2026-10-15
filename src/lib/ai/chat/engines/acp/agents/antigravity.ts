@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { DRIVER_CATALOG } from "@/lib/ai/chat/engines/catalog";
 import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
+import { verifyAuthBrowserCommand } from "@/lib/ai/chat/engines/platform/auth/browser-helper";
 import { BUNDLED_ENGINE_MANIFEST } from "@/lib/ai/chat/engines/platform/manifest/bundled";
 
 import {
@@ -15,10 +16,12 @@ import { resolveAntigravityBinary } from "../antigravity/install";
 import {
   antigravityAuthConfigIssue,
   antigravityAuthLabel,
+  antigravityTempVariables,
   antigravityAuthUsesBrowser,
   buildAntigravityEnv,
   getAntigravityProfileDirectory,
   hasAntigravityToken,
+  isAntigravityAuthOperationActive,
   prepareAntigravityProfile,
   readAntigravityAuthConfig,
   readAntigravityAuthState,
@@ -40,7 +43,11 @@ import type {
   AcpStaticProbe,
 } from "../descriptor";
 import { AcpAuthRequiredError } from "../errors";
-import { getAcpProcessLaunch, type AcpLaunch } from "../launch";
+import {
+  getAcpProcessLaunch,
+  sweepAcpTempDirectories,
+  type AcpLaunch,
+} from "../launch";
 
 // Google Antigravity on the shared ACP engine (design acp-and-agents §3.3;
 // behaviour from t3code apps/server/src/provider/{Drivers/AntigravityDriver,
@@ -136,6 +143,21 @@ export async function buildAntigravityLaunch(input: {
 }): Promise<AcpLaunch> {
   const { auth, binary, instance } = input;
   const profile = await prepareAntigravityProfile({ auth, instance });
+  // Unpacks of servers that were killed (or outlived an earlier Sentinel).
+  void sweepAcpTempDirectories(profile.tempDirectory);
+  const env = buildAntigravityEnv({
+    auth,
+    env: { ...instance.env, PATH: binary.env.PATH ?? instance.env.PATH },
+    harnessPath: path.join(
+      path.dirname(binary.path),
+      antigravityFileNames().harness,
+    ),
+    overrides: instance.envOverrides,
+    profile,
+  });
+  // A helper that fails makes Python's webbrowser open the system browser:
+  // the server does not start unless it works under this env.
+  await verifyAuthBrowserCommand(profile.browser, env);
   return {
     args: [
       ...(process.platform === "linux" ? ["--uid="] : []),
@@ -143,16 +165,11 @@ export async function buildAntigravityLaunch(input: {
     ],
     command: binary.path,
     cwd: input.cwd,
-    env: buildAntigravityEnv({
-      auth,
-      env: { ...instance.env, PATH: binary.env.PATH ?? instance.env.PATH },
-      harnessPath: path.join(
-        path.dirname(binary.path),
-        antigravityFileNames().harness,
-      ),
-      overrides: instance.envOverrides,
-      profile,
-    }),
+    env,
+    tempDirectory: {
+      root: profile.tempDirectory,
+      variables: antigravityTempVariables(process.platform),
+    },
   };
 }
 
@@ -213,6 +230,11 @@ export const antigravityAcpAgent: AcpAgentDescriptor = {
   async prepareLaunch({ binary, cwd, instance, purpose }) {
     const auth = await readAntigravityInstanceAuth(instance);
     if (purpose === "session") {
+      if (isAntigravityAuthOperationActive(instance.id)) {
+        throw new AcpAuthRequiredError(
+          "Antigravity is signing in or out in Settings. Retry once that finishes.",
+        );
+      }
       const issue = antigravityAuthConfigIssue(auth);
       if (issue) {
         throw new AcpAuthRequiredError(

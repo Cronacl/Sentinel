@@ -70,7 +70,10 @@ export function parseAntigravityAuthorizationUrl(
   ) {
     return null;
   }
-  if (Number(new URL(redirectUri).port) < 1_024) {
+  // The pattern lets through ports above 65535, which `new URL` rejects:
+  // this runs inside the agent's output handlers, so it must not throw.
+  const port = Number(redirectUri.slice("http://127.0.0.1:".length, -1));
+  if (!Number.isInteger(port) || port < 1_024 || port > 65_535) {
     return null;
   }
   return { authorizationUrl: value, redirectUri, state };
@@ -224,7 +227,8 @@ export function validateAntigravityCallbackUrl(
 
 /**
  * Replays a validated redirect to the agent's loopback listener: one GET,
- * no proxy, no redirects, the response body discarded.
+ * no proxy, no redirects, the response body discarded. The whole exchange
+ * is bounded (not only socket idle time).
  */
 export function forwardAntigravityCallback(
   callback: URL,
@@ -235,6 +239,14 @@ export function forwardAntigravityCallback(
       new AntigravityCallbackError(
         "Sentinel could not deliver the sign-in response. Start the sign-in again.",
       );
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve();
+    };
     const request = http.request(
       {
         agent: false,
@@ -243,20 +255,22 @@ export function forwardAntigravityCallback(
         path: `${callback.pathname}${callback.search}`,
         port: callback.port,
         protocol: "http:",
-        timeout: options.timeoutMs ?? FORWARD_TIMEOUT_MS,
       },
       (response) => {
-        response.once("error", () => reject(failed()));
+        response.once("error", () => finish(failed()));
         response.once("end", () => {
           const status = response.statusCode ?? 0;
-          if (status >= 200 && status < 300) resolve();
-          else reject(failed());
+          finish(status >= 200 && status < 300 ? undefined : failed());
         });
         response.resume();
       },
     );
-    request.once("timeout", () => request.destroy(failed()));
-    request.once("error", () => reject(failed()));
+    const timer = setTimeout(() => {
+      // Ends the response too (it reads from the request's socket).
+      request.destroy();
+      finish(failed());
+    }, options.timeoutMs ?? FORWARD_TIMEOUT_MS);
+    request.once("error", () => finish(failed()));
     request.end();
   });
 }

@@ -5,6 +5,7 @@ import {
   readFile,
   readlink,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -122,7 +123,7 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
     expect(
       await readlink(path.join(prepared.geminiHome, "config", "skills")),
     ).toBe(path.join(home, ".gemini", "config", "skills"));
-    expect(await readFile(prepared.browserHelper, "utf8")).toStartWith(
+    expect(await readFile(prepared.browser.browser, "utf8")).toStartWith(
       "#!/bin/sh",
     );
 
@@ -143,7 +144,7 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
     expect(env).toEqual({
       AGY_ACP_FORCE_FILE_STORAGE: "1",
       ANTIGRAVITY_HARNESS_PATH: "/opt/agy/localharness_external",
-      BROWSER: prepared.browserHelper,
+      BROWSER: prepared.browser.browser,
       GEMINI_API_KEY: "instance-key",
       GEMINI_HOME: prepared.geminiHome,
       HOME: home,
@@ -153,12 +154,53 @@ describe("prepareAntigravityProfile and buildAntigravityEnv", () => {
     });
   });
 
-  it("uses the instance's home path as GEMINI_HOME when it sets one", () => {
-    expect(
-      profile.getAntigravityProfileDirectory(
-        instance({ envOverrides: { GEMINI_HOME: "/custom/gemini" } }),
-      ),
-    ).toBe("/custom/gemini");
+  it("never uses a user-chosen GEMINI_HOME or homePath as the profile", async () => {
+    const dir = await tempDir();
+    const userGemini = path.join(dir, ".gemini");
+    await mkdir(path.join(userGemini, "antigravity-acp"), { recursive: true });
+    const userSettings = path.join(
+      userGemini,
+      "antigravity-acp",
+      "settings.json",
+    );
+    await writeFile(userSettings, '{"theme":"dark"}\n');
+    const target = instance({
+      config: { homePath: userGemini } as never,
+      envOverrides: { GEMINI_HOME: userGemini },
+      stateDir: path.join(dir, "state"),
+    });
+    expect(profile.getAntigravityProfileDirectory(target)).toBe(
+      path.join(dir, "state", "gemini-home"),
+    );
+    await profile.prepareAntigravityProfile({
+      auth: profile.readAntigravityAuthConfig(target),
+      instance: target,
+      userHome: dir,
+    });
+    expect(await readFile(userSettings, "utf8")).toBe('{"theme":"dark"}\n');
+  });
+
+  it("runs the Windows browser helper as Node through Sentinel's runtime", async () => {
+    const dir = await tempDir();
+    const target = instance({ stateDir: path.join(dir, "state") });
+    const auth = profile.readAntigravityAuthConfig(target);
+    const prepared = await profile.prepareAntigravityProfile({
+      auth,
+      instance: target,
+      nodeExecutable: "C:\\Sentinel\\Sentinel.exe",
+      platform: "win32",
+    });
+    const env = profile.buildAntigravityEnv({
+      auth,
+      env: { ELECTRON_RUN_AS_NODE: "0", TEMP: "C:\\Temp", Path: "C:\\bin" },
+      harnessPath: "C:\\agy\\localharness_external.exe",
+      platform: "win32",
+      profile: prepared,
+    });
+    expect(env.ELECTRON_RUN_AS_NODE).toBe("1");
+    expect(env.BROWSER).toStartWith("'C:/Sentinel/Sentinel.exe' '-e' ");
+    expect(env.TEMP).toBe(prepared.tempDirectory);
+    expect(env.TMP).toBe(prepared.tempDirectory);
   });
 });
 

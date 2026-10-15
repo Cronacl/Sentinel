@@ -40,6 +40,38 @@ function requests(logPath: string) {
 }
 
 describe("probeAcpAgent", () => {
+  it("never spawns a static-probe agent, whatever the depth", async () => {
+    const instance = setup();
+    const descriptor = support.mockDescriptor({
+      probe: {
+        mode: "static",
+        readStatic: async () => ({
+          auth: { method: "Google account", status: "unauthenticated" },
+          imagePrompts: true,
+          message: "Sign in.",
+          resumable: true,
+        }),
+        timeoutMs: 5_000,
+      },
+    });
+    const start = () => {
+      throw new Error("a static probe started the agent");
+    };
+    for (const depth of ["cheap", "full"] as const) {
+      const result = await probeAcpAgent(
+        descriptor,
+        instance,
+        options({ depth }),
+        { start },
+      );
+      expect(result.auth).toEqual(
+        expect.objectContaining({ status: "unauthenticated" }),
+      );
+      expect(result.message).toBe("Sign in.");
+    }
+    expect(support.readMockLog(instance.logPath)).toEqual([]);
+  });
+
   it("initializes without a session and lists the descriptor's models", async () => {
     const instance = setup({
       auth: { requireAuth: true },

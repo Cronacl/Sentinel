@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it, mock } from "bun:test";
 mock.module("server-only", () => ({}));
 
 const authUrl = await import("./auth-url");
-const { ensureAuthBrowserHelper } =
+const { AUTH_URL_MARKER, ensureAuthBrowserHelper } =
   await import("@/lib/ai/chat/engines/platform/auth/browser-helper");
 
 const roots: string[] = [];
@@ -66,6 +66,13 @@ describe("parseAntigravityAuthorizationUrl", () => {
         encodeURIComponent("http://127.0.0.1:80/"),
       ),
     ],
+    [
+      "a port above 65535",
+      GOOGLE.replace(
+        encodeURIComponent(REDIRECT),
+        encodeURIComponent("http://127.0.0.1:99999/"),
+      ),
+    ],
     ["no state", GOOGLE.replace("&state=st-1", "")],
     [
       "another response type",
@@ -98,6 +105,21 @@ describe("readAntigravityAuthLine", () => {
     expect(authUrl.readAntigravityAuthLine(line)?.authorizationUrl).toBe(
       GOOGLE,
     );
+  });
+
+  it("never throws on an out-of-range redirect port in either form", () => {
+    const bad = GOOGLE.replace(
+      encodeURIComponent(REDIRECT),
+      "http://127.0.0.1:99999/",
+    );
+    expect(
+      authUrl.readAntigravityAuthLine(
+        `${authUrl.ANTIGRAVITY_AUTH_STDOUT_PREFIX}${bad}`,
+      ),
+    ).toBeNull();
+    expect(
+      authUrl.readAntigravityAuthLine(`${AUTH_URL_MARKER}"${bad}"`),
+    ).toBeNull();
   });
 
   it("ignores other output", () => {
@@ -167,5 +189,27 @@ describe("forwardAntigravityCallback", () => {
     await expect(
       authUrl.forwardAntigravityCallback(url, { timeoutMs: 1_000 }),
     ).rejects.toThrow(authUrl.AntigravityCallbackError);
+  });
+
+  it("bounds the whole exchange, not only socket idle time", async () => {
+    // A listener that keeps the response open by trickling bytes.
+    const timers: ReturnType<typeof setInterval>[] = [];
+    const server = await listen((_request, response) => {
+      response.writeHead(200);
+      timers.push(setInterval(() => response.write("."), 50));
+    });
+    try {
+      const started = Date.now();
+      await expect(
+        authUrl.forwardAntigravityCallback(
+          new URL(`http://127.0.0.1:${server.port}/?state=s&code=c`),
+          { timeoutMs: 400 },
+        ),
+      ).rejects.toThrow(authUrl.AntigravityCallbackError);
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      for (const timer of timers) clearInterval(timer);
+      await server.close();
+    }
   });
 });

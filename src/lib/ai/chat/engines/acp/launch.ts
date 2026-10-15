@@ -1,6 +1,9 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { readdir, rm } from "node:fs/promises";
+import path from "node:path";
 
 import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { registerInstanceResourceHooks } from "@/lib/ai/chat/engines/platform/instance-resources";
@@ -31,7 +34,71 @@ export type AcpLaunch = {
   command: string;
   cwd: string;
   env: Record<string, string | undefined>;
+  /**
+   * Gives every process its own temp directory under `root`, named in
+   * `variables` (TMPDIR; TEMP and TMP on Windows), removed when it exits.
+   * The fingerprint sees only `root`, so pooled processes stay reusable.
+   */
+  tempDirectory?: { root: string; variables: readonly string[] };
 };
+
+const globalForTemp = globalThis as unknown as {
+  __sentinelAcpLiveTempDirectories?: Set<string>;
+};
+
+/** The per-process temp directories of processes still running. */
+function liveTempDirectories() {
+  globalForTemp.__sentinelAcpLiveTempDirectories ??= new Set();
+  return globalForTemp.__sentinelAcpLiveTempDirectories;
+}
+
+/**
+ * Removes what `root` holds besides the directories of running processes:
+ * leftovers of processes this server did not see exit (killed, or from an
+ * earlier run). Best effort.
+ */
+export async function sweepAcpTempDirectories(root: string) {
+  const entries = await readdir(root).catch(() => [] as string[]);
+  const live = liveTempDirectories();
+  await Promise.all(
+    entries
+      .map((entry) => path.join(root, entry))
+      .filter((entry) => !live.has(entry))
+      .map((entry) =>
+        rm(entry, { force: true, recursive: true }).catch((error) =>
+          log.debug("acp_temp_sweep_failed", { entry, error }),
+        ),
+      ),
+  );
+}
+
+/** The launch with its own temp directory (and how to release it), if it asks for one. */
+function withProcessTempDirectory(launch: AcpLaunch) {
+  if (!launch.tempDirectory) {
+    return { env: launch.env, release: () => {} };
+  }
+  const { root, variables } = launch.tempDirectory;
+  mkdirSync(root, { mode: 0o700, recursive: true });
+  const directory = mkdtempSync(path.join(root, "run-"));
+  const live = liveTempDirectories();
+  live.add(directory);
+  let released = false;
+  return {
+    env: {
+      ...launch.env,
+      ...Object.fromEntries(variables.map((name) => [name, directory])),
+    },
+    release: () => {
+      if (released) return;
+      released = true;
+      void rm(directory, { force: true, recursive: true })
+        .catch((error) =>
+          log.debug("acp_temp_cleanup_failed", { directory, error }),
+        )
+        .finally(() => live.delete(directory));
+    },
+  };
+}
 
 export function buildAcpLaunch(
   descriptor: Pick<AcpAgentDescriptor, "launchArgs" | "launchArgsFor">,
@@ -96,34 +163,51 @@ export function startAcpProcess(
     "instanceId" | "register" | "spawn" | "timers"
   > = {},
 ) {
-  // Lines only arrive after the process exists: the handlers get it.
+  // Lines only arrive after the process exists: the handlers get it. They
+  // run inside the pipes' "data" events, where a throw would escape to the
+  // server process: it is logged and the line dropped.
   let started: AcpAgentProcess | null = null;
   const withProcess = (
     handler: ((line: string, process: AcpAgentProcess) => void) | undefined,
   ) =>
     handler
       ? (line: string) => {
-          if (started) handler.call(descriptor, line, started);
+          if (!started) return;
+          try {
+            handler.call(descriptor, line, started);
+          } catch (error) {
+            log.warn("acp_line_handler_failed", {
+              agent: descriptor.id,
+              error,
+            });
+          }
         }
       : undefined;
-  started = AcpAgentProcess.start({
-    ...options,
-    args: launch.args,
-    command: launch.command,
-    cwd: launch.cwd,
-    env: launch.env,
-    label: descriptor.processLabel,
-    normalizeInbound: descriptor.normalizeInbound?.bind(descriptor),
-    notificationMethods: Object.keys(descriptor.extNotifications ?? {}),
-    onStderrLine: withProcess(descriptor.onStderrLine),
-    onStdoutNoise: withProcess(descriptor.onStdoutNoise),
-    // Vendor methods some agents send as requests and others as
-    // notifications are served both ways.
-    requestMethods: [
-      ...Object.keys(descriptor.extRequests ?? {}),
-      ...Object.keys(descriptor.extNotifications ?? {}),
-    ],
-  });
+  const temp = withProcessTempDirectory(launch);
+  try {
+    started = AcpAgentProcess.start({
+      ...options,
+      args: launch.args,
+      command: launch.command,
+      cwd: launch.cwd,
+      env: temp.env,
+      label: descriptor.processLabel,
+      normalizeInbound: descriptor.normalizeInbound?.bind(descriptor),
+      notificationMethods: Object.keys(descriptor.extNotifications ?? {}),
+      onStderrLine: withProcess(descriptor.onStderrLine),
+      onStdoutNoise: withProcess(descriptor.onStdoutNoise),
+      // Vendor methods some agents send as requests and others as
+      // notifications are served both ways.
+      requestMethods: [
+        ...Object.keys(descriptor.extRequests ?? {}),
+        ...Object.keys(descriptor.extNotifications ?? {}),
+      ],
+    });
+  } catch (error) {
+    temp.release();
+    throw error;
+  }
+  void started.exited.then(temp.release, temp.release);
   started.state.set(LAUNCH_KEY, launch);
   return started;
 }

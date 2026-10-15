@@ -131,31 +131,48 @@ async function startServer(
   if (!installation) {
     throw new EngineAuthError(error ?? "Antigravity is not installed.");
   }
-  // Running sessions share the profile: they end first.
-  await e.launch.disposeAcpInstanceProcesses(instance.id);
-  await mkdir(instance.stateDir, { mode: 0o700, recursive: true });
-  const cwd = await mkdtemp(path.join(instance.stateDir, "auth-"));
+  // Running sessions share the profile: they end first, and new turns wait
+  // (they fail with a hint) until this operation is over.
+  const endOperation = e.profile.beginAntigravityAuthOperation(instance.id);
+  let process: ReturnType<Engine["launch"]["startAcpProcess"]>;
+  let launch: Awaited<ReturnType<Engine["agent"]["buildAntigravityLaunch"]>>;
+  let cwd: string | null = null;
+  try {
+    await e.launch.disposeAcpInstanceProcesses(instance.id);
+    await mkdir(instance.stateDir, { mode: 0o700, recursive: true });
+    cwd = await mkdtemp(path.join(instance.stateDir, "auth-"));
+    launch = await e.agent.buildAntigravityLaunch({
+      auth,
+      binary: {
+        env: instance.env,
+        path: installation.executablePath,
+        source: installation.source,
+        version: installation.version,
+      },
+      cwd,
+      instance,
+    });
+    process = e.launch.startAcpProcess(e.agent.antigravityAcpAgent, launch, {
+      instanceId: instance.id,
+    });
+  } catch (error) {
+    endOperation();
+    if (cwd) await rm(cwd, { force: true, recursive: true }).catch(() => {});
+    throw new EngineAuthError(
+      `Antigravity did not start: ${e.errors.getErrorMessage(error)}`,
+    );
+  }
   const descriptor = e.agent.antigravityAcpAgent;
-  const launch = await e.agent.buildAntigravityLaunch({
-    auth,
-    binary: {
-      env: instance.env,
-      path: installation.executablePath,
-      source: installation.source,
-      version: installation.version,
-    },
-    cwd,
-    instance,
-  });
-  const process = e.launch.startAcpProcess(descriptor, launch, {
-    instanceId: instance.id,
-  });
   const stop = () => void process.dispose();
   context.signal.addEventListener("abort", stop, { once: true });
   const dispose = async () => {
     context.signal.removeEventListener("abort", stop);
-    await process.dispose();
-    await rm(cwd, { force: true, recursive: true }).catch(() => undefined);
+    try {
+      await process.dispose();
+      await rm(cwd!, { force: true, recursive: true }).catch(() => undefined);
+    } finally {
+      endOperation();
+    }
   };
   try {
     context.setMessage("Starting Antigravity.");
@@ -165,7 +182,12 @@ async function startServer(
       signal: context.signal,
       timeoutMs: START_TIMEOUT_MS,
     });
-    return { dispose, geminiHome: launch.env.GEMINI_HOME!, init, process };
+    return {
+      dispose,
+      geminiHome: launch.env.GEMINI_HOME!,
+      init,
+      process,
+    };
   } catch (startError) {
     await dispose();
     throw new EngineAuthError(
@@ -241,12 +263,27 @@ export const antigravityAuth: EngineAuthController = {
           `This Antigravity version does not offer ${label}. Update it.`,
         );
       }
+      // A second, different request (a new state) would make every pasted
+      // redirect fail the state check: the sign-in stops instead.
+      let rejectSecondRequest: (error: Error) => void = () => {};
+      const secondRequest = new Promise<never>((_, reject) => {
+        rejectSecondRequest = reject;
+      });
+      secondRequest.catch(() => undefined);
       if (e.profile.antigravityAuthUsesBrowser(methodId)) {
         let shown: string | null = null;
         unsubscribe = e.authUrl.onAntigravityAuthRequest(
           server.process,
           (request) => {
-            if (shown) return;
+            if (shown === request.authorizationUrl) return;
+            if (shown) {
+              rejectSecondRequest(
+                new EngineAuthError(
+                  "Antigravity started more than one Google sign-in request. Start the sign-in again.",
+                ),
+              );
+              return;
+            }
             shown = request.authorizationUrl;
             showGoogleSignIn(e, context, request);
           },
@@ -256,13 +293,18 @@ export const antigravityAuth: EngineAuthController = {
         context.setMessage(`Checking the ${label}.`);
       }
       try {
-        await server.process.request(
-          server.process.methods.authenticate,
-          { methodId },
-          { signal: context.signal, timeoutMs: SIGN_IN_TIMEOUT_MS },
-        );
+        await Promise.race([
+          server.process.request(
+            server.process.methods.authenticate,
+            { methodId },
+            { signal: context.signal, timeoutMs: SIGN_IN_TIMEOUT_MS },
+          ),
+          secondRequest,
+        ]);
       } catch (error) {
-        if (context.signal.aborted) throw error;
+        if (context.signal.aborted || error instanceof EngineAuthError) {
+          throw error;
+        }
         throw new EngineAuthError(
           `Antigravity sign-in did not complete: ${e.errors.getErrorMessage(error)}`,
         );

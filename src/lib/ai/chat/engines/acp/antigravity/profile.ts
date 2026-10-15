@@ -15,18 +15,21 @@ import os from "node:os";
 import path from "node:path";
 
 import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
-import { ensureAuthBrowserHelper } from "@/lib/ai/chat/engines/platform/auth/browser-helper";
-import { getInstanceHomeDirectory } from "@/lib/ai/chat/engines/platform/instance-homes";
+import {
+  ensureAuthBrowserCommand,
+  type AuthBrowserCommand,
+} from "@/lib/ai/chat/engines/platform/auth/browser-helper";
 import { createLogger } from "@/lib/logger";
 
 // The private profile and environment an Antigravity instance launches with
 // (design acp-and-agents §3.3; ported from t3code
 // apps/server/src/provider/antigravityAuthSupport.ts, MIT). Every instance
 // gets its own GEMINI_HOME (its Google sign-in lives there, as a file:
-// AGY_ACP_FORCE_FILE_STORAGE keeps it out of the OS keychain), its own
-// TMPDIR (the server unpacks ~1 GB per launch; a killed process leaves that
-// behind where Sentinel can reclaim it), BROWSER pointing at Sentinel's
-// /bin/sh helper (critique G13), and only the configured auth method's
+// AGY_ACP_FORCE_FILE_STORAGE keeps it out of the OS keychain), a TMPDIR per
+// process under the instance (the server unpacks ~1 GB per launch; it is
+// removed when the process exits and swept when one was killed), BROWSER
+// pointing at Sentinel's verified helper (critique G13), and only the
+// configured auth method's
 // credential. The environment is curated: the instance env minus every
 // Google credential, profile and browser variable it might carry.
 
@@ -62,6 +65,11 @@ export const GOOGLE_API_KEY_VARIABLE = "GOOGLE_API_KEY";
 export const GCP_PROJECT_VARIABLE = "GOOGLE_CLOUD_PROJECT";
 export const GCP_LOCATION_VARIABLE = "GOOGLE_CLOUD_LOCATION";
 const VERTEX_VARIABLE = "GOOGLE_GENAI_USE_VERTEXAI";
+
+/** The env variables naming the temp directory. */
+export function antigravityTempVariables(platform: NodeJS.Platform) {
+  return platform === "win32" ? ["TEMP", "TMP"] : ["TMPDIR"];
+}
 
 /** Removed from the launch env (Windows keys compare case-insensitively). */
 const REMOVED_ENV_KEYS = new Set([
@@ -181,20 +189,21 @@ export function antigravityProfileSettings(auth: AntigravityAuthConfig) {
   })}\n`;
 }
 
-/** GEMINI_HOME: the instance's home path when it sets one, else its own profile. */
+/**
+ * GEMINI_HOME: always Sentinel's private profile for the instance, never a
+ * user-chosen home. Sentinel rewrites its settings.json, records sign-in
+ * state in it and signs out through it, which must not touch ~/.gemini.
+ */
 export function getAntigravityProfileDirectory(
-  instance: Pick<
-    ResolvedEngineInstance,
-    "driver" | "envOverrides" | "stateDir"
-  >,
+  instance: Pick<ResolvedEngineInstance, "stateDir">,
 ) {
-  return (
-    getInstanceHomeDirectory(instance) ??
-    path.join(instance.stateDir, "gemini-home")
-  );
+  return path.join(instance.stateDir, "gemini-home");
 }
 
-/** Parent of the server's per-launch unpack directories. */
+/**
+ * Parent of the per-process temp directories (the server unpacks ~1 GB into
+ * TMPDIR per launch); see AcpLaunch.tempDirectory.
+ */
 export function getAntigravityTempDirectory(
   instance: Pick<ResolvedEngineInstance, "stateDir">,
 ) {
@@ -203,7 +212,7 @@ export function getAntigravityTempDirectory(
 
 export type AntigravityProfile = {
   acpDirectory: string;
-  browserHelper: string;
+  browser: AuthBrowserCommand;
   geminiHome: string;
   tempDirectory: string;
 };
@@ -262,15 +271,14 @@ async function linkUserSkills(
 
 /**
  * Creates the profile (0700), rewrites settings.json for the current auth
- * settings, links the user's skills and writes the BROWSER helper. Reads
- * no credential.
+ * settings, links the user's skills and writes the BROWSER helper (the
+ * launch verifies it). Reads no credential.
  */
 export async function prepareAntigravityProfile(input: {
   auth: AntigravityAuthConfig;
-  instance: Pick<
-    ResolvedEngineInstance,
-    "driver" | "env" | "envOverrides" | "stateDir"
-  >;
+  instance: Pick<ResolvedEngineInstance, "env" | "stateDir">;
+  /** Windows' browser helper runtime (default: this process's). */
+  nodeExecutable?: string;
   platform?: NodeJS.Platform;
   /** Where `~` is for skills (default: the launch env's HOME). */
   userHome?: string;
@@ -300,17 +308,11 @@ export async function prepareAntigravityProfile(input: {
     os.homedir();
   await linkUserSkills(geminiHome, userHome, platform);
 
-  const browserHelper = await ensureAuthBrowserHelper(
+  const browser = await ensureAuthBrowserCommand(
     path.join(input.instance.stateDir, "bin"),
-    { platform },
+    { nodeExecutable: input.nodeExecutable, platform },
   );
-  // Python's webbrowser splits BROWSER on the path separator.
-  if (browserHelper.includes(platform === "win32" ? ";" : ":")) {
-    throw new Error(
-      "The Antigravity sign-in helper path contains a path separator; move Sentinel's data folder.",
-    );
-  }
-  return { acpDirectory, browserHelper, geminiHome, tempDirectory };
+  return { acpDirectory, browser, geminiHome, tempDirectory };
 }
 
 /**
@@ -354,10 +356,13 @@ export function buildAntigravityEnv(input: {
     ...credential,
     AGY_ACP_FORCE_FILE_STORAGE: "1",
     ANTIGRAVITY_HARNESS_PATH: input.harnessPath,
-    BROWSER: input.profile.browserHelper,
+    ...input.profile.browser.env,
+    BROWSER: input.profile.browser.browser,
     GEMINI_HOME: input.profile.geminiHome,
     PYTHONUNBUFFERED: "1",
-    ...(platform === "win32" ? { TEMP: temp, TMP: temp } : { TMPDIR: temp }),
+    ...Object.fromEntries(
+      antigravityTempVariables(platform).map((name) => [name, temp]),
+    ),
   };
 }
 
@@ -407,4 +412,35 @@ export async function writeAntigravityAuthState(
 export async function hasAntigravityToken(geminiHome: string) {
   const info = await stat(path.join(geminiHome, TOKEN_FILE)).catch(() => null);
   return Boolean(info?.isFile());
+}
+
+// Sign-in and sign-out from Settings run their own server on the profile.
+// While one does, chat turns do not start another (it would begin a second
+// Google request and share the token file).
+
+const globalForAuth = globalThis as unknown as {
+  __sentinelAntigravityAuthOperations?: Map<string, number>;
+};
+
+function authOperations() {
+  globalForAuth.__sentinelAntigravityAuthOperations ??= new Map();
+  return globalForAuth.__sentinelAntigravityAuthOperations;
+}
+
+/** Marks a Settings sign-in or sign-out as running; call the result when it ends. */
+export function beginAntigravityAuthOperation(instanceId: string) {
+  const operations = authOperations();
+  operations.set(instanceId, (operations.get(instanceId) ?? 0) + 1);
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    const count = (operations.get(instanceId) ?? 1) - 1;
+    if (count > 0) operations.set(instanceId, count);
+    else operations.delete(instanceId);
+  };
+}
+
+export function isAntigravityAuthOperationActive(instanceId: string) {
+  return authOperations().has(instanceId);
 }

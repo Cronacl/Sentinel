@@ -97,7 +97,9 @@ const homeConfigSchema = baseInstanceConfigSchema;
 
 const binaryConfigSchema = baseInstanceConfigSchema.omit({ homePath: true });
 
-const antigravityConfigSchema = baseInstanceConfigSchema.extend({
+// No homePath: Antigravity always runs on Sentinel's private per-instance
+// profile (it rewrites settings.json and signs out through it).
+const antigravityConfigSchema = binaryConfigSchema.extend({
   authMethodId: z.string().trim().min(1).optional(),
   gcpLocation: z.string().trim().min(1).optional(),
   gcpProject: z.string().trim().min(1).optional(),
@@ -373,7 +375,7 @@ export const DRIVER_CATALOG = {
     description:
       "Use Google Antigravity through its ACP server, installed by Sentinel.",
     docsUrl: "https://antigravity.google",
-    homeEnvVar: "GEMINI_HOME",
+    homeEnvVar: null,
     kind: "antigravity",
     label: "Antigravity",
     legacyEnvPathKeys: ["SENTINEL_ANTIGRAVITY_PATH"],
