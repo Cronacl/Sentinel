@@ -21,6 +21,11 @@ const aiState = {
   streamErrorMessage: null as unknown,
 };
 
+// Runs started by the UI stream mock; afterEach waits for them to end so a
+// run's tail (persistence, background compaction warmup, follow-up drain)
+// cannot land in the next test after its mocks were reset.
+const runsInFlight: Array<{ settled: boolean }> = [];
+
 const createAgentUIStream = mock(async (args) => {
   if (aiTestState.agentConfig?.prepareCall && args.options) {
     aiTestState.prepared = await aiTestState.agentConfig.prepareCall({
@@ -66,6 +71,12 @@ const createUIMessageStream = mock(({ execute, onEnd }) => {
     await execute({ writer });
     await onEnd?.({ responseMessage: aiState.assistantResponseMessage });
   })();
+  const tracked = { settled: false };
+  runsInFlight.push(tracked);
+  done.then(
+    () => (tracked.settled = true),
+    () => (tracked.settled = true),
+  );
 
   return { done, writer };
 });
@@ -918,6 +929,21 @@ async function waitForMockCall(
   );
 }
 
+// Waits until at least `minRuns` runs have started in this test and every
+// started run (including follow-ups those runs start) has ended.
+// Fire-and-forget work launched at the end of a run (compaction warmup,
+// memory autosave) settles within the flush after it.
+async function waitForRunsToEnd(minRuns = 1, timeoutMs = 2_000) {
+  await waitUntil(
+    () =>
+      runsInFlight.length >= minRuns &&
+      runsInFlight.every((run) => run.settled),
+    `${minRuns} run(s) to start and every started run to end`,
+    timeoutMs,
+  );
+  await flushAsyncWork();
+}
+
 function createDeferred() {
   let resolve: (value: any) => void = () => {};
   let reject: (error?: unknown) => void = () => {};
@@ -1318,7 +1344,10 @@ beforeEach(async () => {
   }));
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // A run a test leaves blocked on purpose is dropped after the deadline.
+  await waitForRunsToEnd(0).catch(() => {});
+  runsInFlight.length = 0;
   mock.clearAllMocks();
 });
 
@@ -1770,19 +1799,11 @@ describe("runThreadChat startup latency", () => {
   });
 });
 
-/*
-TODO: restore runThreadChat title generation coverage.
-
-Spec:
-- uses the provider-specific fast title model and keeps thread chat settings on the selected model.
-- uses default smooth streaming instead of line-buffered chunks.
-- keeps the fallback title when the first user text is empty.
-
 describe("runThreadChat title generation", () => {
   it("uses the provider-specific fast title model and keeps thread chat settings on the selected model", async () => {
     const response = await runThreadChat(createSubmitRequest(), "user-1");
     const payload = await response.json();
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(response.status).toBe(202);
     expect(payload).toMatchObject({
@@ -1807,6 +1828,7 @@ describe("runThreadChat title generation", () => {
       engine: "sentinel",
       mode: "chat",
       modelId: "openai:gpt-5.2",
+      modelOptions: [{ id: "effort", value: "high" }],
       reasoningEffort: "high",
     });
     expect(updateThreadTitle).toHaveBeenCalledWith("thread-1", "Fast title");
@@ -1827,7 +1849,7 @@ describe("runThreadChat title generation", () => {
 
   it("uses default smooth streaming instead of line-buffered chunks", async () => {
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(smoothStream).toHaveBeenCalledWith();
   });
@@ -1844,7 +1866,7 @@ describe("runThreadChat title generation", () => {
     ]);
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -1861,7 +1883,7 @@ describe("runThreadChat title generation", () => {
     loadThreadMessages.mockImplementation(async () => []);
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(resolveThreadTitleModel).toHaveBeenCalledWith({
       providerId: "openai",
@@ -1881,7 +1903,7 @@ describe("runThreadChat title generation", () => {
     loadThreadMessages.mockImplementation(async () => []);
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -1893,12 +1915,12 @@ describe("runThreadChat title generation", () => {
       createRetryRequest("retry-assistant-message"),
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
     await runThreadChat(
       createRetryRequest("regenerate-assistant-message"),
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd(2);
     await runThreadChat(
       createSubmitRequest({
         message: createUserMessage("Edited prompt"),
@@ -1907,7 +1929,7 @@ describe("runThreadChat title generation", () => {
       }),
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd(3);
 
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
@@ -1926,65 +1948,24 @@ describe("runThreadChat title generation", () => {
       }),
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(ensureThread).toHaveBeenCalledWith(
       "thread-1",
       "user-1",
       "workspace-1",
-      "   ",
+      "New thread",
       "chat",
       "sentinel",
+      null,
     );
     expect(resolveThreadTitleModel).not.toHaveBeenCalled();
     expect(generateThreadTitle).not.toHaveBeenCalled();
     expect(updateThreadTitle).not.toHaveBeenCalled();
   });
 });
-*/
-
-/*
-TODO: restore runThreadChat context compaction coverage.
-
-Spec:
-- does not compact when the feature is disabled.
-- compacts older transcript history and persists a checkpoint.
-- does not compact when no prior assistant has exact input tokens.
-- uses the fixed context window override when enabled.
-- compacts short oversized branches without dropping the latest turn.
-- keeps only text and file parts in stripped compacted tail messages.
-- keeps persisted user attachments intact while normalizing the model transcript.
-- removes provider metadata from stripped assistant copies.
-- omits stripped compacted messages that only contain tool or reasoning parts.
-- reuses an existing checkpoint when it is still valid.
-- ignores an invalid checkpoint and leaves the raw tail intact.
-- warms the next checkpoint in the background after a successful turn.
-- does not warm the checkpoint in the background when approval is pending.
-- reuses the warmed checkpoint on the next turn.
 
 describe("runThreadChat context compaction", () => {
-  function createLongConversation(
-    messageCount = 14,
-    { assistantInputTokens }: { assistantInputTokens?: number } = {},
-  ) {
-    return Array.from({ length: messageCount }, (_, index) =>
-      createTextMessage({
-        id: `message-${index + 1}`,
-        metadata:
-          index % 2 === 1 && assistantInputTokens !== undefined
-            ? {
-                status: "completed",
-                usage: {
-                  inputTokens: assistantInputTokens,
-                },
-              }
-            : { status: "completed" },
-        role: index % 2 === 0 ? "user" : "assistant",
-        text: `Message ${index + 1}: ${"refactor-details ".repeat(60)}`,
-      }),
-    );
-  }
-
   it("does not compact when the feature is disabled", async () => {
     const messages = createLongConversation();
 
@@ -1999,7 +1980,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const runtimeMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -2012,8 +1993,10 @@ describe("runThreadChat context compaction", () => {
   });
 
   it("compacts older transcript history and persists a checkpoint", async () => {
+    // Over the 400-token window, so compaction blocks this turn; under it,
+    // compaction is deferred to the background (see startup latency).
     const messages = createLongConversation(14, {
-      assistantInputTokens: 240,
+      assistantInputTokens: 500,
     });
     resolvedChatModel.contextWindow = 400;
     getContextCompactionSettings.mockImplementation(async () => ({
@@ -2100,7 +2083,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const runtimeMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -2113,8 +2096,9 @@ describe("runThreadChat context compaction", () => {
   });
 
   it("uses the fixed context window override when enabled", async () => {
+    // Over the fixed 400-token window, so compaction blocks this turn.
     const messages = createLongConversation(14, {
-      assistantInputTokens: 240,
+      assistantInputTokens: 500,
     });
     resolvedChatModel.contextWindow = 10_000;
     getContextCompactionSettings.mockImplementation(async () => ({
@@ -2490,7 +2474,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -2579,7 +2563,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -2620,7 +2604,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -2671,7 +2655,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const compactedMessages =
       createAgentUIStream.mock.calls.at(-1)?.[0]?.uiMessages;
@@ -2719,7 +2703,13 @@ describe("runThreadChat context compaction", () => {
     expect(response.status).toBe(202);
     expect(generateText).not.toHaveBeenCalled();
 
-    await flushAsyncWork();
+    await waitForRunsToEnd();
+    await waitUntil(
+      () =>
+        contextCompactionCheckpointState.coveredThroughMessageId ===
+        "message-13",
+      "the background checkpoint warmup",
+    );
 
     expect(generateText).toHaveBeenCalledTimes(1);
     expect(updateThreadContextCompactionCheckpoint).toHaveBeenCalledWith(
@@ -2773,7 +2763,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(generateText).not.toHaveBeenCalled();
     expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
@@ -2825,7 +2815,7 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(generateText).not.toHaveBeenCalled();
     expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
@@ -2881,10 +2871,12 @@ describe("runThreadChat context compaction", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
-
-    expect(contextCompactionCheckpointState.coveredThroughMessageId).toBe(
-      "message-13",
+    await waitForRunsToEnd();
+    await waitUntil(
+      () =>
+        contextCompactionCheckpointState.coveredThroughMessageId ===
+        "message-13",
+      "the background checkpoint warmup",
     );
 
     generateText.mockClear();
@@ -2904,7 +2896,7 @@ describe("runThreadChat context compaction", () => {
     );
 
     expect(response.status).toBe(202);
-    await flushAsyncWork();
+    await waitForRunsToEnd(2);
     expect(generateText).not.toHaveBeenCalled();
     expect(updateThreadContextCompactionCheckpoint).not.toHaveBeenCalled();
     expect(
@@ -2915,33 +2907,6 @@ describe("runThreadChat context compaction", () => {
     });
   });
 });
-*/
-
-/*
-TODO: restore runThreadChat approvals and lifecycle coverage.
-
-Spec:
-- reuses the existing assistant id for approval continuation.
-- disposes shell sessions when the stream is stopped.
-- queues a follow-up on the backend without starting a new run.
-- steers by queuing at the front and cancelling the active assistant.
-- starts the next queued follow-up after stop-stream.
-- does not finalize a stream after a newer stream takes ownership.
-- disables shell tooling when the workspace root is unavailable.
-- applies stored tool approval overrides to the runtime agent.
-- builds a planning-only agent for plan-mode threads.
-- applies a requested mode change before building an existing thread turn.
-- keeps manage_task available in chat mode when the thread already has a plan.
-- persists plan answers before continuing a plan-mode assistant turn.
-- retrieves memory for the system prompt and autosaves after success.
-- skips bootstrap recall, autosave, and memory tools when memory is unavailable.
-- starts preflight dependencies before project discovery resolves.
-- falls back when optional preflight stalls instead of blocking the stream.
-- starts runtime bootstrap without waiting for model resolution.
-- starts system prompt assembly in parallel with context compaction.
-- keeps startup fallback behavior non-fatal when optional preflight work fails.
-- regenerates tool-bearing assistant messages from persisted transcript instead of stale client messages.
-- drains the next queued follow-up after a normal finish.
 
 describe("runThreadChat approvals and lifecycle", () => {
   it("reuses the existing assistant id for approval continuation", async () => {
@@ -2963,7 +2928,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     };
 
     const response = await runThreadChat(request, "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalledWith(
@@ -2993,7 +2958,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForMockCall(updateMessageMetadata);
 
     expect(response.status).toBe(204);
     expect(updateMessageMetadata).toHaveBeenCalledWith(
@@ -3168,7 +3133,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     }));
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(response.status).toBe(202);
     expect(buildPersistedAssistantMessage).not.toHaveBeenCalled();
@@ -3181,7 +3146,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     getWorkspaceRootPath.mockImplementation(async () => null);
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(aiTestState.prepared?.tools).toMatchObject({
       search_memory: expect.any(Object),
@@ -3237,14 +3202,14 @@ describe("runThreadChat approvals and lifecycle", () => {
     }));
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
-    expect(await toolCallNeedsApproval(aiTestState.prepared?.tools.list, {})).toBe(
-      true,
-    );
-    expect(await toolCallNeedsApproval(aiTestState.prepared?.tools.edit, {})).toBe(
-      false,
-    );
+    expect(
+      await toolCallNeedsApproval(aiTestState.prepared?.tools.list, {}),
+    ).toBe(true);
+    expect(
+      await toolCallNeedsApproval(aiTestState.prepared?.tools.edit, {}),
+    ).toBe(false);
   });
 
   it("builds a planning-only agent for plan-mode threads", async () => {
@@ -3255,7 +3220,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(Object.keys(aiTestState.prepared?.tools ?? {})).toEqual([
       "list",
@@ -3281,6 +3246,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       "Summarize the refactor",
       "plan",
       "sentinel",
+      null,
     );
   });
 
@@ -3298,7 +3264,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(Object.keys(aiTestState.prepared?.tools ?? {})).toEqual([
       "list",
@@ -3315,6 +3281,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       engine: "sentinel",
       mode: "plan",
       modelId: "openai:gpt-5.2",
+      modelOptions: [{ id: "effort", value: "high" }],
       reasoningEffort: "high",
     });
   });
@@ -3346,7 +3313,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     }));
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     const toolNames = Object.keys(aiTestState.prepared?.tools ?? {});
     expect(toolNames).toContain("manage_task");
@@ -3456,7 +3423,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     ]);
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(retrieveRelevantMemories).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -3509,7 +3476,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     }));
 
     await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(retrieveRelevantMemories).not.toHaveBeenCalled();
     expect(autosaveConversationMemories).not.toHaveBeenCalled();
@@ -3569,7 +3536,10 @@ describe("runThreadChat approvals and lifecycle", () => {
     });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitUntil(
+      () => started.length >= 6,
+      "preflight dependencies to start",
+    );
 
     expect(response.status).toBe(202);
     expect(started).toEqual(
@@ -3588,7 +3558,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       projectCandidates: [],
       shellStartDirectory: "/tmp/workspace-1",
     });
-    await flushAsyncWork();
+    await waitForRunsToEnd();
   });
 
   it("falls back when optional preflight stalls instead of blocking the stream", async () => {
@@ -3626,17 +3596,21 @@ describe("runThreadChat approvals and lifecycle", () => {
     });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitUntil(
+      () => started.includes("model") && started.includes("bootstrap"),
+      "model resolution and runtime bootstrap to start",
+    );
 
     expect(response.status).toBe(202);
     expect(started).toEqual(expect.arrayContaining(["model", "bootstrap"]));
     expect(getThreadRuntimeBootstrap).toHaveBeenCalledWith(
       "user-1",
       "workspace-1",
+      "thread-1",
     );
 
     modelResolution.resolve(resolvedChatModel);
-    await flushAsyncWork();
+    await waitForRunsToEnd();
   });
 
   it("starts system prompt assembly in parallel with context compaction", async () => {
@@ -3651,7 +3625,8 @@ describe("runThreadChat approvals and lifecycle", () => {
             ? {
                 status: "completed",
                 usage: {
-                  inputTokens: 240,
+                  // Over the 400-token window, so compaction blocks.
+                  inputTokens: 500,
                 },
               }
             : { status: "completed" },
@@ -3689,7 +3664,10 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitUntil(
+      () => started.includes("prompt") && started.includes("compaction"),
+      "prompt assembly and compaction to start",
+    );
 
     expect(response.status).toBe(202);
     expect(started).toEqual(expect.arrayContaining(["prompt", "compaction"]));
@@ -3699,7 +3677,8 @@ describe("runThreadChat approvals and lifecycle", () => {
     compactionResolution.resolve({
       text: "<summary>Compacted thread state</summary>",
     });
-    await flushAsyncWork();
+    await waitForRunsToEnd();
+    expect(createAgentUIStream).toHaveBeenCalledTimes(1);
   });
 
   it("keeps startup fallback behavior non-fatal when optional preflight work fails", async () => {
@@ -3737,7 +3716,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalled();
@@ -3803,7 +3782,7 @@ describe("runThreadChat approvals and lifecycle", () => {
       },
       "user-1",
     );
-    await flushAsyncWork();
+    await waitForRunsToEnd();
 
     expect(createAgentUIStream).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -3851,7 +3830,7 @@ describe("runThreadChat approvals and lifecycle", () => {
     });
 
     const response = await runThreadChat(createSubmitRequest(), "user-1");
-    await flushAsyncWork();
+    await waitForRunsToEnd(2);
 
     expect(response.status).toBe(202);
     expect(createAgentUIStream).toHaveBeenCalledTimes(2);
@@ -3859,4 +3838,3 @@ describe("runThreadChat approvals and lifecycle", () => {
     expect(deleteThreadFollowUp).toHaveBeenCalledWith("thread-1", "queued-1");
   });
 });
-*/
