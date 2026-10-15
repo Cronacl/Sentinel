@@ -8,14 +8,22 @@ import {
   type PermissionRuleset,
 } from "@opencode-ai/sdk/v2";
 
+import type { ForwardedMcpServer } from "@/lib/ai/chat/engines/platform/mcp-forwarding";
 import { getInstanceRuntimeKey } from "@/lib/ai/chat/engines/platform/runtime/resolve-binary";
 import {
   parseQuestionResponse,
   type ExternalQuestion,
 } from "@/lib/ai/chat/runtime/external/user-input";
+import { getErrorMessage } from "@/lib/errors";
+import { createLogger } from "@/lib/logger";
 import type { PermissionMode } from "@/server/db/enums";
 
 import type { OpenCodeRunEvent } from "./events";
+import {
+  buildOpenCodeV1McpConfig,
+  buildOpenCodeV2McpServers,
+  mergeOpenCodeConfigContent,
+} from "./mcp";
 import type { OpenCodeServerExit } from "./server";
 import { openOpenCodeEventStream } from "./sse";
 import {
@@ -31,7 +39,7 @@ import {
   type OpenCode2Client,
 } from "./v2/client";
 import { normalizeV2Event, toFormAnswer } from "./v2/events";
-import type { OpenCodeGeneration } from "./version";
+import { classifyOpenCodeVersion, type OpenCodeGeneration } from "./version";
 
 // One thread's OpenCode session for one turn, on the instance's pooled
 // server, behind one interface for both generations (design
@@ -45,6 +53,8 @@ import type { OpenCodeGeneration } from "./version";
 // thread's permission mode, plus an edit deny in plan mode): a resumed
 // session whose rules cannot be updated is not continued, since it could
 // keep a laxer mode's rules.
+
+const log = createLogger("OpenCodeSession");
 
 export type OpenCodeModelRef = {
   modelID: string;
@@ -390,6 +400,8 @@ async function openV2Session(
   const permissions = buildOpenCode2PermissionRules(input.permissionMode, {
     plan: input.planMode,
   });
+  // MCP tool calls ask through the session's rules like any other tool.
+  await syncV2McpServers(client, common, input.mcp);
   let info: {
     agent?: string;
     id: string;
@@ -593,6 +605,8 @@ export type OpenOpenCodeSessionInput = {
   cliVersion: string | null;
   /** Its id and configuration (pool slot and fingerprint). */
   instance: Parameters<typeof getInstanceRuntimeKey>[0];
+  /** The user's MCP servers and their forwardedMcpServersKey. */
+  mcp?: { key: string; servers: readonly ForwardedMcpServer[] } | null;
   /** The model a new 2.x session starts on. */
   model: OpenCodeModelRef;
   permissionMode: PermissionMode;
@@ -609,6 +623,97 @@ export type OpenOpenCodeSessionInput = {
 };
 
 /**
+ * 1.x: the server environment with the forwarded MCP servers merged into
+ * its OPENCODE_CONFIG_CONTENT, and their key. Null without servers, for a
+ * binary whose generation is unknown (a 2.x server would reject the 1.x
+ * shape), or when the content is not a JSON object.
+ */
+function buildV1McpLaunch(input: OpenOpenCodeSessionInput) {
+  const mcp = input.mcp;
+  if (
+    !mcp?.servers.length ||
+    classifyOpenCodeVersion(input.cliVersion)?.generation !== "v1"
+  ) {
+    return null;
+  }
+  const content = mergeOpenCodeConfigContent(
+    input.env.OPENCODE_CONFIG_CONTENT,
+    buildOpenCodeV1McpConfig(mcp.servers),
+  );
+  if (content === null) {
+    log.warn("opencode_config_content_not_merged", {
+      reason: "OPENCODE_CONFIG_CONTENT is not a JSON object",
+    });
+    return null;
+  }
+  return {
+    env: { ...input.env, OPENCODE_CONFIG_CONTENT: content },
+    key: mcp.key,
+  };
+}
+
+/** Never a forwardedMcpServersKey (hex or empty). */
+const INCOMPLETE_MCP_SYNC = "incomplete";
+
+/**
+ * 2.x: adds the forwarded MCP servers to the server for `directory` (add
+ * replaces a server of the same name) and removes the ones a previous turn
+ * added that are gone. Skipped while the directory has the same key. Best
+ * effort: a server that cannot be added leaves the turn running without it.
+ */
+async function syncV2McpServers(
+  client: OpenCode2Client,
+  common: SessionCommon,
+  mcp: OpenOpenCodeSessionInput["mcp"],
+) {
+  const key = mcp?.key ?? "";
+  const current = common.server.forwardedMcp.get(common.directory);
+  if ((current?.key ?? "") === key) {
+    return;
+  }
+  const location = { directory: common.directory };
+  const servers = buildOpenCodeV2McpServers(mcp?.servers ?? []);
+  const names = Object.keys(servers);
+  let complete = true;
+  const leftover: string[] = [];
+  for (const name of current?.names ?? []) {
+    if (names.includes(name)) continue;
+    await client.mcp
+      .remove({ location, server: name })
+      .catch((error: unknown) => {
+        // Already gone (never added, or the user removed it) is done.
+        if (isNotFound(error)) return;
+        complete = false;
+        leftover.push(name);
+        log.warn("opencode_mcp_remove_failed", {
+          error: getErrorMessage(error),
+          server: name,
+        });
+      });
+  }
+  for (const [name, config] of Object.entries(servers)) {
+    await client.mcp
+      .add({ config, location, server: name })
+      .catch((error: unknown) => {
+        complete = false;
+        // Logged by name, never with its config (secrets).
+        log.warn("opencode_mcp_add_failed", {
+          error: getErrorMessage(error),
+          server: name,
+        });
+      });
+  }
+  // After a failure the next turn retries (no key matches) and again
+  // removes what is no longer forwarded.
+  common.server.forwardedMcp.set(
+    common.directory,
+    complete
+      ? { key, names }
+      : { key: INCOMPLETE_MCP_SYNC, names: [...names, ...leftover] },
+  );
+}
+
+/**
  * The thread's session on the instance's server: the persisted one when it
  * still exists on this generation, else a new one. Release the result when
  * the turn ends.
@@ -617,11 +722,13 @@ export async function openOpenCodeSession(
   input: OpenOpenCodeSessionInput,
 ): Promise<OpenCodeTurnSession> {
   const instanceId = input.instance?.id ?? "opencode";
+  const v1Mcp = buildV1McpLaunch(input);
   const lease = await acquireOpenCodeServer(
     {
       binaryPath: input.binaryPath,
-      env: input.env,
+      env: v1Mcp?.env ?? input.env,
       instanceId,
+      ...(v1Mcp ? { mcpKey: v1Mcp.key } : {}),
       runtimeKey: getInstanceRuntimeKey(input.instance),
       version: input.cliVersion,
     },

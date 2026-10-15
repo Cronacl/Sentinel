@@ -196,6 +196,8 @@ export const DRIVER_CATALOG = {
       reportsUsageLimits: true,
       supportsConversationRollback: true,
       supportsImages: true,
+      // The user's MCP servers go in thread/start|resume config.
+      supportsMcpInjection: true,
       supportsPlanMode: "native",
       supportsTextGeneration: true,
       supportsUserInput: true,
@@ -225,6 +227,8 @@ export const DRIVER_CATALOG = {
       reportsContextWindow: true,
       reportsUsageLimits: true,
       supportsImages: true,
+      // The user's MCP servers go in the query's mcpServers.
+      supportsMcpInjection: true,
       supportsPlanMode: "native",
       supportsTextGeneration: true,
       supportsUserInput: true,
@@ -254,6 +258,8 @@ export const DRIVER_CATALOG = {
       ...EXTERNAL_CAPABILITIES,
       // Typed literally so the runtime's mapping is checked when this widens.
       permissionModes: DEFAULT_DRIVER_PERMISSION_MODES,
+      // The user's MCP servers go in the session config's mcpServers.
+      supportsMcpInjection: true,
       supportsTextGeneration: true,
       supportsUserInput: true,
     },
@@ -325,6 +331,9 @@ export const DRIVER_CATALOG = {
       reportsUsageLimits: true,
       // Images go as file parts (1.x) or files (2.x).
       supportsImages: true,
+      // The user's MCP servers: server config content (1.x) or runtime
+      // adds (2.x).
+      supportsMcpInjection: true,
       supportsPlanMode: "agent-select",
       // The instance's server keeps the thread's session between turns.
       supportsResume: "native",

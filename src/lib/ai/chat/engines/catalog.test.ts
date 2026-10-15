@@ -188,4 +188,12 @@ describe("catalog lookups", () => {
       ),
     ).toEqual([]);
   });
+
+  it("forwards the user's MCP servers on every implemented engine but Pi", () => {
+    expect(
+      AVAILABLE_DRIVER_KINDS.filter(
+        (kind) => !getDriverMeta(kind)?.capabilities.supportsMcpInjection,
+      ),
+    ).toEqual(["pi"]);
+  });
 });

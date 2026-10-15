@@ -43,6 +43,10 @@ import {
 } from "../engine-instance";
 import { createMirrorEmitter, type MirrorEmitter } from "../external/emitter";
 import {
+  loadForwardedMcpServers,
+  logSkippedMcpServers,
+} from "../external/mcp-servers";
+import {
   buildQuestionInput,
   parseQuestionResponse,
   type ExternalQuestion,
@@ -1105,9 +1109,16 @@ export async function runOpenCodeThreadChat(
       ),
       DRIVER_CATALOG.opencode.capabilities.permissionModes,
     );
+    // The user's MCP servers; their tools ask through the session's rules.
+    const forwardedMcp = await loadForwardedMcpServers({
+      env: instance?.env ?? process.env,
+      userId: request.userId,
+    });
+    logSkippedMcpServers("opencode", forwardedMcp.skipped);
     session = await startOpenCodeSession({
       cwd: workspaceRoot,
       instance: instance ?? null,
+      mcp: forwardedMcp,
       model: { ...parsedModel, variant: selectedVariant },
       // Without tools every request is asked (and declined here).
       permissionMode: toolsEnabled ? permissionMode : "default",

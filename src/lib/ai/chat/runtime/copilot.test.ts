@@ -103,7 +103,10 @@ mock.module("@/lib/streams", () => ({
   },
 }));
 
+let mcpServers: unknown[] = [];
+
 const workspaceRuntimeMock = () => ({
+  getMcpServerRuntime: mock(async () => mcpServers),
   getToolApprovalPolicies: mock(async () => ({})),
   getToolPermissionMode: mock(async () => toolPermissionMode),
   getWorkspaceRootPath: mock(async () => "/tmp/workspace"),
@@ -420,6 +423,63 @@ describe("Copilot SDK 1.x session wiring", () => {
     });
     expect(config.reasoningEffort).toBeUndefined();
     expect(copilotManager.getSupportedReasoningEfforts).not.toHaveBeenCalled();
+  });
+
+  it("passes the user's enabled MCP servers as session mcpServers", async () => {
+    mcpServers = [
+      {
+        config: {
+          args: ["serve"],
+          command: "docs-mcp",
+          cwd: "/",
+          envPassthrough: [],
+          envVars: [{ key: "DOCS_TOKEN", value: "secret" }],
+        },
+        id: "mcp-1",
+        isEnabled: true,
+        name: "Docs",
+        transport: "stdio",
+      },
+      {
+        config: {
+          headers: [{ key: "X-Key", value: "k" }],
+          headersFromEnv: [],
+          url: "https://mcp.example.com/mcp",
+        },
+        id: "mcp-2",
+        isEnabled: true,
+        name: "Remote",
+        transport: "http",
+      },
+    ];
+    try {
+      const { config } = await startCopilotRun("thread-mcp");
+
+      expect((config as { mcpServers?: unknown }).mcpServers).toEqual({
+        Docs: {
+          args: ["serve"],
+          command: "docs-mcp",
+          env: { DOCS_TOKEN: "secret" },
+          tools: ["*"],
+          type: "local",
+          workingDirectory: "/",
+        },
+        Remote: {
+          headers: { "X-Key": "k" },
+          tools: ["*"],
+          type: "http",
+          url: "https://mcp.example.com/mcp",
+        },
+      });
+    } finally {
+      mcpServers = [];
+    }
+  });
+
+  it("sends no mcpServers when the user has none enabled", async () => {
+    const { config } = await startCopilotRun("thread-no-mcp");
+
+    expect(config).not.toHaveProperty("mcpServers");
   });
 
   it("sends xhigh when the model lists it and falls back to high otherwise", async () => {

@@ -109,7 +109,10 @@ mock.module("@/lib/streams", () => ({
   },
 }));
 
+let mcpServers: unknown[] = [];
+
 mock.module("./workspace", () => ({
+  getMcpServerRuntime: mock(async () => mcpServers),
   getToolApprovalPolicies: mock(async () => ({})),
   getToolPermissionMode,
   getWorkspaceRootPath: mock(async () => "/tmp/workspace"),
@@ -879,6 +882,77 @@ describe("runClaudeThreadChat approvals", () => {
         }),
       }),
     );
+  });
+
+  it("passes the user's enabled MCP servers as query mcpServers", async () => {
+    process.env.SENTINEL_TEST_CLAUDE_MCP_TOKEN = "from-env";
+    mcpServers = [
+      {
+        config: {
+          args: ["--stdio"],
+          command: "docs-mcp",
+          cwd: "/",
+          envPassthrough: ["SENTINEL_TEST_CLAUDE_MCP_TOKEN"],
+          envVars: [],
+        },
+        id: "mcp-1",
+        isEnabled: true,
+        name: "Docs",
+        transport: "stdio",
+      },
+      {
+        config: {
+          bearerTokenEnvVar: "SENTINEL_TEST_CLAUDE_MCP_TOKEN",
+          headers: [],
+          headersFromEnv: [],
+          url: "https://mcp.example.com/mcp",
+        },
+        id: "mcp-2",
+        isEnabled: true,
+        name: "Remote",
+        transport: "http",
+      },
+    ];
+    try {
+      await runClaudeThreadChat(
+        {
+          message: createUserMessage("Use the docs."),
+          modelId: "claude-sonnet-4-20250514",
+          threadId: "thread-mcp",
+          trigger: "submit-user-message",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        },
+        { chatEngineState: null, mode: "chat", status: "idle" } as any,
+      );
+
+      expect(capturedClaudeQueryInput?.options?.mcpServers).toEqual({
+        Docs: {
+          args:
+            process.platform === "win32"
+              ? expect.any(Array)
+              : [
+                  "-c",
+                  'cd "$1" && shift && exec "$@"',
+                  "sh",
+                  "/",
+                  "docs-mcp",
+                  "--stdio",
+                ],
+          command: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
+          env: { SENTINEL_TEST_CLAUDE_MCP_TOKEN: "from-env" },
+          type: "stdio",
+        },
+        Remote: {
+          headers: { Authorization: "Bearer from-env" },
+          type: "http",
+          url: "https://mcp.example.com/mcp",
+        },
+      });
+    } finally {
+      mcpServers = [];
+      delete process.env.SENTINEL_TEST_CLAUDE_MCP_TOKEN;
+    }
   });
 
   it("starts a fresh Claude session when leaving plan mode to implement", async () => {

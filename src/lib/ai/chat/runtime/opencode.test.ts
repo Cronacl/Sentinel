@@ -87,7 +87,10 @@ mock.module("@/lib/streams", () => ({
       new ReadableStream<string>({ start: (controller) => controller.close() }),
   },
 }));
+let mcpServers: unknown[] = [];
+
 mock.module("./workspace", () => ({
+  getMcpServerRuntime: async () => mcpServers,
   getToolApprovalPolicies: async () => ({}),
   getToolPermissionMode,
   getWorkspaceRootPath,
@@ -873,6 +876,62 @@ describe("runOpenCodeThreadChat on OpenCode 2.x", () => {
         model: { id: "claude-sonnet-4-5", providerID: "anthropic" },
       }),
     );
+  });
+
+  it("adds the user's enabled MCP servers to the server before prompting", async () => {
+    mcpServers = [
+      {
+        config: {
+          bearerTokenEnvVar: "SENTINEL_TEST_OPENCODE_MCP_TOKEN",
+          headers: [],
+          headersFromEnv: [],
+          url: "https://mcp.example.com/mcp",
+        },
+        id: "mcp-1",
+        isEnabled: true,
+        name: "Remote Docs",
+        transport: "http",
+      },
+    ];
+    try {
+      const fake = await createFakeOpenCode({ generation: 2 });
+      // Read from the instance's environment, like its processes get it.
+      fake.instance.env = {
+        ...fake.instance.env,
+        SENTINEL_TEST_OPENCODE_MCP_TOKEN: "from-env",
+      };
+      const threadId = nextThreadId();
+      await runOpenCodeThreadChat(
+        runRequest(threadId, "Look it up"),
+        null,
+        fake.instance,
+      );
+      await waitForFinal(threadId, "completed");
+
+      const requests = await fake.requests();
+      const added = requests.findIndex(
+        (request) => request.path === "/api/experimental/mcp/Remote_Docs",
+      );
+      expect(requests[added]).toEqual(
+        expect.objectContaining({
+          body: {
+            config: {
+              headers: { Authorization: "Bearer from-env" },
+              type: "remote",
+              url: "https://mcp.example.com/mcp",
+            },
+          },
+          method: "PUT",
+        }),
+      );
+      const prompted = requests.findIndex((request) =>
+        /^\/api\/session\/[^/]+\/prompt$/.test(request.path),
+      );
+      expect(added).toBeGreaterThan(-1);
+      expect(added).toBeLessThan(prompted);
+    } finally {
+      mcpServers = [];
+    }
   });
 
   it("resumes the session, switches the model and restores the agent after a plan turn", async () => {

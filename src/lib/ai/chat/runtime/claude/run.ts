@@ -25,6 +25,7 @@ import {
   resolveClaudeCodeRuntime,
   resolveClaudeSdkEffort,
 } from "@/lib/ai/chat/engines/claude-sdk";
+import { buildClaudeMcpServers } from "@/lib/ai/chat/engines/claude-sdk/mcp";
 import {
   getClaudeThreadState,
   type ClaudePermissionMode,
@@ -54,6 +55,10 @@ import {
   createThreadEventChannel,
   type ThreadEventChannel,
 } from "../thread-chat/run-state";
+import {
+  loadForwardedMcpServers,
+  logSkippedMcpServers,
+} from "../external/mcp-servers";
 import {
   buildHistoryReplayPrefix,
   getReplayHistory,
@@ -691,6 +696,7 @@ async function buildClaudeRuntimeOptions(input: {
   requestedModelId: string | null;
   sessionId: string;
   threadMode: "chat" | "plan";
+  userId: string;
   workspaceRoot: string | null;
 }) {
   const claudePermissionMode = buildClaudePermissionMode(
@@ -705,6 +711,13 @@ async function buildClaudeRuntimeOptions(input: {
     models: await getCachedClaudeModels(runtime.executablePath),
     reasoningEffort: input.reasoningEffort,
   });
+  // The user's MCP servers, next to the ones Claude Code's own settings
+  // configure. Their tools ask through canUseTool like any other.
+  const forwardedMcp = await loadForwardedMcpServers({
+    env: runtime.env,
+    userId: input.userId,
+  });
+  logSkippedMcpServers("claude", forwardedMcp.skipped);
 
   return {
     options: buildClaudeSdkBaseOptions({
@@ -718,6 +731,9 @@ async function buildClaudeRuntimeOptions(input: {
       cwd: input.cwd,
       ...(effort ? { effort } : {}),
       env: runtime.env,
+      ...(forwardedMcp.servers.length > 0
+        ? { mcpServers: buildClaudeMcpServers(forwardedMcp.servers) }
+        : {}),
       ...(runtime.executablePath
         ? { pathToClaudeCodeExecutable: runtime.executablePath }
         : {}),
@@ -1779,6 +1795,7 @@ export async function runClaudeThreadChat(
     requestedModelId,
     sessionId,
     threadMode,
+    userId: request.userId,
     workspaceRoot,
   });
 

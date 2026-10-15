@@ -43,6 +43,7 @@ import {
   openOpenCodeSession,
   type OpenCodeModelRef,
   type OpenCodeTurnSession,
+  type OpenOpenCodeSessionInput,
 } from "./session";
 import { createOpenCode2Client, type OpenCode2Client } from "./v2/client";
 import {
@@ -1094,6 +1095,8 @@ export type StartOpenCodeSessionInput = {
   cwd: string;
   /** The thread's instance: its binary and environment. */
   instance?: OpenCodeRuntimeInstance | null;
+  /** The user's MCP servers (1.x config content, 2.x runtime adds). */
+  mcp?: OpenOpenCodeSessionInput["mcp"];
   model: OpenCodeModelRef;
   permissionMode: OpenCodeTurnSessionPermissionMode;
   /** A plan-mode turn (its rules deny edits). */
@@ -1133,6 +1136,7 @@ export async function startOpenCodeSession(
     cwd: input.cwd,
     env: runtime.env,
     instance: input.instance ?? null,
+    mcp: input.mcp ?? null,
     model: input.model,
     permissionMode: input.permissionMode,
     planMode: input.planMode,

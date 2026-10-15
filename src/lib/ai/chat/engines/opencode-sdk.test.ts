@@ -34,6 +34,7 @@ const {
   createOpenCodeSdkClient,
   disposeAllOpenCodeServers,
   getOpenCodeEngineStatus,
+  getOpenCodeServerPool,
   isOpenCodeAuthError,
   OPENCODE_MINIMUM_VERSION,
   OPENCODE_RECOMMENDED_VERSION,
@@ -893,5 +894,144 @@ describe.skipIf(process.platform === "win32")("startOpenCodeSession", () => {
     expect(serves).toHaveLength(1);
     await disposeAllOpenCodeServers();
     expect(await waitFor(() => !isProcessAlive(serves[0]!.pid))).toBe(true);
+  });
+
+  const forwardedServers = [
+    {
+      args: ["serve"],
+      command: "docs-mcp",
+      cwd: null,
+      env: { DOCS_TOKEN: "secret" },
+      name: "Docs",
+      transport: "stdio" as const,
+    },
+    {
+      headers: { Authorization: "Bearer t" },
+      name: "Remote",
+      transport: "http" as const,
+      url: "https://mcp.example.com/mcp",
+    },
+  ];
+
+  it("merges forwarded MCP servers into a 1.x server's config content and respawns when they change", async () => {
+    const fake = await createFakeOpenCode({ version: "1.18.35" });
+    process.env.SENTINEL_OPENCODE_PATH = fake.binaryPath;
+    process.env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+      mcp: { mine: { type: "remote", url: "https://mine.example.com" } },
+      share: "disabled",
+    });
+    try {
+      const input = {
+        cwd: tempRoot,
+        mcp: { key: "key-1", servers: forwardedServers },
+        model: { modelID: "gpt-5", providerID: "openai" },
+        permissionMode: "default" as const,
+        title: "t",
+      };
+      (await startOpenCodeSession(input)).release();
+      (await startOpenCodeSession(input)).release();
+
+      const server = getOpenCodeServerPool().peek("opencode")!;
+      const env = (await (
+        await fetch(`${server.url}/_test/env`, {
+          headers: { authorization: server.authorization },
+        })
+      ).json()) as { configContent: string };
+      expect(JSON.parse(env.configContent)).toEqual({
+        mcp: {
+          Docs: {
+            command: ["docs-mcp", "serve"],
+            environment: { DOCS_TOKEN: "secret" },
+            type: "local",
+          },
+          mine: { type: "remote", url: "https://mine.example.com" },
+          Remote: {
+            headers: { Authorization: "Bearer t" },
+            type: "remote",
+            url: "https://mcp.example.com/mcp",
+          },
+        },
+        share: "disabled",
+      });
+      // The same servers reuse the server; changed ones start another.
+      expect(
+        (await fake.invocations()).filter((entry) => entry.pid),
+      ).toHaveLength(1);
+      (
+        await startOpenCodeSession({
+          ...input,
+          mcp: { key: "key-2", servers: forwardedServers.slice(0, 1) },
+        })
+      ).release();
+      expect(
+        (await fake.invocations()).filter((entry) => entry.pid),
+      ).toHaveLength(2);
+    } finally {
+      delete process.env.OPENCODE_CONFIG_CONTENT;
+    }
+  });
+
+  it("adds forwarded MCP servers to a 2.x server at runtime and removes stale ones", async () => {
+    const fixture = await createFixtureOpenCode({ generation: 2 });
+    const input = {
+      cwd: tempRoot,
+      instance: fixture.instance,
+      mcp: { key: "key-1", servers: forwardedServers },
+      model: { modelID: "gpt-5", providerID: "openai" },
+      permissionMode: "default" as const,
+      title: "t",
+    };
+    const mcpRequests = async () =>
+      (await fixture.requests())
+        .filter((request) => request.path.startsWith("/api/experimental/mcp/"))
+        .map((request) => [request.method, request.path, request.body]);
+
+    (await startOpenCodeSession(input)).release();
+    (await startOpenCodeSession(input)).release();
+    expect(await mcpRequests()).toEqual([
+      [
+        "PUT",
+        "/api/experimental/mcp/Docs",
+        {
+          config: {
+            command: ["docs-mcp", "serve"],
+            environment: { DOCS_TOKEN: "secret" },
+            type: "local",
+          },
+        },
+      ],
+      [
+        "PUT",
+        "/api/experimental/mcp/Remote",
+        {
+          config: {
+            headers: { Authorization: "Bearer t" },
+            type: "remote",
+            url: "https://mcp.example.com/mcp",
+          },
+        },
+      ],
+    ]);
+
+    (
+      await startOpenCodeSession({
+        ...input,
+        mcp: { key: "key-2", servers: forwardedServers.slice(0, 1) },
+      })
+    ).release();
+    expect((await mcpRequests()).slice(2)).toEqual([
+      ["DELETE", "/api/experimental/mcp/Remote", undefined],
+      [
+        "PUT",
+        "/api/experimental/mcp/Docs",
+        {
+          config: {
+            command: ["docs-mcp", "serve"],
+            environment: { DOCS_TOKEN: "secret" },
+            type: "local",
+          },
+        },
+      ],
+    ]);
   });
 });

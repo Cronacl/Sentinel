@@ -22,6 +22,7 @@ import {
   CODEX_DEFAULT_MODEL_ID,
   toCodexReasoningEffort,
 } from "@/lib/ai/chat/engines/codex-app-server/models";
+import { buildCodexThreadMcpConfig } from "@/lib/ai/chat/engines/codex-app-server/mcp";
 import {
   buildCodexUserInputPrompt,
   parseCodexUserInputQuestions,
@@ -62,6 +63,10 @@ import {
   createThreadEventChannel,
   type ThreadEventChannel,
 } from "../thread-chat/run-state";
+import {
+  loadForwardedMcpServers,
+  logSkippedMcpServers,
+} from "../external/mcp-servers";
 import {
   buildHistoryReplayPrefix,
   getReplayHistory,
@@ -2431,12 +2436,24 @@ export async function runCodexThreadChat(
       thread: existingThread,
     });
 
+    // The user's MCP servers, in the thread's config overrides. MCP tool
+    // calls ask through the same approvals (declined when unattended).
+    const forwardedMcp = await loadForwardedMcpServers({
+      env: instance?.env ?? process.env,
+      userId: request.userId,
+    });
+    logSkippedMcpServers("codex", forwardedMcp.skipped);
+    const threadMcp = {
+      config: buildCodexThreadMcpConfig(forwardedMcp.servers),
+      key: forwardedMcp.key,
+    };
     const threadStartResponse =
       resumableCodexState?.codexThreadId != null
-        ? await codex.resumeThread(resumableCodexState.codexThreadId)
+        ? await codex.resumeThread(resumableCodexState.codexThreadId, threadMcp)
         : await codex.startThread({
             approvalPolicy,
             cwd: workspaceRoot,
+            mcp: threadMcp,
             model: request.modelId ?? null,
             sandboxMode,
           });

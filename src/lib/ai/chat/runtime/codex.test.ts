@@ -175,7 +175,10 @@ mock.module("@/lib/streams", () => ({
   },
 }));
 
+let mcpServers: unknown[] = [];
+
 mock.module("./workspace", () => ({
+  getMcpServerRuntime: mock(async () => mcpServers),
   getToolApprovalPolicies: mock(async () => ({})),
   getToolPermissionMode: mock(async () => "default"),
   getWorkspaceRootPath: mock(async () => "/tmp/workspace"),
@@ -1793,8 +1796,100 @@ describe("runCodexThreadChat instances and unattended runs", () => {
 
     expect(codexManager.resumeThread).toHaveBeenCalledWith(
       "codex-thread-old-home",
+      { config: null, key: "" },
     );
     expect(firstTurnText()).toBe("Do the thing");
+  });
+
+  it("forwards the user's enabled MCP servers in thread/start and thread/resume config", async () => {
+    mcpServers = [
+      {
+        config: {
+          args: ["serve"],
+          command: "docs-mcp",
+          envPassthrough: [],
+          envVars: [{ key: "DOCS_TOKEN", value: "secret" }],
+        },
+        id: "mcp-1",
+        isEnabled: true,
+        name: "Docs",
+        transport: "stdio",
+      },
+      {
+        config: {
+          headers: [{ key: "X-Key", value: "k" }],
+          headersFromEnv: [],
+          url: "https://mcp.example.com/mcp",
+        },
+        id: "mcp-2",
+        isEnabled: true,
+        name: "Remote",
+        transport: "http",
+      },
+      {
+        config: { args: [], command: "off", envPassthrough: [], envVars: [] },
+        id: "mcp-3",
+        isEnabled: false,
+        name: "Off",
+        transport: "stdio",
+      },
+    ];
+    const expectedConfig = {
+      mcp_servers: {
+        Docs: {
+          args: ["serve"],
+          command: "docs-mcp",
+          env: { DOCS_TOKEN: "secret" },
+        },
+        Remote: {
+          http_headers: { "X-Key": "k" },
+          url: "https://mcp.example.com/mcp",
+        },
+      },
+    };
+    const instance = makeFakeInstance({
+      continuationKey: "codex:home:/tmp/old-home",
+      driver: "codex",
+      id: "codex-work",
+    });
+    try {
+      await runCodexThreadChat(
+        {
+          message: userMessage("thread-mcp-new"),
+          modelId: "gpt-6-astra",
+          threadId: "thread-mcp-new",
+          trigger: "submit-user-message",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        },
+        { chatEngineState: null, mode: "chat", status: "idle" } as any,
+        instance,
+      );
+      const started = (codexManager.startThread.mock.calls[0] as any)?.[0];
+      expect(started.mcp.config).toEqual(expectedConfig);
+      expect(started.mcp.key).toMatch(/^[0-9a-f]{64}$/);
+
+      loadThreadMessages.mockResolvedValueOnce(priorRecords as any);
+      codexManager.resumeThread.mockClear();
+      await runCodexThreadChat(
+        {
+          message: { ...userMessage("thread-mcp-kept"), id: "user-2" },
+          modelId: "gpt-6-astra",
+          threadId: "thread-mcp-kept",
+          trigger: "submit-user-message",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        },
+        threadOnHome("/tmp/old-home"),
+        instance,
+      );
+      expect(codexManager.resumeThread).toHaveBeenCalledWith(
+        "codex-thread-old-home",
+        { config: expectedConfig, key: started.mcp.key },
+      );
+    } finally {
+      mcpServers = [];
+    }
   });
 
   it("declines approvals and questions at once when nobody can answer", async () => {

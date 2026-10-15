@@ -711,6 +711,54 @@ describe("CodexAppServerManager declined server requests", () => {
 });
 
 describe("CodexAppServerManager client requests", () => {
+  it("sends forwarded MCP servers in thread config and reloads a thread loaded with others", async () => {
+    const thread = { result: { model: "gpt-6", thread: { id: "thr" } } };
+    const manager = createManager({
+      responses: {
+        "thread/resume": [thread, thread, thread, thread],
+        "thread/start": thread,
+        "thread/unsubscribe": { result: { status: "unsubscribed" } },
+      },
+    });
+    const config = (url: string) => ({ mcp_servers: { Docs: { url } } });
+
+    await manager.startThread({
+      approvalPolicy: "on-request",
+      cwd: "/work",
+      mcp: { config: config("https://a"), key: "key-a" },
+      model: null,
+      sandboxMode: "workspace-write",
+    });
+    // Loaded with the same servers: rejoined as is.
+    await manager.resumeThread("thr", {
+      config: config("https://a"),
+      key: "key-a",
+    });
+    // Changed: unloaded first so the resume applies the new config.
+    await manager.resumeThread("thr", {
+      config: config("https://b"),
+      key: "key-b",
+    });
+    // Closed by Codex: the next resume loads it again without unsubscribing.
+    await emitFromPeer(manager, [
+      { jsonrpc: "2.0", method: "thread/closed", params: { threadId: "thr" } },
+    ]);
+    await manager.resumeThread("thr", { config: null, key: "" });
+
+    const frames = (await receivedFrames(manager)).filter(
+      (frame) => frame.method && frame.method.startsWith("thread/"),
+    );
+    expect(
+      frames.map((frame) => [frame.method, frame.params.config ?? null]),
+    ).toEqual([
+      ["thread/start", config("https://a")],
+      ["thread/resume", config("https://a")],
+      ["thread/unsubscribe", null],
+      ["thread/resume", config("https://b")],
+      ["thread/resume", null],
+    ]);
+  });
+
   it("reverts turns by paging thread/turns/list and calling thread/revert", async () => {
     const manager = createManager({
       responses: {

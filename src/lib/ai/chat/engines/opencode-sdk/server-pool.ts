@@ -22,8 +22,8 @@ import { classifyOpenCodeVersion } from "./version";
 // instance shares it, and a turn no longer pays a server start.
 //
 // - Reused while its fingerprint (the instance's runtime configuration,
-//   binary and version) holds; a changed one is replaced once its last
-//   turn released it.
+//   binary, version and, on 1.x, the forwarded MCP servers) holds; a
+//   changed one is replaced once its last turn released it.
 // - Reaped 15 minutes after the last turn released it.
 // - A server that exited is dropped; the next turn starts a new one.
 // - Removing or disabling the instance ends it, and shutdown ends all
@@ -37,6 +37,11 @@ export const OPENCODE_SERVER_IDLE_TTL_MS = 15 * 60 * 1_000;
 export type PooledOpenCodeServer = OpenCodeServerProcess & {
   dispose(): Promise<void>;
   fingerprint: string;
+  /**
+   * 2.x: the forwarded MCP servers added per directory at runtime (their
+   * key and names), which the server forgets when it exits.
+   */
+  forwardedMcp: Map<string, { key: string; names: string[] }>;
 };
 
 export type OpenCodeServerLease = {
@@ -49,6 +54,11 @@ export type OpenCodeServerLaunch = {
   env: NodeJS.ProcessEnv;
   /** The instance id (pool slot). */
   instanceId: string;
+  /**
+   * 1.x: the key of the forwarded MCP servers in its
+   * OPENCODE_CONFIG_CONTENT (a change starts a new server).
+   */
+  mcpKey?: string;
   /** getInstanceRuntimeKey(instance): its configuration. */
   runtimeKey: string;
   /** `--version` output; picks the password variable. */
@@ -58,7 +68,12 @@ export type OpenCodeServerLaunch = {
 export function openCodeServerFingerprint(launch: OpenCodeServerLaunch) {
   return createHash("sha256")
     .update(
-      JSON.stringify([launch.runtimeKey, launch.binaryPath, launch.version]),
+      JSON.stringify([
+        launch.runtimeKey,
+        launch.binaryPath,
+        launch.version,
+        ...(launch.mcpKey ? [launch.mcpKey] : []),
+      ]),
     )
     .digest("hex");
 }
@@ -128,6 +143,7 @@ export async function acquireOpenCodeServer(
       ...started,
       dispose: () => disposeServer(started),
       fingerprint,
+      forwardedMcp: new Map(),
     };
     void started.exited.then(({ code, signal }) => {
       if (pool.peek(key) !== pooled) return;

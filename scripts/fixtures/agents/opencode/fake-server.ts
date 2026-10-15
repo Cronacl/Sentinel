@@ -212,6 +212,8 @@ class FakeOpenCodeServer {
     string,
     PendingReply & { form: JsonObject }
   >();
+  /** 2.x MCP servers added at runtime, by name. */
+  private readonly mcpServers = new Map<string, JsonObject>();
   private readonly seq = new Map<string, number>();
   /** 2.x user messages by inbox id, until delivered or cancelled. */
   private readonly inboxItems = new Map<string, JsonObject>();
@@ -518,6 +520,28 @@ class FakeOpenCodeServer {
     }
     if (method === "GET" && path === "/api/command") {
       return json(this.scenario.commands ?? { location, data: [] });
+    }
+    // Runtime MCP servers (experimental.mcp.add|remove): kept until the
+    // server exits, like the real one's runtime set.
+    if ((match = /^\/api\/experimental\/mcp\/([^/]+)$/.exec(path))) {
+      const server = decodeURIComponent(match[1] ?? "");
+      if (method === "PUT") {
+        this.mcpServers.set(server, (input.config ?? {}) as JsonObject);
+        return new Response(null, { status: 204 });
+      }
+      if (method === "DELETE") {
+        if (!this.mcpServers.delete(server)) {
+          return json(
+            {
+              _tag: "McpServerNotFoundError",
+              message: `MCP server not found: ${server}`,
+              server,
+            },
+            404,
+          );
+        }
+        return new Response(null, { status: 204 });
+      }
     }
     if (method === "GET" && path === "/api/session") {
       return json({

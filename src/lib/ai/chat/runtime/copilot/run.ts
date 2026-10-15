@@ -19,6 +19,7 @@ import {
   getCopilotClientManager,
   normalizeCopilotErrorMessage,
 } from "@/lib/ai/chat/engines/copilot-sdk";
+import { buildCopilotMcpServers } from "@/lib/ai/chat/engines/copilot-sdk/mcp";
 import { getCopilotThreadState } from "@/lib/ai/chat/engines/types";
 import {
   mergeThreadMessageMetadata,
@@ -61,6 +62,10 @@ import {
   resolveCopilotPromptResponse,
   type CopilotPromptResponse,
 } from "./event-helpers";
+import {
+  loadForwardedMcpServers,
+  logSkippedMcpServers,
+} from "../external/mcp-servers";
 import { buildTranscriptBootstrapPrompt } from "../history-replay";
 import { isUnattendedRun } from "../unattended";
 import {
@@ -1230,6 +1235,7 @@ export async function stopCopilotThreadRun(
 
 function buildCopilotSessionConfig(input: {
   cwd: string;
+  mcpServers: SessionConfig["mcpServers"] | null;
   modelId: string | null;
   onEvent: (event: SessionEvent) => void;
   onPermissionRequest: NonNullable<SessionConfig["onPermissionRequest"]>;
@@ -1241,6 +1247,7 @@ function buildCopilotSessionConfig(input: {
     // Sentinel has no sub-agent stream view yet; non-streaming sub-agent events
     // and subagent.* lifecycle events still arrive.
     includeSubAgentStreamingEvents: false,
+    ...(input.mcpServers ? { mcpServers: input.mcpServers } : {}),
     ...(input.modelId ? { model: input.modelId } : {}),
     ...(input.reasoningEffort
       ? { reasoningEffort: input.reasoningEffort }
@@ -1554,8 +1561,18 @@ export async function runCopilotThreadChat(
       return await answer;
     };
 
+    // The user's MCP servers, for a new and a resumed session alike.
+    const forwardedMcp = await loadForwardedMcpServers({
+      env: instance?.env ?? process.env,
+      userId: request.userId,
+    });
+    logSkippedMcpServers("copilot", forwardedMcp.skipped);
     const sessionConfig = buildCopilotSessionConfig({
       cwd,
+      mcpServers:
+        forwardedMcp.servers.length > 0
+          ? buildCopilotMcpServers(forwardedMcp.servers)
+          : null,
       modelId: requestedModelId,
       onEvent: (event) => {
         if (control) {

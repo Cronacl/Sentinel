@@ -598,6 +598,15 @@ export type CodexThreadItem =
       type: "userMessage";
     };
 
+/**
+ * The forwarded MCP servers for thread/start|resume: the `config` override
+ * (null without servers) and its forwardedMcpServersKey.
+ */
+export type CodexThreadMcp = {
+  config: Record<string, unknown> | null;
+  key: string;
+};
+
 export type CodexNotificationEvent = {
   method: string;
   params: unknown;
@@ -725,6 +734,12 @@ export class CodexAppServerManager {
   >();
 
   private pendingServerRequests = new Map<string, CodexPendingServerRequest>();
+
+  /**
+   * The forwarded-MCP key each thread this app-server has loaded was
+   * loaded with (in memory only; it digests secrets).
+   */
+  private loadedThreadMcpKeys = new Map<string, string>();
 
   private starting: Promise<void> | null = null;
 
@@ -1262,11 +1277,14 @@ export class CodexAppServerManager {
   async startThread(params: {
     approvalPolicy: CodexApprovalPolicy;
     cwd: string | null;
+    /** The forwarded MCP servers the thread is loaded with. */
+    mcp?: CodexThreadMcp | null;
     model: string | null;
     sandboxMode: CodexSandboxMode;
   }) {
-    return (await this.call("thread/start", {
+    const response = (await this.call("thread/start", {
       approvalPolicy: params.approvalPolicy,
+      ...(params.mcp?.config ? { config: params.mcp.config } : {}),
       cwd: params.cwd,
       ephemeral: false,
       experimentalRawEvents: false,
@@ -1281,6 +1299,8 @@ export class CodexAppServerManager {
       sandbox: unknown;
       thread: CodexThread;
     };
+    this.loadedThreadMcpKeys.set(response.thread.id, params.mcp?.key ?? "");
+    return response;
   }
 
   async readThread(threadId: string) {
@@ -1292,8 +1312,23 @@ export class CodexAppServerManager {
     };
   }
 
-  async resumeThread(threadId: string) {
-    return (await this.call("thread/resume", {
+  /**
+   * Resumes a stored thread with the forwarded MCP servers. A thread this
+   * app-server still has loaded keeps the servers it was loaded with (resume
+   * rejoins it and ignores overrides), so one loaded with other servers is
+   * unsubscribed first, which unloads it, and then resumed.
+   */
+  async resumeThread(threadId: string, mcp?: CodexThreadMcp | null) {
+    const key = mcp?.key ?? "";
+    const loadedKey = this.loadedThreadMcpKeys.get(threadId);
+    if (loadedKey !== undefined && loadedKey !== key) {
+      this.loadedThreadMcpKeys.delete(threadId);
+      await this.call("thread/unsubscribe", { threadId }).catch((error) => {
+        log.debug("thread_unsubscribe_failed", { error, threadId });
+      });
+    }
+    const response = (await this.call("thread/resume", {
+      ...(mcp?.config ? { config: mcp.config } : {}),
       threadId,
     })) as {
       approvalPolicy: CodexApprovalPolicy;
@@ -1304,6 +1339,8 @@ export class CodexAppServerManager {
       sandbox: unknown;
       thread: CodexThread;
     };
+    this.loadedThreadMcpKeys.set(threadId, key);
+    return response;
   }
 
   async startTurn(params: {
@@ -1571,6 +1608,7 @@ export class CodexAppServerManager {
     this.child = null;
     this.stdoutLines = this.createStdoutSplitter();
     this.initialized = false;
+    this.loadedThreadMcpKeys.clear();
     this.pendingServerRequests.clear();
 
     for (const pending of this.pendingRequests.values()) {
@@ -1632,6 +1670,13 @@ export class CodexAppServerManager {
     }
 
     if (isJsonRpcNotification(message)) {
+      if (message.method === "thread/closed") {
+        // Unloaded: the next resume loads it with the current servers.
+        const params = message.params as { threadId?: unknown } | undefined;
+        if (typeof params?.threadId === "string") {
+          this.loadedThreadMcpKeys.delete(params.threadId);
+        }
+      }
       if (message.method === "serverRequest/resolved") {
         // Codex resolved the request itself (interrupt, auto-review, …), so
         // a late answer from the UI must not be written back.

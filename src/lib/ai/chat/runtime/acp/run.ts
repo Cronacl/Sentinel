@@ -1,7 +1,5 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
-
 import { generateId } from "ai";
 
 import { updateAcpCatalog } from "@/lib/ai/chat/engines/acp/catalog-cache";
@@ -28,7 +26,7 @@ import {
   type AcpLaunch,
 } from "@/lib/ai/chat/engines/acp/launch";
 import {
-  buildAcpMcpServers,
+  toAcpMcpServers,
   type AcpMcpForwarding,
 } from "@/lib/ai/chat/engines/acp/mcp-forwarding";
 import {
@@ -60,7 +58,6 @@ import {
   type ThreadUIMessage,
 } from "@/lib/ai/messages/types";
 import { createLogger } from "@/lib/logger";
-import { createMcpOAuthProvider, requiresMcpOAuth } from "@/lib/mcp/oauth";
 import { normalizeThreadMode } from "@/lib/plan";
 import { resolveSupportedPermissionMode } from "@/lib/security";
 import { streamContext } from "@/lib/streams";
@@ -77,6 +74,7 @@ import {
   finishExternalRun,
   outcomeFromStopReason,
 } from "../external/lifecycle";
+import { loadForwardedMcpServers } from "../external/mcp-servers";
 import { createAssistantMirror } from "../external/mirror";
 import {
   beginExternalRuntimeRepoCheckpoint,
@@ -94,11 +92,7 @@ import {
   getUserParentMessageId,
   truncateTranscriptAtMessage,
 } from "../transcript";
-import {
-  getMcpServerRuntime,
-  getToolPermissionMode,
-  getWorkspaceRootPath,
-} from "../workspace";
+import { getToolPermissionMode, getWorkspaceRootPath } from "../workspace";
 import {
   cancelPendingInteractions,
   persistAssistantMessage,
@@ -168,21 +162,6 @@ function writeThreadState(control: AcpRunControl, state: AcpThreadState) {
     state,
     control.instance,
   );
-}
-
-async function resolveOAuthToken(
-  userId: string,
-  entry: Parameters<typeof requiresMcpOAuth>[0] & { id: string },
-) {
-  const provider = createMcpOAuthProvider({
-    redirectUrl: "http://127.0.0.1/",
-    serverId: entry.id,
-    userId,
-  });
-  const tokens = await Promise.resolve()
-    .then(() => provider.tokens())
-    .catch(() => undefined);
-  return tokens?.access_token ?? null;
 }
 
 /**
@@ -438,21 +417,18 @@ async function resolveMcpServers(
   control: AcpRunControl,
   init: Awaited<ReturnType<typeof initializeAcpAgent>>,
 ) {
-  const mcp = await buildAcpMcpServers(
-    await getMcpServerRuntime(control.userId).catch(() => []),
-    {
-      capabilities: init.capabilities,
-      env: control.instance.env,
-      requiresOAuth: requiresMcpOAuth,
-      resolveOAuthToken: (entry) => resolveOAuthToken(control.userId, entry),
-    },
-  );
+  const mcp = await loadForwardedMcpServers({
+    env: control.instance.env,
+    http: init.capabilities.mcpHttp,
+    userId: control.userId,
+  });
   // A live session keeps the servers it was opened with: a changed list
   // (a server added, edited or turned off) reopens the session.
-  const key = createHash("sha256")
-    .update(JSON.stringify(mcp.servers))
-    .digest("hex");
-  return { ...mcp, key };
+  return {
+    key: mcp.key,
+    servers: toAcpMcpServers(mcp.servers),
+    skipped: mcp.skipped,
+  };
 }
 
 /** Says which MCP servers a newly opened session did not get. */
