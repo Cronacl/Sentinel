@@ -159,8 +159,12 @@ function setLiveSession(process: AcpAgentProcess, session: AcpLiveSession) {
 function authMethodFor(
   descriptor: AcpAgentDescriptor,
   init: AcpInitializeInfo,
+  env: Record<string, string | undefined> | undefined,
 ) {
-  const methodId = descriptor.auth.methodId(init.authMethods);
+  const methodId = descriptor.auth.methodId(
+    init.authMethods,
+    env ? { env } : undefined,
+  );
   return methodId
     ? (init.authMethods.find((method) => method.id === methodId) ?? {
         args: [],
@@ -244,6 +248,8 @@ async function authenticate(
 
 export type AcpAuthOptions = {
   binaryPath: string | null;
+  /** The instance environment (the descriptor may pick its method by it). */
+  env?: Record<string, string | undefined>;
   /** False for unattended runs: never start an interactive sign-in. */
   interactive: boolean;
   /** Called before an in-run `authenticate` (a status label). */
@@ -269,8 +275,12 @@ export async function withLazyAuth<T>(
     if (!isAuthRequiredError(error) || descriptor.auth.strategy === "none") {
       throw error;
     }
-    const method = authMethodFor(descriptor, init);
-    if (!method || method.kind !== "agent" || !options.interactive) {
+    const method = authMethodFor(descriptor, init, options.env);
+    if (
+      !method ||
+      method.kind !== "agent" ||
+      (!options.interactive && descriptor.auth.headless !== true)
+    ) {
       throw authRequiredError(descriptor, init, method, options);
     }
     await authenticate(process, descriptor, init, method, options);
@@ -373,8 +383,11 @@ export async function openAcpSession(
   const guarded = <T>(operation: () => Promise<T>) =>
     withLazyAuth(process, input.descriptor, input.init, input.auth, operation);
 
-  if (input.descriptor.auth.strategy === "eager" && input.auth.interactive) {
-    const method = authMethodFor(input.descriptor, input.init);
+  if (
+    input.descriptor.auth.strategy === "eager" &&
+    (input.auth.interactive || input.descriptor.auth.headless === true)
+  ) {
+    const method = authMethodFor(input.descriptor, input.init, input.auth.env);
     if (method?.kind === "agent") {
       await authenticate(
         process,

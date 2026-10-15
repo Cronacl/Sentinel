@@ -217,6 +217,8 @@ describe("Cursor wire shapes", () => {
       interactive,
       log: () => {},
       mirror,
+      completeTurn: () => {},
+      promptId: "prompt-1",
       update: mock(() => {}),
     };
   }

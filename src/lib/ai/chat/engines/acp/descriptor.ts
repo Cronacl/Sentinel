@@ -16,7 +16,12 @@ import type { PermissionMode } from "@/server/db/enums";
 
 import type { AcpAgentProcess } from "./connection";
 import type { AcpCatalogModel } from "./config-options";
-import type { AcpAuthMethodInfo, JsonRecord } from "./schema";
+import type {
+  AcpAuthMethodInfo,
+  AcpPermissionOptionInfo,
+  AcpSessionUpdateEnvelope,
+  JsonRecord,
+} from "./schema";
 
 // What differs between ACP agents (design acp-and-agents §2.16). The shared
 // engine (connection, session, probe, runtime) does everything else; a new
@@ -54,6 +59,13 @@ export type AcpExtContext = {
   readonly mirror: ExternalAssistantMirror;
   /** Persist and stream the mirror (debounced). */
   update(): void;
+  /** The running user turn's prompt id (what `promptMeta` was given). */
+  readonly promptId: string;
+  /**
+   * Ends the user turn now, as if session/prompt had answered with
+   * `stopReason` (xAI's completion notifications race the response).
+   */
+  completeTurn(input: { stopReason: string | null }): void;
 };
 
 export type AcpExtRequestHandler = (
@@ -84,6 +96,12 @@ export interface AcpAgentDescriptor {
   ): Promise<AcpBinaryResolution>;
   /** Arguments that start the ACP server ("acp"), before the instance's launchArgs. */
   readonly launchArgs: readonly string[];
+  /**
+   * Arguments per permission mode, in place of `launchArgs` (Grok picks its
+   * mode on the command line). A change of mode respawns the agent; the
+   * probe launches with "default".
+   */
+  launchArgsFor?(input: { permissionMode: PermissionMode }): readonly string[];
   /** Forget cached binary resolutions. */
   invalidate?(): void;
 
@@ -108,8 +126,19 @@ export interface AcpAgentDescriptor {
      * auth is required; eager: authenticate first; none: never.
      */
     readonly strategy: "eager" | "lazy" | "none";
-    /** The method to use among those advertised (null: none fits). */
-    methodId(methods: readonly AcpAuthMethodInfo[]): string | null;
+    /**
+     * The method to use among those advertised (null: none fits); `env` is
+     * the instance environment the agent runs with.
+     */
+    methodId(
+      methods: readonly AcpAuthMethodInfo[],
+      context?: { env: Record<string, string | undefined> },
+    ): string | null;
+    /**
+     * `authenticate` never opens a sign-in (a cached token, an API key from
+     * the environment), so unattended runs may send it too.
+     */
+    readonly headless?: boolean;
     /** How long an in-run `authenticate` may take (browser sign-in). */
     readonly timeoutMs?: number;
     /** How to sign in outside Sentinel, for error messages. */
@@ -130,6 +159,10 @@ export interface AcpAgentDescriptor {
   permissionDisposition?(
     input: PermissionDispositionInput,
   ): PermissionDisposition | null;
+  /** The options a permission request offers, narrowed (null: as sent). */
+  permissionOptions?(
+    options: readonly AcpPermissionOptionInfo[],
+  ): AcpPermissionOptionInfo[];
 
   /** Models offered before the agent listed any (Cursor: its Auto model). */
   readonly fallbackModels?: readonly AcpCatalogModel[];
@@ -153,6 +186,17 @@ export interface AcpAgentDescriptor {
   readonly extNotifications?: Readonly<
     Record<string, AcpExtNotificationHandler>
   >;
+
+  /**
+   * Handles a session/update itself instead of the mirror (true: handled),
+   * such as frames of a background turn the agent runs on its own.
+   */
+  interceptSessionUpdate?(
+    envelope: AcpSessionUpdateEnvelope,
+    context: AcpExtContext,
+  ): boolean;
+  /** The message a failed session/prompt ends the turn with (null: its own). */
+  promptErrorMessage?(error: unknown): string | null;
 
   /** How long Stop waits for the prompt to end after session/cancel (default 5 s). */
   readonly cancelGraceMs?: number;

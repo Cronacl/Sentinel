@@ -187,7 +187,8 @@ export async function handlePermissionRequest(
   params: unknown,
 ): Promise<PermissionOutcome> {
   const toolCall = readRecord(params, "toolCall") ?? {};
-  const options = readPermissionOptions(params);
+  const offered = readPermissionOptions(params);
+  const options = control.descriptor.permissionOptions?.(offered) ?? offered;
   const toolCallId =
     readNonEmptyString(toolCall, "toolCallId") ??
     `permission-${(control.nextInteractionId += 1)}`;
@@ -551,6 +552,8 @@ export function extContext(control: AcpRunControl): AcpExtContext {
         threadId: control.threadId,
       }),
     mirror: control.mirror,
+    promptId: control.runId,
+    completeTurn: (input) => control.completeTurn?.(input),
     update: () => control.emitter.schedule(),
   };
 }

@@ -30,7 +30,10 @@ import {
   buildAcpMcpServers,
   type AcpMcpForwarding,
 } from "@/lib/ai/chat/engines/acp/mcp-forwarding";
-import type { AcpSessionUpdateEnvelope } from "@/lib/ai/chat/engines/acp/schema";
+import {
+  readStopReason,
+  type AcpSessionUpdateEnvelope,
+} from "@/lib/ai/chat/engines/acp/schema";
 import {
   applyAcpModelSelection,
   applyAcpPlanMode,
@@ -41,6 +44,7 @@ import {
   openAcpSession,
   promptAcpSession,
   type AcpLiveSession,
+  type AcpPromptResult,
 } from "@/lib/ai/chat/engines/acp/session";
 import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import type { LoadedEngineThread } from "@/lib/ai/chat/engines/platform/driver";
@@ -100,7 +104,11 @@ import {
   type AcpRunControl,
 } from "./control";
 import { MISSED_TURNS_HEADING, planAcpHistory } from "./history";
-import { createRunHandlers, toInteractionAnswer } from "./interactions";
+import {
+  createRunHandlers,
+  extContext,
+  toInteractionAnswer,
+} from "./interactions";
 import { buildAcpPromptBlocks } from "./prompt";
 import { activeAcpRunControls, resolveActiveAcpRunControl } from "./state";
 
@@ -212,6 +220,14 @@ function handleSessionUpdate(
     envelope.sessionId &&
     envelope.sessionId !== control.sessionId
   ) {
+    return;
+  }
+
+  if (
+    !control.replaying &&
+    control.descriptor.interceptSessionUpdate?.(envelope, extContext(control))
+  ) {
+    control.emitter.schedule();
     return;
   }
 
@@ -454,6 +470,7 @@ async function startTurn(
     instance,
     binary,
     control.workspaceRoot,
+    { permissionMode: control.permissionMode },
   );
   control.lease = await acquireProcess(control, launch);
   const process: AcpAgentProcess = control.lease.resource;
@@ -488,6 +505,7 @@ async function startTurn(
   const opened = await openAcpSession(process, {
     auth: {
       binaryPath: binary.path,
+      env: instance.env,
       interactive: control.interactive,
       onAuthenticating: () =>
         setStatusLabel(control, `Waiting for ${descriptor.label} sign-in...`),
@@ -621,10 +639,24 @@ async function runPrompt(
 ) {
   try {
     persist.setThreadStatus(control.threadId, "streaming");
-    const result = await promptAcpSession(turn.process, {
+    const response = promptAcpSession(turn.process, {
       meta: control.descriptor.promptMeta?.({ promptId: control.runId }),
       prompt: turn.prompt,
       sessionId: turn.session.sessionId,
+    });
+    // A descriptor may end the turn before the response (xAI's completion
+    // notifications); the request left in flight is then ignored.
+    const early = new Promise<AcpPromptResult>((resolve) => {
+      control.completeTurn = ({ stopReason }) =>
+        resolve({
+          raw: null,
+          stopReason: readStopReason({ stopReason }),
+          usage: null,
+        });
+    });
+    response.catch(() => undefined);
+    const result = await Promise.race([response, early]).finally(() => {
+      control.completeTurn = null;
     });
     // The session now holds this turn and everything before it.
     writeThreadState(control, {
@@ -678,9 +710,10 @@ async function runPrompt(
     }
     await finishRun(control, {
       errorMessage:
-        (exited ?? error) instanceof Error
+        (exited ? null : control.descriptor.promptErrorMessage?.(error)) ??
+        ((exited ?? error) instanceof Error
           ? getErrorMessage(exited ?? error)
-          : String(error),
+          : String(error)),
       status: "error",
     });
   }
@@ -857,6 +890,7 @@ export async function runAcpThreadChat(
     allowTitleUpdate: allRecords.length === 0,
     assistantId,
     cancelRequested: false,
+    completeTurn: null,
     descriptor,
     detach: null,
     emitter: null as unknown as AcpRunControl["emitter"],

@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type { ResolvedEngineInstance } from "@/lib/ai/chat/engines/contract";
 import { registerInstanceResourceHooks } from "@/lib/ai/chat/engines/platform/instance-resources";
 import { createLogger } from "@/lib/logger";
+import type { PermissionMode } from "@/server/db/enums";
 import {
   createProcessPool,
   type ProcessPool,
@@ -29,13 +30,18 @@ export type AcpLaunch = {
 };
 
 export function buildAcpLaunch(
-  descriptor: Pick<AcpAgentDescriptor, "launchArgs">,
+  descriptor: Pick<AcpAgentDescriptor, "launchArgs" | "launchArgsFor">,
   instance: Pick<ResolvedEngineInstance, "config" | "env">,
   binary: AcpResolvedBinary,
   cwd: string,
+  options: { permissionMode?: PermissionMode } = {},
 ): AcpLaunch {
+  const args =
+    descriptor.launchArgsFor?.({
+      permissionMode: options.permissionMode ?? "default",
+    }) ?? descriptor.launchArgs;
   return {
-    args: [...descriptor.launchArgs, ...(instance.config.launchArgs ?? [])],
+    args: [...args, ...(instance.config.launchArgs ?? [])],
     command: binary.path,
     cwd,
     // The instance env wins; the binary's env only contributes the PATH it

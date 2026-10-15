@@ -51,6 +51,8 @@ export type AcpRunControl = ExternalRunControl & {
   /** The thread was created by this turn: the agent may title it. */
   allowTitleUpdate: boolean;
   cancelRequested: boolean;
+  /** Ends the running prompt early (set while session/prompt is in flight). */
+  completeTurn: ((input: { stopReason: string | null }) => void) | null;
   descriptor: AcpAgentDescriptor;
   detach: (() => void) | null;
   emitter: MirrorEmitter;

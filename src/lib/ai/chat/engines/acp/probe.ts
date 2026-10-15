@@ -190,7 +190,9 @@ export async function probeAcpAgent(
     if (models.length === 0 && descriptor.fallbackModels) {
       models = [...descriptor.fallbackModels];
     }
-    const preferredMethodId = descriptor.auth.methodId(init.authMethods);
+    const preferredMethodId = descriptor.auth.methodId(init.authMethods, {
+      env: instance.env,
+    });
     const result: EngineProbeResult = {
       auth: {
         ...UNKNOWN_AUTH,

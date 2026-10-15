@@ -326,7 +326,22 @@ export const DRIVER_CATALOG = {
     transport: "http",
   },
   grok: {
-    capabilities: { ...EXTERNAL_CAPABILITIES, supportsPlanMode: "acp-mode" },
+    capabilities: {
+      ...EXTERNAL_CAPABILITIES,
+      // Launch flags (`--permission-mode default|auto`, `--always-approve`);
+      // Grok has no accept-edits mode.
+      permissionModes: ["default", "auto", "full"],
+      // `grok inspect --json` on full probes.
+      reportsNativeSkills: true,
+      reportsSlashCommands: true,
+      // Billing credits of the grok.com login.
+      reportsUsageLimits: true,
+      supportsImages: true,
+      supportsMcpInjection: true,
+      // The plan preamble; x.ai/exit_plan_mode becomes the plan card.
+      supportsPlanMode: "prompt",
+      supportsUserInput: true,
+    },
     config: homeConfigSchema,
     defaultInstance: true,
     description: "Use the locally installed Grok Build agent.",
@@ -337,7 +352,7 @@ export const DRIVER_CATALOG = {
     multiInstance: true,
     runtime: "external",
     stability: "experimental",
-    status: "planned",
+    status: "available",
     toolPrefix: "grok_",
     transport: "acp",
   },
