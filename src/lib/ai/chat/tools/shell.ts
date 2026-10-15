@@ -8,6 +8,7 @@ import {
   buildManagedExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
 
 const COMMAND_INACTIVITY_TIMEOUT_MS = 5 * 60_000;
 const COMMAND_MAX_DURATION_MS = 30 * 60_000;
@@ -414,9 +415,11 @@ function getShellCommand(
 }
 
 async function buildShellSpawnEnv(
-  env: NodeJS.ProcessEnv = process.env,
+  baseEnv: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ) {
+  // The shell runs commands the model chose: never Sentinel's secrets.
+  const env = withoutSentinelPrivateEnv(baseEnv);
   if (platform === "win32") {
     return {
       ...env,

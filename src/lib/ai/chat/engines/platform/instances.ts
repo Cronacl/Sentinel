@@ -14,6 +14,7 @@ import {
   buildPreferredExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
 import { db as defaultDb } from "@/server/db";
 import type { ChatEngine } from "@/server/db/enums";
 import type * as schema from "@/server/db/schema";
@@ -449,7 +450,8 @@ export function createEngineInstanceRegistry(
     decoded: Extract<Decoded, { availability: "available" }>,
   ): ResolvedEngineInstance {
     const { config, meta } = decoded;
-    const baseEnv = getEnv();
+    // Sentinel's own secrets never enter an instance's env (private-env.ts).
+    const baseEnv = withoutSentinelPrivateEnv(getEnv());
     const { unreadable, values: instanceEnv } = decryptEnvironment(
       record.environment,
     );

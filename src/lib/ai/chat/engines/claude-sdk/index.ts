@@ -15,6 +15,7 @@ import {
   buildManagedExecutablePathValue,
   getPlatformHomeDirectory,
 } from "@/lib/runtime/platform-paths";
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
 import { withTimeout } from "@/lib/runtime/process/with-timeout";
 import type { EngineInstallSource } from "@/lib/ai/chat/engines/contract";
 import { getLegacyEngineStatusFilePath } from "@/lib/ai/chat/engines/platform/paths";
@@ -586,12 +587,13 @@ export const CLAUDE_SDK_TASK_TOOLS = [
 
 /**
  * `options.env` replaces the CLI's environment since Agent SDK 0.2.113, so
- * always start from process.env and layer the runtime env on top.
+ * always start from process.env and layer the runtime env on top. The CLI
+ * and its Bash tool never see Sentinel's private keys.
  */
 export function buildClaudeSdkEnv(
   env?: Options["env"],
 ): NonNullable<Options["env"]> {
-  const mergedEnv = { ...process.env, ...env };
+  const mergedEnv = withoutSentinelPrivateEnv({ ...process.env, ...env });
 
   return {
     ...mergedEnv,

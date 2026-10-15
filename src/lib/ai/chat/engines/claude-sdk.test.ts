@@ -309,6 +309,26 @@ describe("buildClaudeSdkBaseOptions", () => {
     );
   });
 
+  it("keeps Sentinel's own secrets from the CLI and its Bash tool", () => {
+    const previous = process.env.ENCRYPTION_KEY;
+    process.env.ENCRYPTION_KEY = "e".repeat(64);
+    try {
+      const options = buildClaudeSdkBaseOptions({
+        env: { PATH: "/managed/bin", SENTINEL_INTERNAL_TOKEN: "t".repeat(64) },
+      });
+
+      expect(options.env).not.toHaveProperty("ENCRYPTION_KEY");
+      expect(options.env).not.toHaveProperty("SENTINEL_INTERNAL_TOKEN");
+      expect(options.env?.PATH).toBe("/managed/bin");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.ENCRYPTION_KEY;
+      } else {
+        process.env.ENCRYPTION_KEY = previous;
+      }
+    }
+  });
+
   it("always sets a permission mode and keeps the Task tools available", () => {
     const options = buildClaudeSdkBaseOptions({
       allowedTools: ["Read"],

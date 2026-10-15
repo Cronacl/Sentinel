@@ -17,6 +17,7 @@ import {
   type ReasoningEffort,
 } from "@/lib/ai/providers/models";
 import { normalizeSelectedModelId } from "@/lib/ai/providers/model-selection";
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
 import type { ChatEngine } from "@/server/db/enums";
 
 type ChildProcessLike = {
@@ -478,7 +479,7 @@ async function spawnResolvedClaudeCli(input: {
   });
   return spawn(launch.command, launch.args, {
     cwd: input.cwd,
-    env: launch.env as NodeJS.ProcessEnv,
+    env: withoutSentinelPrivateEnv(launch.env) as NodeJS.ProcessEnv,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   }) as ChildProcessWithoutNullStreams;

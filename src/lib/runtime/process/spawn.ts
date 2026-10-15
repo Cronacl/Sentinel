@@ -10,17 +10,11 @@ import path from "node:path";
 
 import { installTreeKill, type KillTreeDeps } from "./kill-tree";
 import { getAgentPidRegistry, type AgentPidRegistry } from "./pid-registry";
+import { SENTINEL_PRIVATE_ENV_KEYS } from "./private-env";
 import { installAgentShutdownHandlers } from "./shutdown";
 
-/**
- * Sentinel's own secrets never reach agent processes, nor the shells, MCP
- * servers and tools those start. ENCRYPTION_KEY decrypts stored provider
- * credentials; SENTINEL_INTERNAL_TOKEN authorizes Electron's internal calls.
- */
-export const SENTINEL_PRIVATE_ENV_KEYS = new Set([
-  "ENCRYPTION_KEY",
-  "SENTINEL_INTERNAL_TOKEN",
-]);
+// Sentinel's own secrets never reach agent processes (private-env.ts).
+export { SENTINEL_PRIVATE_ENV_KEYS } from "./private-env";
 
 export type ProcessEnv = Record<string, string | undefined>;
 

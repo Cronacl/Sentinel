@@ -149,7 +149,7 @@ describe("instance environment and overrides", () => {
 
     expect(
       getInstanceProcessEnv(null, base as unknown as NodeJS.ProcessEnv),
-    ).toBe(base);
+    ).toEqual(base);
     expect(
       getInstanceProcessEnv(
         { envOverrides: { CODEX_HOME: "/work" }, envUnset: ["TOKEN"] },
@@ -157,6 +157,22 @@ describe("instance environment and overrides", () => {
       ),
     ).toEqual({ CODEX_HOME: "/work", KEEP: "1" });
     expect(base.TOKEN).toBe("global-token");
+  });
+
+  it("drops Sentinel's own secrets with or without an instance", () => {
+    const base = {
+      ENCRYPTION_KEY: "e".repeat(64),
+      KEEP: "1",
+      SENTINEL_INTERNAL_TOKEN: "t".repeat(64),
+    } as unknown as NodeJS.ProcessEnv;
+
+    expect(getInstanceProcessEnv(null, base)).toEqual({ KEEP: "1" });
+    expect(
+      getInstanceProcessEnv(
+        { envOverrides: { CODEX_HOME: "/work" }, envUnset: [] },
+        base,
+      ),
+    ).toEqual({ CODEX_HOME: "/work", KEEP: "1" });
   });
 
   it("prefers the configured binary and keeps legacy variables to the default instance", () => {

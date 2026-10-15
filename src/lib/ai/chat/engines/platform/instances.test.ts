@@ -332,6 +332,33 @@ describe("environment secrets", () => {
     expect(String(rawRow(created.id)?.environment)).not.toContain("now-secret");
   });
 
+  it("never puts Sentinel's own secrets in an instance's env", async () => {
+    const registry = createEngineInstanceRegistry({
+      db: drizzle(sqlite, { schema }) as never,
+      decrypt: fakeDecrypt,
+      encrypt: fakeEncrypt,
+      env: () => ({
+        ENCRYPTION_KEY: "e".repeat(64),
+        HOME: "/Users/me",
+        OPENAI_API_KEY: "sk-global",
+        PATH: "/usr/bin",
+        SENTINEL_INTERNAL_TOKEN: "t".repeat(64),
+      }),
+      platform: "darwin",
+      stateRoot: () => "/Users/me/.sentinel",
+    });
+
+    const resolved = await registry.resolve(USER_ID, {
+      driver: "codex",
+      instanceId: null,
+    });
+    expect(resolved.env.ENCRYPTION_KEY).toBeUndefined();
+    expect(resolved.env.SENTINEL_INTERNAL_TOKEN).toBeUndefined();
+    // What the agent needs is kept.
+    expect(resolved.env.OPENAI_API_KEY).toBe("sk-global");
+    expect(resolved.env.HOME).toBe("/Users/me");
+  });
+
   it("leaves values it cannot decrypt unset and flags them for re-entry", async () => {
     const registry = createEngineInstanceRegistry({
       db: drizzle(sqlite, { schema }) as never,

@@ -10,6 +10,7 @@ import {
 import path from "node:path";
 
 import { setLocalRuntimeEnvValue } from "@/lib/runtime/local-runtime-env";
+import { withoutSentinelPrivateEnv } from "@/lib/runtime/process/private-env";
 import { buildManagedExecutablePathValue } from "@/lib/runtime/platform-paths";
 
 import type {
@@ -277,20 +278,20 @@ export type EngineBinaryInstance = Pick<
 
 /**
  * The environment a legacy engine resolves and runs with: process.env as it
- * is now, minus the variables the instance cannot decrypt, plus the
- * instance's own variables (home directory, instance env). Without an
- * instance, process.env itself.
+ * is now, minus Sentinel's private keys and the variables the instance
+ * cannot decrypt, plus the instance's own variables (home directory,
+ * instance env). Without an instance, process.env minus the private keys.
  */
 export function getInstanceProcessEnv(
   instance:
     Pick<EngineBinaryInstance, "envOverrides" | "envUnset"> | null | undefined,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = withoutSentinelPrivateEnv(baseEnv);
   if (!instance) {
-    return baseEnv;
+    return env;
   }
 
-  const env: NodeJS.ProcessEnv = { ...baseEnv };
   for (const name of instance.envUnset) {
     delete env[name];
   }
