@@ -58,10 +58,15 @@ function files(entries: Record<string, string>) {
 const authFile = (entry: Record<string, unknown>) =>
   JSON.stringify({ [LOGIN_KEY]: entry });
 
-const deps = (entries: Record<string, string>) => ({
+// POSIX paths on every host; Windows' home is tested on its own.
+const deps = (
+  entries: Record<string, string>,
+  platform: NodeJS.Platform = "linux",
+) => ({
   fetch: localFetch,
   homeDirectory: "/home/me",
   now: () => Date.parse("2026-10-15T00:00:00Z"),
+  platform,
   readFile: files(entries),
 });
 
@@ -85,6 +90,24 @@ describe("readGrokLogin", () => {
       ),
     ).toEqual({ email: null, status: "signed-in", token: "tok2" });
     expect(await readGrokLogin({}, deps({}))).toEqual({ status: "signed-out" });
+  });
+
+  it("takes Windows' home from USERPROFILE", async () => {
+    const login = {
+      "C:\\Users\\me\\.grok\\auth.json": authFile({ key: "tok" }),
+    };
+    expect(
+      await readGrokLogin(
+        { HOME: "/c/Users/me", USERPROFILE: "C:\\Users\\me" },
+        deps(login, "win32"),
+      ),
+    ).toEqual({ email: null, status: "signed-in", token: "tok" });
+    expect(
+      await readGrokLogin(
+        {},
+        { ...deps(login, "win32"), homeDirectory: "C:\\Users\\me" },
+      ),
+    ).toEqual({ email: null, status: "signed-in", token: "tok" });
   });
 
   it("leaves API keys and custom deployments alone", async () => {

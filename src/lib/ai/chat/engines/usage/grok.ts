@@ -53,6 +53,8 @@ export type GrokUsageDeps = {
   fetch?: typeof fetch;
   homeDirectory?: string;
   now?: () => number;
+  /** Whose home and path rules apply (default: this host's). */
+  platform?: NodeJS.Platform;
   readFile?: (target: string, encoding: "utf8") => Promise<string>;
 };
 
@@ -64,14 +66,21 @@ export type GrokLogin =
   /** An API key or a custom deployment: not Sentinel's to read. */
   | { status: "other" };
 
+function grokPath(platform: NodeJS.Platform) {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
+/** GROK_HOME, else ~/.grok, with Windows' home in USERPROFILE. */
 export function getGrokHomeDirectory(
   env: Record<string, string | undefined>,
   homeDirectory: string,
+  platform: NodeJS.Platform = process.platform,
 ) {
-  return (
-    env.GROK_HOME?.trim() ||
-    path.join(env.HOME?.trim() || homeDirectory, ".grok")
-  );
+  const home =
+    (platform === "win32" ? env.USERPROFILE?.trim() : undefined) ||
+    env.HOME?.trim() ||
+    homeDirectory;
+  return env.GROK_HOME?.trim() || grokPath(platform).join(home, ".grok");
 }
 
 async function readOptional(
@@ -100,13 +109,20 @@ export async function readGrokLogin(
     return { status: "other" };
   }
   const read = deps.readFile ?? nodeReadFile;
-  const home = getGrokHomeDirectory(env, deps.homeDirectory ?? os.homedir());
+  const platform = deps.platform ?? process.platform;
+  const join = grokPath(platform).join;
+  const home = getGrokHomeDirectory(
+    env,
+    deps.homeDirectory ?? os.homedir(),
+    platform,
+  );
   for (const configPath of [
-    path.join(home, "config.toml"),
-    path.join(home, "managed_config.toml"),
-    path.join(home, "requirements.toml"),
-    "/etc/grok/managed_config.toml",
-    "/etc/grok/requirements.toml",
+    join(home, "config.toml"),
+    join(home, "managed_config.toml"),
+    join(home, "requirements.toml"),
+    ...(platform === "win32"
+      ? []
+      : ["/etc/grok/managed_config.toml", "/etc/grok/requirements.toml"]),
   ]) {
     const config = await readOptional(read, configPath).catch(() => null);
     if (config && CUSTOM_CONFIG_SECTION.test(config)) {
@@ -116,7 +132,7 @@ export async function readGrokLogin(
 
   const contents =
     env.GROK_AUTH?.trim() ||
-    (await readOptional(read, path.join(home, "auth.json")));
+    (await readOptional(read, join(home, "auth.json")));
   if (!contents) {
     return { status: "signed-out" };
   }

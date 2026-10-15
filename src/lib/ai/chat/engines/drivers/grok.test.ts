@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import { describe, expect, it, mock } from "bun:test";
 
 import type { EngineProbeResult } from "../contract";
@@ -74,8 +76,10 @@ function fakeCli(outputs: Record<string, { code?: number; stdout: string }>) {
   return { calls, execFile };
 }
 
+// The login files are looked up with POSIX paths on every host.
 const noLogin = {
   homeDirectory: "/home/me",
+  platform: "linux" as const,
   readFile: async () => {
     throw Object.assign(new Error("missing"), { code: "ENOENT" });
   },
@@ -149,7 +153,7 @@ describe("enrichGrokProbe", () => {
       "review",
     ]);
     expect(cli.calls.find((call) => call.args[0] === "inspect")?.cwd).toBe(
-      "/state/grok/probe-cwd",
+      path.join("/state/grok", "probe-cwd"),
     );
   });
 
@@ -168,6 +172,7 @@ describe("enrichGrokProbe", () => {
     const login = await enrichGrokProbe(instance, acpResult(), {
       execFile: cli.execFile,
       homeDirectory: "/home/me",
+      platform: "linux",
       readFile: async (target) => {
         if (target === "/home/me/.grok/auth.json") {
           return JSON.stringify({
