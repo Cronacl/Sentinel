@@ -66,6 +66,14 @@ describe("filterSkillsForEngine", () => {
       target: "opencode",
     },
     {
+      description: "Pi primary",
+      directory: "/tmp/pi/shared",
+      name: "shared",
+      scope: "workspace",
+      sourceKind: "pi",
+      target: "pi",
+    },
+    {
       description: "Another sentinel skill",
       directory: "/tmp/sentinel/other",
       name: "other",
@@ -224,6 +232,18 @@ describe("filterSkillsForEngine", () => {
       }),
     ]);
   });
+
+  it("offers Pi its own skills, then the shared agents ones", () => {
+    expect(filterSkillsForEngine(skills, "pi")).toEqual([
+      expect.objectContaining({ sourceKind: "pi", target: "pi" }),
+    ]);
+    expect(
+      filterSkillsForEngine(
+        skills.filter((skill) => skill.target !== "pi"),
+        "pi",
+      ),
+    ).toEqual([expect.objectContaining({ sourceKind: "agents" })]);
+  });
 });
 
 describe("getSkillSuggestionTitle", () => {
@@ -234,6 +254,7 @@ describe("getSkillSuggestionTitle", () => {
     expect(getSkillSuggestionTitle("codex")).toBe("Showing Codex skills");
     expect(getSkillSuggestionTitle("cursor")).toBe("Showing Cursor skills");
     expect(getSkillSuggestionTitle("opencode")).toBe("Showing OpenCode skills");
+    expect(getSkillSuggestionTitle("pi")).toBe("Showing Pi skills");
   });
 });
 

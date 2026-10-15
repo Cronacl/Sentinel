@@ -447,6 +447,56 @@ describe("skills", () => {
     );
   });
 
+  it("discovers Pi skills from .pi/skills and the agent directory", async () => {
+    await writeSkill({
+      baseDirectory: workspaceRoot,
+      container: ".pi/skills",
+      name: "workspace-pi",
+    });
+    await writeSkill({
+      baseDirectory: homeDirectory,
+      container: ".pi/agent/skills",
+      name: "global-pi",
+    });
+    const piHome = path.join(homeDirectory, "pi-work");
+    await writeSkill({
+      baseDirectory: piHome,
+      container: "skills",
+      name: "work-pi",
+    });
+
+    const skills = await discoverSkills({ workspaceRoot });
+    expect(
+      skills
+        .filter((skill) => skill.sourceKind === "pi")
+        .map((skill) => [skill.name, skill.scope, skill.target])
+        .sort(),
+    ).toEqual([
+      ["global-pi", "global", "pi"],
+      ["workspace-pi", "workspace", "pi"],
+    ]);
+
+    // An instance home (PI_CODING_AGENT_DIR) replaces ~/.pi/agent/skills.
+    const moved = await discoverSkills({
+      globalDirectories: { pi: path.join(piHome, "skills") },
+      workspaceRoot: null,
+    });
+    expect(
+      moved
+        .filter((skill) => skill.sourceKind === "pi")
+        .map((skill) => skill.name),
+    ).toEqual(["work-pi"]);
+    expect(
+      (
+        await loadSkillByName({
+          name: "global-pi",
+          target: "pi",
+          workspaceRoot,
+        })
+      )?.skillFile,
+    ).toBe(path.join(homeDirectory, ".pi/agent/skills/global-pi/SKILL.md"));
+  });
+
   it("loads Cursor and OpenCode skills from their native lookup targets", async () => {
     await writeSkill({
       baseDirectory: workspaceRoot,

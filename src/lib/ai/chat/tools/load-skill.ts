@@ -22,6 +22,7 @@ export const loadSkillOutputSchema = z.object({
     "codex",
     "cursor",
     "opencode",
+    "pi",
     "sentinel",
   ]),
   target: z.enum([
@@ -31,6 +32,7 @@ export const loadSkillOutputSchema = z.object({
     "copilot",
     "cursor",
     "opencode",
+    "pi",
   ]),
 });
 

@@ -228,6 +228,42 @@ EOF`,
     );
   });
 
+  it("installs Pi skills into the agent directory or .pi/skills", async () => {
+    const root = await createTempRoot("sentinel-skill-install-");
+    tempRoots.push(root);
+    const skillFile = (dir: string, name: string) => [
+      `mkdir -p "${dir}/${name}"`,
+      `cat <<'EOF' > "${dir}/${name}/SKILL.md"
+---
+name: ${name}
+description: Helpful skill
+---
+
+# Steps
+EOF`,
+    ];
+
+    const globalResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: skillFile(`${root}/.pi/agent/skills`, "pi-skill"),
+      name: "pi-skill",
+      scope: "global",
+      target: "pi",
+    });
+    const workspaceResult = await executeInstallSteps({
+      destRoot: root,
+      installSteps: skillFile(`${root}/.pi/skills`, "workspace-pi-skill"),
+      name: "workspace-pi-skill",
+      scope: "workspace",
+      target: "pi",
+    });
+
+    expect(globalResult.directory).toBe(`${root}/.pi/agent/skills/pi-skill`);
+    expect(workspaceResult.directory).toBe(
+      `${root}/.pi/skills/workspace-pi-skill`,
+    );
+  });
+
   it("installs OpenCode skills into native global and workspace directories", async () => {
     const root = await createTempRoot("sentinel-skill-install-");
     tempRoots.push(root);

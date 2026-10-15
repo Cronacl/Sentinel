@@ -24,7 +24,9 @@ export default async function SkillDetailPage({
                 ? "cursor"
                 : target === "opencode"
                   ? "opencode"
-                  : "sentinel"
+                  : target === "pi"
+                    ? "pi"
+                    : "sentinel"
       }
     />
   );

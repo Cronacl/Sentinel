@@ -434,16 +434,25 @@ export const DRIVER_CATALOG = {
       supportsPlanMode: false,
       supportsUserInput: true,
     },
-    config: binaryConfigSchema,
+    config: homeConfigSchema,
     defaultInstance: true,
     description: "Use the locally installed Pi coding agent.",
     docsUrl: "https://pi.dev",
-    homeEnvVar: null,
+    // Pi's agent directory (auth, settings, sessions, skills); ~/.pi/agent
+    // without one.
+    homeEnvVar: "PI_CODING_AGENT_DIR",
     kind: "pi",
     label: "Pi",
     legacyEnvPathKeys: ["SENTINEL_PI_PATH"],
     multiInstance: true,
     runtime: "external",
+    // Global skills live in `<agent dir>/skills`, so an instance home moves
+    // them (lib/skills/instance-skills.ts).
+    skills: {
+      globalDir: ".pi/agent/skills",
+      sourceKind: "pi",
+      workspaceDir: ".pi/skills",
+    },
     stability: "experimental",
     status: "available",
     toolPrefix: "pi_",

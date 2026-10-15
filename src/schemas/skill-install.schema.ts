@@ -40,6 +40,7 @@ export const skillInstallTargetSchema = z.enum([
   "copilot",
   "cursor",
   "opencode",
+  "pi",
 ]);
 
 export const skillNameSchema = z

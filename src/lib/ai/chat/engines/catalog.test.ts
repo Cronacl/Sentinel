@@ -75,9 +75,21 @@ describe("DRIVER_CATALOG", () => {
     expect(DRIVER_CATALOG.claude.homeEnvVar).toBe("CLAUDE_CONFIG_DIR");
     expect(DRIVER_CATALOG.copilot.homeEnvVar).toBe("COPILOT_HOME");
     expect(DRIVER_CATALOG.grok.homeEnvVar).toBe("GROK_HOME");
+    expect(DRIVER_CATALOG.pi.homeEnvVar).toBe("PI_CODING_AGENT_DIR");
+    expect(DRIVER_CATALOG.pi.config.parse({ homePath: "/x" })).toMatchObject({
+      homePath: "/x",
+    });
     // Antigravity isolates through its private per-instance profile instead
     // (a user-chosen GEMINI_HOME would be rewritten and signed out).
     expect(DRIVER_CATALOG.antigravity.homeEnvVar).toBeNull();
+  });
+
+  it("declares Pi's skill folders under its agent directory", () => {
+    expect(DRIVER_CATALOG.pi.skills).toEqual({
+      globalDir: ".pi/agent/skills",
+      sourceKind: "pi",
+      workspaceDir: ".pi/skills",
+    });
   });
 
   it("keeps today's permission modes for every existing driver", () => {

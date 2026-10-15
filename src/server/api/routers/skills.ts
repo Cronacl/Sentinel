@@ -13,6 +13,7 @@ import { getInstanceHomeDirectory } from "@/lib/ai/chat/engines/platform/instanc
 import {
   executeInstallSteps,
   resolveCodexHome,
+  type SkillInstallTarget,
   uninstallSkill,
 } from "@/lib/skills/install";
 import {
@@ -83,7 +84,7 @@ function resolveDestRoot(
   user: { skillsBasePath?: string | null },
   scope: "global" | "workspace",
   workspaceRootPath: string | null,
-  target: "sentinel" | "codex" | "claude" | "copilot" | "cursor" | "opencode",
+  target: SkillInstallTarget,
   codexHome: string,
 ) {
   if (target === "codex") {
@@ -241,6 +242,11 @@ export const skillsRouter = createTRPCRouter({
         .filter((skill) => skill.target === "opencode")
         .map((s) => s.name.trim().toLowerCase()),
     );
+    const installedPiNames = new Set(
+      snapshot.skills
+        .filter((skill) => skill.target === "pi")
+        .map((s) => s.name.trim().toLowerCase()),
+    );
     const installedCodexNames = new Set(
       (await buildCodexSkillList(codexHome).catch(() => [])).map((skill) =>
         skill.name.trim().toLowerCase(),
@@ -258,6 +264,7 @@ export const skillsRouter = createTRPCRouter({
         copilot: installedCopilotNames.has(entry.name.trim().toLowerCase()),
         cursor: installedCursorNames.has(entry.name.trim().toLowerCase()),
         opencode: installedOpenCodeNames.has(entry.name.trim().toLowerCase()),
+        pi: installedPiNames.has(entry.name.trim().toLowerCase()),
         sentinel: installedSentinelNames.has(entry.name.trim().toLowerCase()),
       },
     }));

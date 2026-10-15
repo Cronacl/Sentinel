@@ -210,6 +210,9 @@ function getInstalledDetailHref(skill: SkillListItem) {
   if (skill.target === "opencode") {
     return `/skills/${encodeURIComponent(skill.name)}?target=opencode`;
   }
+  if (skill.target === "pi") {
+    return `/skills/${encodeURIComponent(skill.name)}?target=pi`;
+  }
   return `/skills/${encodeURIComponent(skill.name)}`;
 }
 

@@ -45,11 +45,20 @@ const composerSkillEntrySchema = z.object({
       "copilot",
       "cursor",
       "opencode",
+      "pi",
       "codex",
     ])
     .optional(),
   target: z
-    .enum(["sentinel", "codex", "claude", "copilot", "cursor", "opencode"])
+    .enum([
+      "sentinel",
+      "codex",
+      "claude",
+      "copilot",
+      "cursor",
+      "opencode",
+      "pi",
+    ])
     .optional(),
 });
 

@@ -54,12 +54,31 @@ describe("instance skill folders", () => {
     });
     expect(
       resolveDefault.mock.calls.map((call: unknown[]) => call[1]).sort(),
-    ).toEqual(["codex", "copilot"]);
+    ).toEqual(["codex", "copilot", "pi"]);
     expect(getGlobalInstallDirectory(context, "claude")).toBe(
       "/homes/claude-work/skills",
     );
     expect(getGlobalInstallDirectory(context, "codex")).toBeNull();
     expect(getGlobalInstallDirectory(context, "sentinel")).toBeNull();
+  });
+
+  it("moves Pi's global skills with its agent directory", async () => {
+    const piWork = makeFakeInstance({
+      driver: "pi",
+      envOverrides: { PI_CODING_AGENT_DIR: "/homes/pi-work" },
+      id: "pi-work",
+      isDefault: false,
+    });
+    const context = await resolveSkillInstanceContext("user-1", "pi-work", {
+      getInstance: async () => piWork,
+      resolveDefault: async () => null,
+    });
+
+    expect(context.instances.pi).toBe(piWork);
+    expect(context.globalDirectories).toEqual({ pi: "/homes/pi-work/skills" });
+    expect(getGlobalInstallDirectory(context, "pi")).toBe(
+      "/homes/pi-work/skills",
+    );
   });
 
   it("ignores an unknown or non-home instance", async () => {

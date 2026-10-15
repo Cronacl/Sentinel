@@ -80,7 +80,8 @@ describe("drivers and isolation", () => {
     expect(getInstanceIsolationNote("codex")).toContain("CODEX_HOME");
     expect(getInstanceIsolationNote("claude")).toContain("CLAUDE_CONFIG_DIR");
     expect(getInstanceIsolationNote("copilot")).toContain("COPILOT_HOME");
-    for (const driver of ["cursor", "opencode", "pi"]) {
+    expect(getInstanceIsolationNote("pi")).toContain("PI_CODING_AGENT_DIR");
+    for (const driver of ["cursor", "opencode"]) {
       expect(getInstanceIsolationNote(driver)).toContain(
         "share the CLI's sign-in and settings",
       );

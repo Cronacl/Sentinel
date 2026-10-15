@@ -13,16 +13,21 @@ import {
 
 import type { SkillGlobalDirectories } from "./index";
 
-// Global skill folders per engine instance (critique G11). Codex, Claude and
-// Copilot read their global skills from `<home>/skills`, where home is the
-// instance's CODEX_HOME, CLAUDE_CONFIG_DIR or COPILOT_HOME; without one,
-// the usual ~/.codex, ~/.claude and ~/.copilot folders apply (and
-// skillsBasePath keeps moving those). Discovery, the composer and installs
+// Global skill folders per engine instance (critique G11). Codex, Claude,
+// Copilot and Pi read their global skills from `<home>/skills`, where home
+// is the instance's CODEX_HOME, CLAUDE_CONFIG_DIR, COPILOT_HOME or
+// PI_CODING_AGENT_DIR; without one, the usual ~/.codex, ~/.claude,
+// ~/.copilot and ~/.pi/agent folders apply (and skillsBasePath keeps moving
+// those). Discovery, the composer and installs
 // all go through the instance the user picked, else the driver's default.
 
-export const HOME_SKILL_DRIVERS = ["codex", "claude", "copilot"] as const;
+export const HOME_SKILL_DRIVERS = ["codex", "claude", "copilot", "pi"] as const;
 
 export type HomeSkillDriver = (typeof HOME_SKILL_DRIVERS)[number];
+
+/** The drivers whose home moves a conventional skills folder. */
+const HOME_SKILL_FOLDER_DRIVERS = ["claude", "copilot", "pi"] as const;
+type HomeSkillFolderDriver = (typeof HOME_SKILL_FOLDER_DRIVERS)[number];
 
 function isHomeSkillDriver(driver: DriverKind): driver is HomeSkillDriver {
   return (HOME_SKILL_DRIVERS as readonly string[]).includes(driver);
@@ -37,7 +42,7 @@ export function getInstanceGlobalSkillsDirectory(
 }
 
 export type SkillInstanceContext = {
-  /** Claude's and Copilot's global folders moved by their instance homes. */
+  /** Claude's, Copilot's and Pi's global folders moved by instance homes. */
   globalDirectories: SkillGlobalDirectories;
   /** The instance whose skills are shown or installed, per driver. */
   instances: Record<HomeSkillDriver, ResolvedEngineInstance | null>;
@@ -98,7 +103,8 @@ export async function resolveSkillInstanceContext(
   >;
 
   const globalDirectories: SkillGlobalDirectories = {};
-  for (const driver of ["claude", "copilot"] as const) {
+  // Codex's home is handled by the Codex skill context instead.
+  for (const driver of HOME_SKILL_FOLDER_DRIVERS) {
     const directory = getInstanceGlobalSkillsDirectory(instances[driver]);
     if (directory) {
       globalDirectories[driver] = directory;
@@ -112,7 +118,7 @@ export function getGlobalInstallDirectory(
   context: SkillInstanceContext,
   target: string,
 ) {
-  return target === "claude" || target === "copilot"
-    ? (context.globalDirectories[target] ?? null)
+  return (HOME_SKILL_FOLDER_DRIVERS as readonly string[]).includes(target)
+    ? (context.globalDirectories[target as HomeSkillFolderDriver] ?? null)
     : null;
 }

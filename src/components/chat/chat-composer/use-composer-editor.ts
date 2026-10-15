@@ -117,6 +117,8 @@ function getSkillEngineSourceRank(skill: SkillListItem, engine: ChatEngine) {
       if (skill.target === "opencode") return 0;
       if (skill.sourceKind === "agents") return 1;
       return skill.sourceKind === "claude" ? 2 : 3;
+    case "pi":
+      return skill.target === "pi" ? 0 : 1;
     case "sentinel":
       return skill.sourceKind === "sentinel" ? 0 : 1;
     case "codex":
@@ -140,6 +142,8 @@ export function getSkillSuggestionTitle(engine: ChatEngine) {
       return "Showing Cursor skills";
     case "opencode":
       return "Showing OpenCode skills";
+    case "pi":
+      return "Showing Pi skills";
     case "codex":
       return "Showing Codex skills";
     case "sentinel":
@@ -172,6 +176,11 @@ export function filterSkillsForEngine(
         );
       case "codex":
         return skills.filter((s) => s.target === "codex");
+      // Pi loads its own folders and the shared .agents ones.
+      case "pi":
+        return skills.filter(
+          (s) => s.target === "pi" || s.sourceKind === "agents",
+        );
       case "claude":
         return skills.filter(
           (s) =>
