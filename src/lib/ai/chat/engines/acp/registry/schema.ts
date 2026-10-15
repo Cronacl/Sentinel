@@ -172,6 +172,23 @@ export type ResolvedAcpRegistryDistribution =
       packageSpec: string;
     };
 
+/**
+ * Whether the managed installer can unpack a binary archive (zip, tar,
+ * tar.gz, tar.bz2 or a raw executable). Mirrors managed-install's
+ * detectArchiveKind, which this client-safe module cannot import.
+ */
+export function isSupportedAcpRegistryArchive(url: string) {
+  let pathname = url;
+  try {
+    pathname = new URL(url).pathname;
+  } catch {
+    // Validated as HTTPS already.
+  }
+  const lower = pathname.toLowerCase();
+  if (/\.tar\.bz2$|\.tbz2?$/.test(lower)) return true;
+  return !/\.(?:tar\.)?(?:bz2|xz|zst|7z|rar)$|\.txz$/.test(lower);
+}
+
 /** The distribution to install: `auto` prefers binary, then npx, then uvx. */
 export function resolveAcpRegistryDistribution(
   agent: AcpRegistryAgent,
@@ -183,7 +200,7 @@ export function resolveAcpRegistryDistribution(
   for (const kind of kinds) {
     if (kind === "binary") {
       const binary = target ? agent.distribution.binary?.[target] : undefined;
-      if (binary) {
+      if (binary && isSupportedAcpRegistryArchive(binary.archive)) {
         return {
           args: binary.args ?? [],
           env: binary.env ?? {},

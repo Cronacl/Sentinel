@@ -36,17 +36,26 @@ describe("Devin normalizer", () => {
     ).toBe("m-1");
   });
 
-  it("drops subagent thoughts and names untitled tools", () => {
+  it("keeps subagent thoughts in their own block and names untitled tools", () => {
     const normalize = createDevinNormalizer();
-    expect(
-      normalize(
-        update("sub-1", {
-          _meta: { "cognition.ai/subagent_context": { parentAgentId: "root" } },
-          content: { text: "thinking", type: "text" },
-          sessionUpdate: "agent_thought_chunk",
-        }),
-      ),
-    ).toBeNull();
+    const thought = normalize(
+      update("sub-1", {
+        _meta: {
+          "cognition.ai/streamingMessageId": "sub-m-1",
+          "cognition.ai/subagent_context": { parentAgentId: "parent-1" },
+        },
+        content: { text: "thinking", type: "text" },
+        sessionUpdate: "agent_thought_chunk",
+      }),
+    ) as {
+      params: {
+        sessionId: string;
+        update: { messageId: string; sessionUpdate: string };
+      };
+    };
+    expect(thought.params.sessionId).toBe("parent-1");
+    expect(thought.params.update.sessionUpdate).toBe("agent_thought_chunk");
+    expect(thought.params.update.messageId).toBe("sub-m-1");
     const tool = normalize(
       update("s", {
         _meta: { "cognition.ai/inferenceToolName": "grep" },

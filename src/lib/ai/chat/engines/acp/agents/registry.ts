@@ -47,6 +47,8 @@ export type AcpRegistryInstanceConfig = {
   commandPath: string | null;
   distribution: "auto" | "binary" | "custom" | "npx" | "uvx";
   name: string | null;
+  /** The registry version the user confirmed installing. */
+  version: string | null;
 };
 
 const PROBE_REQUEST_TIMEOUT_MS = 30_000;
@@ -81,6 +83,7 @@ export function readAcpRegistryConfig(
         ? distribution
         : "auto",
     name: string("agentName"),
+    version: string("agentVersion"),
   };
 }
 

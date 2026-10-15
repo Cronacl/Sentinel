@@ -117,6 +117,8 @@ const acpConfigSchema = z
       .regex(/^[a-z0-9][a-z0-9._-]{0,127}$/)
       .optional(),
     agentName: z.string().trim().min(1).max(160).optional(),
+    /** The registry version the user confirmed installing. */
+    agentVersion: z.string().trim().min(1).max(128).optional(),
     authMethodId: z.string().trim().min(1).max(256).optional(),
     /** Serve fs/read_text_file and fs/write_text_file (default per agent). */
     clientFs: z.boolean().optional(),

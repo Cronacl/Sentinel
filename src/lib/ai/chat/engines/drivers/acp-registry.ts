@@ -11,7 +11,6 @@ import { disposeAcpInstanceProcesses } from "../acp/launch";
 import { probeAcpAgent } from "../acp/probe";
 import {
   findAcpRegistryAgent,
-  loadAcpRegistry,
   scheduleAcpRegistryBackgroundRefresh,
 } from "../acp/registry/catalog";
 import { acpRegistryIconUrl } from "../acp/registry/schema";
@@ -167,11 +166,19 @@ export const acpRegistryDriver = defineEngineDriver({
             "This instance runs a custom command, not an ACP Registry agent.",
           );
         }
-        // An explicit install: the index may be fetched when it is stale.
-        await loadAcpRegistry({ refresh: "if-stale" });
+        // The release the user confirmed in the browser, from the cached
+        // index: never refetched here, so a newer release published since
+        // the confirmation is not installed without a new one.
         const agent = await findAcpRegistryAgent(config.agentId);
         if (!agent) {
-          throw new Error(`${config.agentId} is not in the ACP Registry.`);
+          throw new Error(
+            `${config.agentId} is not in the cached ACP Registry. Open the registry browser in Settings > Engines and install it from there.`,
+          );
+        }
+        if (config.version && agent.version !== config.version) {
+          throw new Error(
+            `The ACP Registry now lists ${agent.name} ${agent.version}, not the ${config.version} you confirmed. Review it in the registry browser and install again.`,
+          );
         }
         const { installAcpRegistryAgent } =
           await import("../acp/registry/install");

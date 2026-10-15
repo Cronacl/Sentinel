@@ -14,7 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 mock.module("server-only", () => ({}));
 
-const { parseAcpRegistryIndex } = await import("./schema");
+const { parseAcpRegistryIndex, resolveAcpRegistryDistribution } =
+  await import("./schema");
 const {
   describeAcpRegistryDistributions,
   getAcpRegistryToolDirectory,
@@ -44,6 +45,20 @@ dir="$npm_config_prefix/lib/node_modules/$name"
 mkdir -p "$dir/bundle"
 printf '{"name":"%s","version":"%s","bin":{"gemini":"bundle/gemini.js"}}' "$name" "$version" > "$dir/package.json"
 echo 'console.log("gemini")' > "$dir/bundle/gemini.js"
+`;
+
+// Like @xai-official/grok: after postinstall the bin is a link to a native
+// executable (here, a file starting with the ELF magic).
+const FAKE_NPM_NATIVE_BIN = `#!/bin/sh
+spec="$5"
+name="\${spec%@*}"
+version="\${spec##*@}"
+dir="$npm_config_prefix/lib/node_modules/$name"
+mkdir -p "$dir/bin"
+printf '{"name":"%s","version":"%s","bin":{"gemini":"bin/gemini"}}' "$name" "$version" > "$dir/package.json"
+printf '\\177ELF\\002\\001' > "$dir/bin/gemini-native"
+chmod +x "$dir/bin/gemini-native"
+ln -s gemini-native "$dir/bin/gemini"
 `;
 
 const FAKE_UV = `#!/bin/sh
@@ -203,6 +218,79 @@ describe("installAcpRegistryAgent", () => {
     expect(await readAcpRegistryLaunch("devin", root)).toBeNull();
   });
 
+  it("runs an npm bin linked to a native executable directly, not under node", async () => {
+    const npm = await fakeProgram("npm", FAKE_NPM_NATIVE_BIN);
+    const receipt = await installAcpRegistryAgent(
+      agent("gemini"),
+      { env: env(), preference: "npx", signal: new AbortController().signal },
+      { platform: "darwin", stateRoot: root, which: async () => npm },
+    );
+    expect(receipt).toMatchObject({
+      command: path.join(
+        root,
+        "tools/npm/gemini/lib/node_modules/@google/gemini-cli/bin/gemini",
+      ),
+      launcher: "direct",
+    });
+  });
+
+  it("keeps the installed release until an update succeeds, then prunes it", async () => {
+    let fail = false;
+    const fetch = async (url: string) => {
+      const response = fail
+        ? new Response("unavailable", { status: 503 })
+        : new Response(
+            buildTarGz([
+              { data: "#!/bin/sh\n", mode: 0o755, name: "bin/devin" },
+            ]),
+          );
+      Object.defineProperty(response, "url", { value: url });
+      return response;
+    };
+    const deps = {
+      arch: "x64",
+      fetch,
+      platform: "linux" as const,
+      stateRoot: root,
+    };
+    const install = (target: ReturnType<typeof agent>) =>
+      installAcpRegistryAgent(
+        target,
+        {
+          env: env(),
+          preference: "auto",
+          signal: new AbortController().signal,
+        },
+        deps,
+      );
+    const old = await install(agent("devin"));
+    const next = {
+      ...agent("devin"),
+      distribution: {
+        binary: {
+          "linux-x86_64": {
+            archive:
+              "https://static.devin.ai/cli/3000.12.0/devin-linux-x64.tar.gz",
+            args: ["acp"],
+            cmd: "./bin/devin",
+          },
+        },
+      },
+      version: "3000.12.0",
+    };
+
+    fail = true;
+    await expect(install(next)).rejects.toThrow();
+    expect(await readAcpRegistryLaunch("devin", root)).toEqual(old);
+    expect(await stat(old.command).catch(() => null)).not.toBeNull();
+
+    fail = false;
+    const updated = await install(next);
+    expect(updated.version).toBe("3000.12.0");
+    expect(await stat(updated.command).catch(() => null)).not.toBeNull();
+    expect(await stat(old.command).catch(() => null)).toBeNull();
+  });
+
   it("explains a missing npm or uv, and reports a failing installer", async () => {
     await expect(
       installAcpRegistryAgent(
@@ -236,6 +324,43 @@ describe("installAcpRegistryAgent", () => {
       await stat(path.join(root, "tools", "npm", "gemini")).catch(() => null),
     ).toBeNull();
     expect(() => getAcpRegistryToolDirectory("../x", root)).toThrow();
+  });
+});
+
+describe("binary archive formats", () => {
+  const withArchive = (archive: string) => ({
+    ...agent("gemini"),
+    distribution: {
+      ...agent("gemini").distribution,
+      binary: { "linux-x86_64": { archive, cmd: "./gemini" } },
+    },
+  });
+
+  it("offers tar.bz2 binaries and skips formats the installer cannot unpack", async () => {
+    const npm = { which: async () => "/usr/bin/npm" };
+    const linux = { arch: "x64", platform: "linux" as const, ...npm };
+    const bz2 = withArchive("https://example.com/gemini.tar.bz2");
+    expect(
+      resolveAcpRegistryDistribution(bz2, "auto", "linux-x86_64")?.kind,
+    ).toBe("binary");
+    expect(
+      (await describeAcpRegistryDistributions(bz2, {}, linux))[0],
+    ).toMatchObject({ available: true, kind: "binary" });
+
+    const xz = withArchive("https://example.com/gemini.tar.xz");
+    expect(
+      resolveAcpRegistryDistribution(xz, "auto", "linux-x86_64")?.kind,
+    ).toBe("npx");
+    expect(
+      resolveAcpRegistryDistribution(xz, "binary", "linux-x86_64"),
+    ).toBeNull();
+    expect(
+      (await describeAcpRegistryDistributions(xz, {}, linux))[0],
+    ).toMatchObject({
+      advisory: "Sentinel cannot unpack this archive format yet.",
+      available: false,
+      kind: "binary",
+    });
   });
 });
 

@@ -3,6 +3,7 @@ import "server-only";
 import type { ChildProcess } from "node:child_process";
 import {
   mkdir,
+  open,
   readdir,
   readFile,
   realpath,
@@ -22,6 +23,7 @@ import {
   getManagedToolsRoot,
   installManagedTool,
   ManagedInstallError,
+  removeManagedTool,
   type ManagedInstallOptions,
   type ManagedInstallProgress,
 } from "@/lib/runtime/managed-install/install";
@@ -33,6 +35,7 @@ import {
 import {
   ACP_REGISTRY_DISTRIBUTIONS,
   ACP_REGISTRY_NATIVE_ENGINES,
+  isSupportedAcpRegistryArchive,
   parseAcpRegistryPackageSpec,
   resolveAcpRegistryDistribution,
   resolveAcpRegistryPlatformTarget,
@@ -264,6 +267,47 @@ async function isFileInside(file: string, root: string) {
   );
 }
 
+const NATIVE_MAGIC = [
+  [0x7f, 0x45, 0x4c, 0x46], // ELF
+  [0xcf, 0xfa, 0xed, 0xfe], // Mach-O 64-bit
+  [0xce, 0xfa, 0xed, 0xfe], // Mach-O 32-bit
+  [0xca, 0xfe, 0xba, 0xbe], // Mach-O universal
+  [0x4d, 0x5a], // PE (MZ)
+];
+
+/**
+ * How to run an npm bin target: JavaScript (a .js/.cjs/.mjs file, a node
+ * shebang or no shebang at all) under Node, anything else - a native
+ * executable, as packages like @xai-official/grok link their bin to after
+ * postinstall, or a script for another interpreter - directly.
+ */
+export async function detectNpmBinLauncher(
+  file: string,
+): Promise<"direct" | "node"> {
+  if (/\.[cm]?js$/i.test(file)) {
+    return "node";
+  }
+  const handle = await open(file, "r");
+  let head: Buffer;
+  try {
+    const buffer = Buffer.alloc(256);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    head = buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+  if (
+    NATIVE_MAGIC.some((magic) => magic.every((byte, i) => head[i] === byte))
+  ) {
+    return "direct";
+  }
+  if (head[0] === 0x23 && head[1] === 0x21) {
+    const shebang = head.toString("latin1").split("\n", 1)[0]!;
+    return /[\s/]node(?:\s|$)/.test(shebang) ? "node" : "direct";
+  }
+  return "node";
+}
+
 /** The bin script npm installed for the agent (package.json `bin`). */
 async function resolveNpmBin(
   agent: AcpRegistryAgent,
@@ -307,9 +351,16 @@ async function resolveNpmBin(
     return null;
   }
   const script = path.resolve(packageRoot, relative);
-  return (await isFileInside(script, packageRoot))
-    ? { name: unscoped, script }
-    : null;
+  if (!(await isFileInside(script, packageRoot))) {
+    return null;
+  }
+  // Judged by the real file: a bin linked to a native executable (after a
+  // postinstall swap) runs directly, through the link.
+  return {
+    launcher: await detectNpmBinLauncher(await realpath(script)),
+    name: unscoped,
+    script,
+  };
 }
 
 async function installNpx(
@@ -370,7 +421,7 @@ async function installNpx(
     command: bin.script,
     distribution: "npx",
     env: distribution.env,
-    launcher: "node",
+    launcher: bin.launcher,
     name: agent.name,
     packageSpec: distribution.packageSpec,
     verified: null,
@@ -459,6 +510,42 @@ export type AcpRegistryInstallInput = {
 
 const locks = new Map<string, Promise<unknown>>();
 
+/**
+ * Removes what the new launch receipt replaced: the other distributions'
+ * folders and a previous binary version. The old install stays in place
+ * until the new one is complete, so a failed update keeps it usable.
+ */
+async function pruneReplacedInstall(
+  previous: AcpRegistryLaunchReceipt | null,
+  current: AcpRegistryLaunchReceipt,
+  stateRoot: string | undefined,
+) {
+  const removals: Promise<unknown>[] = [];
+  if (current.distribution !== "npx") {
+    removals.push(
+      rm(npmPrefix(current.agentId, stateRoot), {
+        force: true,
+        recursive: true,
+      }),
+    );
+  }
+  if (current.distribution !== "uvx") {
+    removals.push(
+      rm(uvRoot(current.agentId, stateRoot), { force: true, recursive: true }),
+    );
+  }
+  if (
+    previous?.distribution === "binary" &&
+    (current.distribution !== "binary" || previous.version !== current.version)
+  ) {
+    removals.push(
+      removeManagedTool(`acp/${current.agentId}`, previous.version, stateRoot),
+    );
+  }
+  // A file still in use (Windows) is left for the next uninstall.
+  await Promise.allSettled(removals);
+}
+
 async function runInstall(
   agent: AcpRegistryAgent,
   input: AcpRegistryInstallInput,
@@ -482,6 +569,7 @@ async function runInstall(
     );
   }
 
+  const previous = await readAcpRegistryLaunch(agent.id, deps.stateRoot);
   let launch: Omit<AcpRegistryLaunchReceipt, "installedAt" | "schemaVersion">;
   if (distribution.kind === "binary") {
     const result = await installManagedTool({
@@ -523,6 +611,7 @@ async function runInstall(
     schemaVersion: 1,
   };
   await writeLaunch(receipt, deps.stateRoot);
+  await pruneReplacedInstall(previous, receipt, deps.stateRoot);
   if (distribution.kind !== "binary") {
     input.onProgress?.({
       downloadedBytes: 0,
@@ -569,12 +658,31 @@ export async function uninstallAcpRegistryAgent(
   );
 }
 
+export type AcpRegistryPackageManagers = {
+  npm: string | null;
+  uv: string | null;
+};
+
+/** npm and uv on PATH, looked up once per catalog listing. */
+export async function findAcpRegistryPackageManagers(
+  env: Record<string, string | undefined>,
+  deps: AcpRegistryInstallDeps = {},
+): Promise<AcpRegistryPackageManagers> {
+  const [npm, uv] = await Promise.all([
+    which(deps)("npm", env.PATH),
+    which(deps)("uv", env.PATH),
+  ]);
+  return { npm, uv };
+}
+
 /** What the browser shows per distribution, with the npm/uv advisory. */
 export async function describeAcpRegistryDistributions(
   agent: AcpRegistryAgent,
   env: Record<string, string | undefined>,
   deps: AcpRegistryInstallDeps = {},
+  managers?: AcpRegistryPackageManagers,
 ): Promise<AcpRegistryDistributionView[]> {
+  const tools = managers ?? (await findAcpRegistryPackageManagers(env, deps));
   const target = resolveAcpRegistryPlatformTarget(
     deps.platform ?? process.platform,
     deps.arch ?? process.arch,
@@ -588,9 +696,12 @@ export async function describeAcpRegistryDistributions(
     } catch {
       // Validated as HTTPS already.
     }
+    const supported = isSupportedAcpRegistryArchive(binary.archive);
     views.push({
-      advisory: null,
-      available: true,
+      advisory: supported
+        ? null
+        : "Sentinel cannot unpack this archive format yet.",
+      available: supported,
       detail: host,
       kind: "binary",
       verified: Boolean(binary.sha256),
@@ -607,8 +718,7 @@ export async function describeAcpRegistryDistributions(
   for (const kind of ["npx", "uvx"] as const) {
     const pkg = agent.distribution[kind];
     if (!pkg) continue;
-    const tool = kind === "npx" ? "npm" : "uv";
-    const found = await which(deps)(tool, env.PATH);
+    const found = kind === "npx" ? tools.npm : tools.uv;
     views.push({
       advisory: found
         ? null

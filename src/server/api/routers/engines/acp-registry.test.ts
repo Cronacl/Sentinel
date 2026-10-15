@@ -72,6 +72,8 @@ const { getAcpRegistryCachePath } =
   await import("@/lib/ai/chat/engines/acp/registry/catalog");
 const { registryIndex } =
   await import("@/lib/ai/chat/engines/acp/registry/__tests__/fixtures");
+const { getAcpRegistryToolDirectory, readAcpRegistryLaunch } =
+  await import("@/lib/ai/chat/engines/acp/registry/install");
 
 const ctx = { session: { user: { id: "user-1" } } };
 
@@ -130,6 +132,7 @@ describe("acpRegistry.install", () => {
       config: {
         agentId: "gemini",
         agentName: "Gemini CLI",
+        agentVersion: "0.63.0",
         distribution: "auto",
         iconUrl:
           "https://cdn.agentclientprotocol.com/registry/v1/latest/gemini.svg",
@@ -154,6 +157,39 @@ describe("acpRegistry.install", () => {
     });
     expect(registry.create).toHaveBeenCalledTimes(1);
     expect(summaries[0].config.distribution).toBe("npx");
+  });
+
+  it("keeps the installed older release when the update cannot start", async () => {
+    const dir = getAcpRegistryToolDirectory("gemini");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, ".launch.json"),
+      JSON.stringify({
+        agentId: "gemini",
+        args: ["--acp"],
+        command: path.join(root, "gemini.js"),
+        distribution: "npx",
+        env: {},
+        installedAt: new Date().toISOString(),
+        launcher: "node",
+        name: "Gemini CLI",
+        packageSpec: "@google/gemini-cli@0.62.0",
+        schemaVersion: 1,
+        verified: null,
+        version: "0.62.0",
+      }),
+    );
+    maintenance.install.mockImplementationOnce(async () => {
+      throw new Error("busy");
+    });
+    await expect(
+      router.install({
+        ctx,
+        input: { agentId: "gemini", distribution: "auto" },
+      }),
+    ).rejects.toThrow("busy");
+    expect((await readAcpRegistryLaunch("gemini"))?.version).toBe("0.62.0");
+    await rm(dir, { force: true, recursive: true });
   });
 
   it("refuses an agent the registry does not list", async () => {

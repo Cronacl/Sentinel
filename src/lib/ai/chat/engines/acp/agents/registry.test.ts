@@ -275,3 +275,31 @@ describe("registry descriptor", () => {
     ).toBe("key");
   });
 });
+
+describe("acpRegistryDriver managed install", () => {
+  it("refuses a release other than the one the user confirmed", async () => {
+    const { getAcpRegistryCachePath } = await import("../registry/catalog");
+    const { registryIndex } = await import("../registry/__tests__/fixtures");
+    const file = getAcpRegistryCachePath(stateRoot);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(
+      file,
+      JSON.stringify({
+        etag: null,
+        fetchedAt: new Date().toISOString(),
+        index: registryIndex(),
+      }),
+    );
+    const instance = registryInstance(
+      {},
+      { agentId: "gemini", agentVersion: "0.62.0", commandPath: undefined },
+    );
+    await expect(
+      acpRegistryDriver.maintenance!.managedInstall!.run({
+        instance,
+        onProgress: () => undefined,
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow("not the 0.62.0 you confirmed");
+  });
+});

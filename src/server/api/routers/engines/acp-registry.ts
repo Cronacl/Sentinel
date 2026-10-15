@@ -7,6 +7,8 @@ import {
 } from "@/lib/ai/chat/engines/acp/registry/catalog";
 import {
   describeAcpRegistryDistributions,
+  findAcpRegistryPackageManagers,
+  type AcpRegistryPackageManagers,
   nativeEngineFor,
   readAcpRegistryLaunch,
   uninstallAcpRegistryAgent,
@@ -79,11 +81,17 @@ async function toView(
   agent: AcpRegistryAgent,
   instances: EngineInstanceSummary[],
   env: Record<string, string | undefined>,
+  managers?: AcpRegistryPackageManagers,
 ): Promise<AcpRegistryAgentView> {
   return {
     authors: agent.authors ?? [],
     description: agent.description,
-    distributions: await describeAcpRegistryDistributions(agent, env),
+    distributions: await describeAcpRegistryDistributions(
+      agent,
+      env,
+      {},
+      managers,
+    ),
     featured: ACP_REGISTRY_FEATURED_AGENTS.includes(agent.id),
     iconUrl: acpRegistryIconUrl(agent),
     id: agent.id,
@@ -122,9 +130,10 @@ async function toCatalogView(
         left.agent.name.localeCompare(right.agent.name)
       );
     });
+  const managers = await findAcpRegistryPackageManagers(env);
   return {
     agents: await Promise.all(
-      agents.map(({ agent }) => toView(agent, instances, env)),
+      agents.map(({ agent }) => toView(agent, instances, env, managers)),
     ),
     fetchedAt: result.cache?.fetchedAt ?? null,
     fetchError: result.error,
@@ -266,6 +275,7 @@ export const engineAcpRegistryRouter = createTRPCRouter({
             config: {
               agentId: agent.id,
               agentName: agent.name,
+              agentVersion: agent.version,
               distribution: input.distribution,
               ...(iconUrl ? { iconUrl } : {}),
             },
@@ -274,9 +284,16 @@ export const engineAcpRegistryRouter = createTRPCRouter({
           });
         } else {
           const config = (instance.config ?? {}) as Record<string, unknown>;
-          if (config.distribution !== input.distribution) {
+          if (
+            config.distribution !== input.distribution ||
+            config.agentVersion !== agent.version
+          ) {
             instance = await registry.update(userId, instance.id, {
-              config: { ...config, distribution: input.distribution },
+              config: {
+                ...config,
+                agentVersion: agent.version,
+                distribution: input.distribution,
+              },
             });
           }
         }
@@ -284,7 +301,9 @@ export const engineAcpRegistryRouter = createTRPCRouter({
         throw toEngineInstanceTRPCError(error);
       }
       // Already installed at this version (another instance of the agent):
-      // nothing to download. A new registry version replaces the old one.
+      // nothing to download. A new registry version is installed next to
+      // the old one, which stays usable until the new launch receipt is
+      // written (installAcpRegistryAgent prunes it afterwards).
       const maintenance = getEngineMaintenanceService();
       const snapshots = getEngineSnapshotService();
       const launch = await readAcpRegistryLaunch(agent.id);
@@ -300,9 +319,6 @@ export const engineAcpRegistryRouter = createTRPCRouter({
           instanceId: instance.id,
           status: await maintenance.status(userId, instance.id),
         };
-      }
-      if (launch) {
-        await removeAgentFiles(userId, agent.id);
       }
       try {
         const status = await maintenance.install(userId, instance.id, {

@@ -33,8 +33,8 @@ export type AcpRegistryOverlay = Partial<
 // - `cognition.ai/subagent_context.parentAgentId`: an update from a
 //   subagent, routed to its parent session ("root" stays as sent; the
 //   descriptor accepts other session ids as the root's). Its text becomes
-//   a subagent message rather than the assistant's own; its thoughts are
-//   dropped;
+//   a subagent message rather than the assistant's own; its thoughts stay
+//   reasoning, in their own block (keyed by the subagent's message id);
 // - `cognition.ai/streamingMessageId` → `messageId` on message and thought
 //   chunks;
 // - `cognition.ai/inferenceToolName` → the tool title when it is empty or
@@ -96,7 +96,15 @@ export function createDevinNormalizer() {
     if (kind === "agent_message_chunk" || kind === "agent_thought_chunk") {
       if (context) {
         if (kind === "agent_thought_chunk") {
-          return null;
+          return {
+            sessionId: routed,
+            update: {
+              ...update,
+              messageId:
+                streamingId ??
+                `devin-subagent-thought:${sessionId ?? "unknown"}`,
+            },
+          };
         }
         return {
           sessionId: routed,
