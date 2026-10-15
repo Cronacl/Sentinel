@@ -387,18 +387,32 @@ export const DRIVER_CATALOG = {
     transport: "acp",
   },
   pi: {
-    capabilities: { ...EXTERNAL_CAPABILITIES, supportsImages: true },
+    capabilities: {
+      ...EXTERNAL_CAPABILITIES,
+      // Sentinel's Pi extension asks before every tool call; the shared
+      // policy answers it (runtime/pi/interactions.ts).
+      permissionModes: ["default", "accept_edits", "full"],
+      reportsNativeSkills: true,
+      reportsSlashCommands: true,
+      supportsImages: true,
+      // Pi has no MCP client; bridging MCP through the extension is not built.
+      supportsMcpInjection: false,
+      // Pi has no plan mode.
+      supportsPlanMode: false,
+      supportsUserInput: true,
+    },
     config: binaryConfigSchema,
     defaultInstance: true,
     description: "Use the locally installed Pi coding agent.",
+    docsUrl: "https://pi.dev",
     homeEnvVar: null,
     kind: "pi",
     label: "Pi",
-    legacyEnvPathKeys: [],
+    legacyEnvPathKeys: ["SENTINEL_PI_PATH"],
     multiInstance: true,
     runtime: "external",
     stability: "experimental",
-    status: "planned",
+    status: "available",
     toolPrefix: "pi_",
     transport: "rpc",
   },

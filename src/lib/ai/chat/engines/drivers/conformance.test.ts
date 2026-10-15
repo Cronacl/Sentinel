@@ -169,6 +169,58 @@ mock.module("@/lib/ai/chat/engines/opencode-sdk", () => ({
   resetOpenCodeRuntimeCache: () => {},
   resolveOpenCodeRuntime: async () => runtimeFor("opencode"),
 }));
+// Pi probes through its own RPC engine module (an ephemeral `pi --mode rpc`).
+mock.module("@/lib/ai/chat/engines/pi/probe", () => ({
+  PI_LOGIN_HINT: "Run `pi` and use /login.",
+  PI_PROBE_TIMEOUT_MS: 8_000,
+  probePiEngine: async () => {
+    const mode = modeOf("pi");
+    if (mode === "hang") {
+      return never();
+    }
+    const installed = mode === "installed";
+    return {
+      auth: {
+        canLogin: false,
+        canLogout: false,
+        email: null,
+        label: null,
+        method: "Pi login",
+        plan: null,
+        status: installed ? "authenticated" : "unknown",
+      },
+      install: {
+        installed,
+        path: installed ? "/usr/local/bin/pi" : null,
+        source: installed ? "managed-path" : null,
+        version: installed ? "1.0.4" : null,
+      },
+      ...(installed ? {} : { message: "Pi was not found in PATH." }),
+      models: installed
+        ? [
+            {
+              id: "default",
+              inputModalities: ["text"],
+              isCustom: false,
+              isDefault: true,
+              name: "Pi default",
+              options: [],
+              source: "live",
+            },
+            {
+              id: "anthropic/claude-sonnet-4",
+              inputModalities: ["text", "image"],
+              isCustom: false,
+              name: "Claude Sonnet 4",
+              options: [],
+              source: "live",
+            },
+          ]
+        : [],
+      status: installed ? "ready" : "error",
+    };
+  },
+}));
 
 // Each external runtime module is faked under its own path, so a driver
 // whose handlers loaded another engine's runtime (or swapped run and stop)
