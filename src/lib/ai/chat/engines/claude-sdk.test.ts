@@ -10,6 +10,12 @@ import {
 import os from "node:os";
 import path from "node:path";
 
+import {
+  restoreTestHome,
+  setTestHome,
+  writeFakeCli,
+} from "./platform/testing/fake-cli";
+
 const setLocalRuntimeEnvValueMock = mock(
   async (key: string, value: string | null | undefined) => {
     const normalizedValue = value?.trim() ?? "";
@@ -68,7 +74,6 @@ const {
 } = await import("./claude-sdk.ts?claude-sdk-test");
 
 const originalPath = process.env.PATH;
-const originalHome = process.env.HOME;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
 const originalClaudePath = process.env.CLAUDE_PATH;
 const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
@@ -81,7 +86,7 @@ afterEach(async () => {
     delete process.env.SENTINEL_CLAUDE_TEST_MARKER;
   }
   process.env.PATH = originalPath;
-  process.env.HOME = originalHome;
+  restoreTestHome();
   if (originalSentinelClaudePath) {
     process.env.SENTINEL_CLAUDE_PATH = originalSentinelClaudePath;
   } else {
@@ -124,12 +129,10 @@ __SENTINEL_CLAUDE_SHELL_PATH_END__
 describe("resolveClaudeCodeRuntime", () => {
   it("detects claude directly from the current PATH", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
-    const executablePath = path.join(tempRoot, "claude");
 
     try {
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      const executablePath = await writeFakeCli(path.join(tempRoot, "claude"));
+      setTestHome(tempRoot);
       process.env.PATH = `${tempRoot}${path.delimiter}${originalPath ?? ""}`;
       delete process.env.SENTINEL_STATE_PATH;
 
@@ -148,13 +151,12 @@ describe("resolveClaudeCodeRuntime", () => {
   it("detects claude from common user bin locations when PATH is stripped", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
     const bunBinRoot = path.join(tempRoot, ".bun", "bin");
-    const executablePath = path.join(bunBinRoot, "claude");
 
     try {
-      await mkdir(bunBinRoot, { recursive: true });
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      const executablePath = await writeFakeCli(
+        path.join(bunBinRoot, "claude"),
+      );
+      setTestHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
       delete process.env.SENTINEL_STATE_PATH;
 
@@ -181,7 +183,7 @@ describe("resolveClaudeCodeRuntime", () => {
     try {
       await writeFile(executablePath, "#!/bin/sh\nexit 1\n", "utf8");
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
       process.env.SENTINEL_CLAUDE_PATH = executablePath;
       delete process.env.CLAUDE_PATH;
@@ -213,7 +215,7 @@ describe("resolveClaudeCodeRuntime", () => {
         "utf8",
       );
       await chmod(executablePath, 0o755);
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       process.env.PATH = tempRoot;
       process.env.SENTINEL_CLAUDE_PATH = executablePath;
       delete process.env.CLAUDE_PATH;
@@ -232,17 +234,13 @@ describe("resolveClaudeCodeRuntime", () => {
 describe("resolveClaudeCodeRuntime for an instance", () => {
   it("verifies a non-default instance's binaryPath under the instance env", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-claude-"));
-    const configured = path.join(tempRoot, "work", "claude");
 
     try {
-      await mkdir(path.dirname(configured), { recursive: true });
-      await writeFile(
-        configured,
-        '#!/bin/sh\necho "2.1.300 (Claude Code) $CLAUDE_CONFIG_DIR"\n',
-        "utf8",
+      const configured = await writeFakeCli(
+        path.join(tempRoot, "work", "claude"),
+        'console.log("2.1.300 (Claude Code) " + process.env.CLAUDE_CONFIG_DIR);',
       );
-      await chmod(configured, 0o755);
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       process.env.SENTINEL_CLAUDE_PATH = "/somewhere/else/claude";
       delete process.env.SENTINEL_STATE_PATH;
 

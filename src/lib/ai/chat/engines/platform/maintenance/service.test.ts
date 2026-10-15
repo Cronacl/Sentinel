@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import path from "node:path";
 import { PassThrough } from "node:stream";
 
 import { beforeEach, describe, expect, it, mock } from "bun:test";
@@ -272,7 +273,7 @@ describe("engine maintenance service", () => {
     });
     const env = spawnedEnv[0]!;
     // The standalone tree's own CODEX_HOME, not the instance's.
-    expect(env.CODEX_HOME).toBe("/Users/me/.codex");
+    expect(env.CODEX_HOME).toBe(path.normalize("/Users/me/.codex"));
     // Unset explicitly, so the spawn does not fill it in either.
     expect("OPENAI_API_KEY" in env).toBe(true);
     expect(env.OPENAI_API_KEY).toBeUndefined();

@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+
+import {
+  restoreTestHome,
+  setTestHome,
+  writeFakeCli,
+} from "./platform/testing/fake-cli";
 
 mock.module("server-only", () => ({}));
 
@@ -56,12 +55,11 @@ async function writeNpmCodexShims(directory: string) {
 }
 
 const originalPath = process.env.PATH;
-const originalHome = process.env.HOME;
 const originalSentinelCodexPath = process.env.SENTINEL_CODEX_PATH;
 const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
 
 function useTempSentinelHome(tempRoot: string) {
-  process.env.HOME = tempRoot;
+  setTestHome(tempRoot);
   process.env.SENTINEL_STATE_PATH = path.join(
     tempRoot,
     ".sentinel",
@@ -71,7 +69,7 @@ function useTempSentinelHome(tempRoot: string) {
 
 afterEach(async () => {
   process.env.PATH = originalPath;
-  process.env.HOME = originalHome;
+  restoreTestHome();
   if (originalSentinelStatePath) {
     process.env.SENTINEL_STATE_PATH = originalSentinelStatePath;
   } else {
@@ -109,11 +107,9 @@ __SENTINEL_PATH_END__
 describe("resolveCodexCli", () => {
   it("detects codex directly from the current PATH", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
-    const executablePath = path.join(tempRoot, "codex");
 
     try {
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
+      const executablePath = await writeFakeCli(path.join(tempRoot, "codex"));
       useTempSentinelHome(tempRoot);
       process.env.PATH = `${tempRoot}${path.delimiter}${originalPath ?? ""}`;
 
@@ -130,12 +126,9 @@ describe("resolveCodexCli", () => {
   it("detects codex from common user bin locations when PATH is stripped", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
     const bunBinRoot = path.join(tempRoot, ".bun", "bin");
-    const executablePath = path.join(bunBinRoot, "codex");
 
     try {
-      await mkdir(bunBinRoot, { recursive: true });
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
+      const executablePath = await writeFakeCli(path.join(bunBinRoot, "codex"));
       useTempSentinelHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
 
@@ -165,12 +158,9 @@ describe("resolveCodexCli", () => {
       "123",
       "bin",
     );
-    const executablePath = path.join(fnmBinRoot, "codex");
 
     try {
-      await mkdir(fnmBinRoot, { recursive: true });
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
+      const executablePath = await writeFakeCli(path.join(fnmBinRoot, "codex"));
       useTempSentinelHome(tempRoot);
       process.env.PATH = `${fnmBinRoot}${path.delimiter}/usr/bin:/bin`;
 
@@ -192,14 +182,13 @@ describe("resolveCodexCli", () => {
   it("clears a stale persisted override before falling back to PATH discovery", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
     const stableBinRoot = path.join(tempRoot, ".bun", "bin");
-    const executablePath = path.join(stableBinRoot, "codex");
     const staleOverridePath = path.join(tempRoot, "missing", "codex");
 
     try {
-      await mkdir(stableBinRoot, { recursive: true });
       await mkdir(path.join(tempRoot, ".sentinel"), { recursive: true });
-      await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
-      await chmod(executablePath, 0o755);
+      const executablePath = await writeFakeCli(
+        path.join(stableBinRoot, "codex"),
+      );
       useTempSentinelHome(tempRoot);
       process.env.PATH = "/usr/bin:/bin";
       process.env.SENTINEL_CODEX_PATH = staleOverridePath;
@@ -240,15 +229,12 @@ describe("resolveCodexCli for an instance", () => {
 
   it("runs a non-default instance's binaryPath and records it per instance", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
-    const configured = path.join(tempRoot, "work", "codex");
-    const legacy = path.join(tempRoot, "legacy", "codex");
 
     try {
-      for (const filePath of [configured, legacy]) {
-        await mkdir(path.dirname(filePath), { recursive: true });
-        await writeFile(filePath, "#!/bin/sh\nexit 0\n", "utf8");
-        await chmod(filePath, 0o755);
-      }
+      const configured = await writeFakeCli(
+        path.join(tempRoot, "work", "codex"),
+      );
+      const legacy = await writeFakeCli(path.join(tempRoot, "legacy", "codex"));
       useTempSentinelHome(tempRoot);
       process.env.SENTINEL_CODEX_PATH = legacy;
 
@@ -287,15 +273,10 @@ describe("resolveCodexCli for an instance", () => {
 
   it("ignores SENTINEL_CODEX_PATH for instances other than the default", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
-    const legacy = path.join(tempRoot, "legacy", "codex");
-    const onPath = path.join(tempRoot, "bin", "codex");
 
     try {
-      for (const filePath of [legacy, onPath]) {
-        await mkdir(path.dirname(filePath), { recursive: true });
-        await writeFile(filePath, "#!/bin/sh\nexit 0\n", "utf8");
-        await chmod(filePath, 0o755);
-      }
+      const legacy = await writeFakeCli(path.join(tempRoot, "legacy", "codex"));
+      const onPath = await writeFakeCli(path.join(tempRoot, "bin", "codex"));
       useTempSentinelHome(tempRoot);
       process.env.SENTINEL_CODEX_PATH = legacy;
       process.env.PATH = path.join(tempRoot, "bin");

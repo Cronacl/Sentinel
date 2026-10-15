@@ -190,12 +190,13 @@ async function writeFailingCopilotScript(
 }
 
 afterEach(async () => {
+  // Leave the temp roots first: Windows cannot remove a process's cwd.
+  process.chdir(originalCwd);
   await Promise.all(
     tempRoots
       .splice(0)
       .map((rootPath) => rm(rootPath, { force: true, recursive: true })),
   );
-  process.chdir(originalCwd);
 
   for (const [key, value] of Object.entries(originalEnv)) {
     if (value === undefined) {
@@ -473,10 +474,12 @@ describe("resolveCopilotRuntime", () => {
     resetCopilotRuntimeCache();
 
     const runtime = await resolveCopilotRuntime();
-    const canonicalScriptPath = await realpath(scriptPath);
 
     expect(runtime.cliDetected).toBe(true);
-    expect(runtime.cliPath).toBe(canonicalScriptPath);
+    // Resolved against the cwd as the OS reports it (macOS: /private/var/…;
+    // Windows: the 8.3 temp path it was entered by).
+    expect(runtime.cliPath).toBe(path.resolve(process.cwd(), relativePath));
+    expect(await realpath(runtime.cliPath!)).toBe(await realpath(scriptPath));
     // The override is used as given; nothing is written back.
     expect(process.env.SENTINEL_COPILOT_PATH).toBe(relativePath);
     expect(setLocalRuntimeEnvValueMock).not.toHaveBeenCalled();

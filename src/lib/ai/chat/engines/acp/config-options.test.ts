@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import path from "node:path";
 
 import {
   catalogFromConfigOptions,
@@ -283,7 +284,7 @@ describe("MCP forwarding", () => {
       homeDir: "/Users/me",
     };
     expect(resolveForwardedStdioCwd(withCwd("~/tools/x"), options)).toBe(
-      "/Users/me/tools/x",
+      path.join("/Users/me", "tools", "x"),
     );
     expect(resolveForwardedStdioCwd(withCwd("~"), options)).toBe("/Users/me");
     // Missing: the agent starts it in the session's cwd, the workspace.

@@ -176,7 +176,10 @@ describe("installManagedTool", () => {
     expect(result.executablePath).toBe(
       path.join(toolDir, "1.2.3", "agent", "bin", "agent"),
     );
-    expect((await stat(result.executablePath)).mode & 0o111).not.toBe(0);
+    // Windows has no execute bits to check.
+    if (process.platform !== "win32") {
+      expect((await stat(result.executablePath)).mode & 0o111).not.toBe(0);
+    }
     expect(result.receipt).toEqual(
       expect.objectContaining({
         archive: "tar.gz",

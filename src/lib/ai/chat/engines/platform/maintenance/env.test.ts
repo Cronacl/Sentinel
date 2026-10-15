@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import path from "node:path";
 
 import { codexHomeFromStandalonePath } from "./definitions";
 import { buildMaintenanceEnv, isKeptMaintenanceVariable } from "./env";
@@ -44,16 +45,22 @@ describe("maintenance environment", () => {
   });
 
   it("finds the CODEX_HOME of a standalone Codex install", () => {
+    // The home comes back in the host's separators.
     expect(
       codexHomeFromStandalonePath(
         "/Users/me/.codex/packages/standalone/current/bin/codex",
       ),
-    ).toBe("/Users/me/.codex");
+    ).toBe(path.normalize("/Users/me/.codex"));
     expect(
       codexHomeFromStandalonePath(
         "/opt/Codex Home/Packages/Standalone/0.161.0/codex",
       ),
-    ).toBe("/opt/Codex Home");
+    ).toBe(path.normalize("/opt/Codex Home"));
+    expect(
+      codexHomeFromStandalonePath(
+        "C:\\Users\\me\\.codex\\packages\\standalone\\current\\bin\\codex.exe",
+      ),
+    ).toBe(path.normalize("C:/Users/me/.codex"));
     expect(
       codexHomeFromStandalonePath("/usr/local/lib/node_modules/@openai/codex"),
     ).toBe(null);

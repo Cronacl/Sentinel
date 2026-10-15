@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 import { describe, expect, it, mock } from "bun:test";
 
@@ -68,7 +69,10 @@ describe("OpenCode Go usage", () => {
       { fetch: fetchMock as never, now: () => NOW, readFile },
     );
 
-    expect(readFile).toHaveBeenCalledWith("/data/opencode/auth.json", "utf8");
+    expect(readFile).toHaveBeenCalledWith(
+      path.join("/data", "opencode", "auth.json"),
+      "utf8",
+    );
     expect(fetchMock.mock.calls[0]?.[0]).toBe(OPENCODE_GO_USAGE_URL);
     expect(
       (fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>)
@@ -108,7 +112,7 @@ describe("OpenCode Go usage", () => {
 
   it("finds OpenCode's auth file under the data home", () => {
     expect(getOpenCodeAuthFilePath({ HOME: "/home/me" }, "/fallback")).toBe(
-      "/home/me/.local/share/opencode/auth.json",
+      path.join("/home/me", ".local", "share", "opencode", "auth.json"),
     );
   });
 });

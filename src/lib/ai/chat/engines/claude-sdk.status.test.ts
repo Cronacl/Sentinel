@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+
+import {
+  restoreTestHome,
+  setTestHome,
+  writeFakeCli,
+} from "./platform/testing/fake-cli";
 
 mock.module("server-only", () => ({}));
 
@@ -45,7 +51,6 @@ const {
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./claude-sdk.ts?claude-sdk-status-test");
 
-const originalHome = process.env.HOME;
 const originalPath = process.env.PATH;
 const originalSentinelClaudePath = process.env.SENTINEL_CLAUDE_PATH;
 const originalClaudePath = process.env.CLAUDE_PATH;
@@ -69,7 +74,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env.HOME = originalHome;
+  restoreTestHome();
   process.env.PATH = originalPath;
   if (originalSentinelClaudePath) {
     process.env.SENTINEL_CLAUDE_PATH = originalSentinelClaudePath;
@@ -91,14 +96,11 @@ afterEach(() => {
 });
 
 async function createClaudeExecutable(tempRoot: string) {
-  const executablePath = path.join(tempRoot, "claude");
-  await writeFile(
-    executablePath,
-    "#!/bin/sh\necho '2.1.39 (Claude Code)'\nexit 0\n",
-    "utf8",
+  const executablePath = await writeFakeCli(
+    path.join(tempRoot, "claude"),
+    'console.log("2.1.39 (Claude Code)");',
   );
-  await chmod(executablePath, 0o755);
-  process.env.HOME = tempRoot;
+  setTestHome(tempRoot);
   process.env.PATH = tempRoot;
   delete process.env.CLAUDE_PATH;
   delete process.env.SENTINEL_CLAUDE_PATH;

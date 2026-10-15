@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { restoreTestHome, setTestHome } from "./platform/testing/fake-cli";
+
 mock.module("server-only", () => ({}));
 
 const resolveCodexCliMock = mock(async () => ({
@@ -26,7 +28,6 @@ const {
   // @ts-expect-error Bun test-only cache-busting import for module isolation.
 } = await import("./codex-app-server.ts?codex-app-server-status-test");
 
-const originalHome = process.env.HOME;
 const originalSentinelCodexPath = process.env.SENTINEL_CODEX_PATH;
 const originalSentinelStatePath = process.env.SENTINEL_STATE_PATH;
 
@@ -77,7 +78,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  process.env.HOME = originalHome;
+  restoreTestHome();
   if (originalSentinelCodexPath) {
     process.env.SENTINEL_CODEX_PATH = originalSentinelCodexPath;
   } else {
@@ -96,7 +97,7 @@ describe("CodexAppServerManager.getStatus", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
 
     try {
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       resolveCodexCliMock.mockImplementation(async () => ({
         command: path.join(tempRoot, ".local", "bin", "codex"),
         env: process.env,
@@ -141,7 +142,7 @@ describe("CodexAppServerManager.getStatus", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
 
     try {
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       resolveCodexCliMock.mockImplementation(async () => ({
         command: path.join(tempRoot, ".local", "bin", "codex"),
         env: process.env,
@@ -181,7 +182,7 @@ describe("CodexAppServerManager.getStatus", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
 
     try {
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       resolveCodexCliMock.mockImplementation(async () => ({
         command: path.join(tempRoot, ".local", "bin", "codex"),
         env: process.env,
@@ -234,7 +235,7 @@ describe("CodexAppServerManager.getStatus", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
 
     try {
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       resolveCodexCliMock.mockImplementation(async () => ({
         command: path.join(tempRoot, ".local", "bin", "codex"),
         env: process.env,
@@ -274,7 +275,7 @@ describe("CodexAppServerManager.getStatus", () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "sentinel-codex-"));
 
     try {
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       const firstPath = path.join(tempRoot, ".local", "bin", "codex");
       const secondPath = path.join(tempRoot, ".bun", "bin", "codex");
       resolveCodexCliMock.mockImplementation(async () => ({
@@ -325,7 +326,7 @@ describe("CodexAppServerManager.getStatus for an instance", () => {
     };
 
     try {
-      process.env.HOME = tempRoot;
+      setTestHome(tempRoot);
       resolveCodexCliMock.mockImplementation(async () => ({
         command: work.config.binaryPath,
         env: process.env,

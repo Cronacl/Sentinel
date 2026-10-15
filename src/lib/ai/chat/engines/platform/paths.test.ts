@@ -46,7 +46,10 @@ describe("engine state paths", () => {
 
 describe("legacy engine status files", () => {
   it("stay at the state root for the default instance and move under the instance otherwise", () => {
-    const options = { stateRoot: "/Users/me/.sentinel" };
+    const options = {
+      pathModule: path.posix,
+      stateRoot: "/Users/me/.sentinel",
+    };
 
     expect(
       getLegacyEngineStatusFilePath("codex-status.json", null, options),

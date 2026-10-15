@@ -52,6 +52,14 @@ async function extract(
   return { destination, result };
 }
 
+// Windows has no POSIX permission bits (stat reports 0o666, or 0o444 when
+// read-only), so modes are only checked elsewhere.
+async function expectPosixMode(filePath: string, mode: number) {
+  if (process.platform !== "win32") {
+    expect((await stat(filePath)).mode & 0o7777).toBe(mode);
+  }
+}
+
 async function listTree(directory: string, prefix = ""): Promise<string[]> {
   const names: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -132,12 +140,8 @@ describe("extractArchive: tar", () => {
       "pkg/bin/",
       "pkg/bin/agent",
     ]);
-    expect(
-      (await stat(path.join(destination, "pkg/bin/agent"))).mode & 0o7777,
-    ).toBe(0o755);
-    expect(
-      (await stat(path.join(destination, "pkg/README.md"))).mode & 0o7777,
-    ).toBe(0o644);
+    await expectPosixMode(path.join(destination, "pkg/bin/agent"), 0o755);
+    await expectPosixMode(path.join(destination, "pkg/README.md"), 0o644);
     expect(await readlink(path.join(destination, "pkg/agent"))).toBe(
       "bin/agent",
     );
@@ -208,17 +212,23 @@ describe("extractArchive: tar", () => {
     expect(await readdir(root)).not.toContain("escaped");
   });
 
-  it("refuses a chain of links that climbs out of the tree", async () => {
-    await expect(
-      extract(
-        "tar",
-        buildTar([
-          { linkname: "x/..", name: "b", type: "2" },
-          { linkname: ".", name: "x", type: "2" },
-        ]),
-      ),
-    ).rejects.toThrow("points outside");
-  });
+  // Windows resolves `..` in a link target against the link's path text, not
+  // through `x`, so there this chain stays inside the tree (the lexical check
+  // already covers it).
+  it.skipIf(process.platform === "win32")(
+    "refuses a chain of links that climbs out of the tree",
+    async () => {
+      await expect(
+        extract(
+          "tar",
+          buildTar([
+            { linkname: "x/..", name: "b", type: "2" },
+            { linkname: ".", name: "x", type: "2" },
+          ]),
+        ),
+      ).rejects.toThrow("points outside");
+    },
+  );
 
   it("caps the expanded size and the member count", async () => {
     await expect(
@@ -338,9 +348,7 @@ describe("extractArchive: tar.bz2", () => {
       "pkg/bin/agent",
       "pkg/data.bin",
     ]);
-    expect(
-      (await stat(path.join(destination, "pkg/bin/agent"))).mode & 0o7777,
-    ).toBe(0o755);
+    await expectPosixMode(path.join(destination, "pkg/bin/agent"), 0o755);
     expect(
       (await readFile(path.join(destination, "pkg/data.bin"))).equals(
         tarBz2FixtureData(),
@@ -388,9 +396,7 @@ describe("extractArchive: zip", () => {
     expect(
       await readFile(path.join(destination, "agent/bin/agent"), "utf8"),
     ).toBe("binary");
-    expect(
-      (await stat(path.join(destination, "agent/bin/agent"))).mode & 0o777,
-    ).toBe(0o755);
+    await expectPosixMode(path.join(destination, "agent/bin/agent"), 0o755);
     expect(
       (await lstat(path.join(destination, "agent/run"))).isSymbolicLink(),
     ).toBe(true);
