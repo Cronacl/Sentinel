@@ -43,30 +43,136 @@ const RESERVED_ARGUMENTS = [
   "-v",
 ] as const;
 
+/** Pi's built-in options that take a value (t3code mcpInjection.ts). */
+const ARGUMENTS_WITH_VALUES = new Set([
+  "--api-key",
+  "--append-system-prompt",
+  "--exclude-tools",
+  "-xt",
+  "--extension",
+  "-e",
+  "--model",
+  "--models",
+  "--name",
+  "-n",
+  "--prompt-template",
+  "--provider",
+  "--session-dir",
+  "--skill",
+  "--system-prompt",
+  "--theme",
+  "--thinking",
+  "--tools",
+  "-t",
+  "--tui-mode",
+  "--use-theme",
+]);
+
+const ARGUMENTS_WITHOUT_VALUES = new Set([
+  "--approve",
+  "-a",
+  "--no-approve",
+  "-na",
+  "--no-builtin-tools",
+  "-nbt",
+  "--no-context-files",
+  "-nc",
+  "--no-extensions",
+  "-ne",
+  "--no-prompt-templates",
+  "-np",
+  "--no-skills",
+  "-ns",
+  "--no-themes",
+  "--no-tools",
+  "-nt",
+  "--offline",
+  "--verbose",
+]);
+
 export class PiLaunchArgumentError extends Error {
   constructor(message: string) {
-    super(message);
+    super(`${message} Change the instance's launch arguments.`);
     this.name = "PiLaunchArgumentError";
   }
 }
 
-/** The instance's launch arguments, or why they cannot be used. */
-export function validatePiLaunchArgs(args: readonly string[]) {
-  for (const arg of args) {
-    if (arg === "--") {
-      break;
-    }
-    const reserved = RESERVED_ARGUMENTS.find(
-      (name) =>
-        arg === name || (name.startsWith("--") && arg.startsWith(`${name}=`)),
-    );
+function reservedArgument(arg: string) {
+  return RESERVED_ARGUMENTS.find(
+    (name) =>
+      arg === name || (name.startsWith("--") && arg.startsWith(`${name}=`)),
+  );
+}
+
+/**
+ * The instance's launch arguments as Pi gets them, or why they cannot be
+ * used (t3code resolvePiLaunchArgs, MIT). Pi reads `--name=value` only as an
+ * extension flag, so built-in options in that form are split; positional
+ * prompts and unknown short flags are refused, and so is `--provider`
+ * without `--model`, on which Pi 1.0 exits at startup.
+ */
+export function validatePiLaunchArgs(input: readonly string[]) {
+  const args = input.flatMap((arg) => {
+    const equals = arg.indexOf("=");
+    const option = equals > 0 ? arg.slice(0, equals) : "";
+    return ARGUMENTS_WITH_VALUES.has(option)
+      ? [option, arg.slice(equals + 1)]
+      : [arg];
+  });
+  let hasProvider = false;
+  let hasModel = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    const reserved = reservedArgument(arg);
     if (reserved) {
       throw new PiLaunchArgumentError(
-        `Pi launch argument "${reserved}" is managed by Sentinel. Remove it from the instance's launch arguments.`,
+        `Pi launch argument "${reserved}" is managed by Sentinel.`,
       );
     }
+    if (ARGUMENTS_WITH_VALUES.has(arg)) {
+      if (args[index + 1] === undefined) {
+        throw new PiLaunchArgumentError(
+          `Pi launch argument "${arg}" needs a value.`,
+        );
+      }
+      hasProvider ||= arg === "--provider";
+      hasModel ||= arg === "--model";
+      index += 1;
+      continue;
+    }
+    if (
+      ARGUMENTS_WITHOUT_VALUES.has(arg) ||
+      (arg.startsWith("--") && arg.includes("="))
+    ) {
+      continue;
+    }
+    if (arg.startsWith("--") && arg !== "--") {
+      // An extension's own flag; one following non-flag token is its value.
+      const next = args[index + 1];
+      if (
+        next !== undefined &&
+        !next.startsWith("-") &&
+        !next.startsWith("@")
+      ) {
+        index += 1;
+      }
+      continue;
+    }
+    if (arg.startsWith("-") && arg !== "--") {
+      throw new PiLaunchArgumentError(
+        `Pi launch argument "${arg}" is not supported.`,
+      );
+    }
+    throw new PiLaunchArgumentError(
+      `Pi launch arguments cannot include a prompt ("${arg}").`,
+    );
   }
-  return [...args];
+  if (hasProvider && !hasModel) {
+    throw new PiLaunchArgumentError(
+      'Pi launch argument "--provider" needs "--model" as well.',
+    );
+  }
+  return args;
 }
 
 export type PiLaunch = {

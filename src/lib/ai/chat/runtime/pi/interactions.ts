@@ -68,7 +68,32 @@ function denialReason(control: PiRunControl) {
     : DENIED_WITHOUT_TOOLS;
 }
 
-/** Tool names the user allowed for the rest of this Pi session. */
+/** JSON with sorted keys, so equal inputs give equal keys. */
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) =>
+          `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`,
+      )
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * What "Allow for this session" covers: this exact call (tool and input),
+ * as t3code keys its session approvals, never every call of the tool.
+ */
+export function piSessionGrantKey(tool: { input: unknown; toolName: string }) {
+  return `${tool.toolName}:${canonicalJson(tool.input)}`;
+}
+
+/** Calls the user allowed for the rest of this Pi session. */
 export function sessionGrants(process: PiRpcProcess) {
   let grants = process.state.get(SESSION_GRANTS_KEY) as Set<string> | undefined;
   if (!grants) {
@@ -176,7 +201,10 @@ async function handleConfirm(
       permissionMode: control.permissionMode,
       toolsEnabled: control.toolsEnabled,
     });
-    if (disposition === "ask" && sessionGrants(process).has(tool.toolName)) {
+    if (
+      disposition === "ask" &&
+      sessionGrants(process).has(piSessionGrantKey(tool))
+    ) {
       disposition = "allow";
     }
   } else {
@@ -231,7 +259,7 @@ async function handleConfirm(
   const approved =
     answer.decision === "accept" || answer.decision === "acceptForSession";
   if (tool && answer.decision === "acceptForSession") {
-    sessionGrants(process).add(tool.toolName);
+    sessionGrants(process).add(piSessionGrantKey(tool));
   }
   control.mirror.respondToApproval(patch.id, {
     approved,

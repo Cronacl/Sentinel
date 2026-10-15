@@ -30,6 +30,7 @@ import {
 } from "@/lib/ai/chat/engines/pi/models";
 import { PI_LOGIN_HINT } from "@/lib/ai/chat/engines/pi/probe";
 import {
+  cancelUnclaimedPiDialog,
   PiRpcCancelledError,
   PiRpcError,
   PiRpcTimeoutError,
@@ -88,6 +89,11 @@ import {
   sessionGrants,
   toPiInteractionAnswer,
 } from "./interactions";
+import {
+  cancelPiIdleCheck,
+  PI_SETTLE_TIMINGS,
+  settleWhenPiIdle,
+} from "./settle";
 import { activePiRunControls, resolveActivePiRunControl } from "./state";
 
 // One thread turn on Pi (`pi --mode rpc`, design acp-and-agents §4). The
@@ -99,20 +105,26 @@ import { activePiRunControls, resolveActivePiRunControl } from "./state";
 // (an edit, a checkpoint restore) gets a new session (runtime/acp/
 // history.ts). Events stream into the shared mirror; Sentinel's extension
 // asks before every tool call (interactions.ts); the turn ends when Pi says
-// it settled. Stop sends `abort`.
+// it settled and is idle (settle.ts). Stop sends `abort`.
 
 const log = createLogger("ThreadChatPi");
 
 const LABEL = "Pi";
-const CANCEL_GRACE_MS = 5_000;
-/** Pi 1.x sends agent_settled; older builds are asked whether they are idle. */
-const SETTLE_FALLBACK_MS = 10_000;
 const COMPACT_TIMEOUT_MS = 5 * 60 * 1_000;
 const INTERRUPTED_TOOL_MESSAGE = "Interrupted";
 const DANGLING_TOOL_MESSAGE = "Tool did not report completion";
 const LIVE_SESSION_KEY = "sentinel.sessionPath";
 const MODELS_KEY = "sentinel.models";
 const GATE_KEY = "sentinel.gateLoaded";
+/** Pi's own model and thinking level in this session, before Sentinel set any. */
+const BASELINE_KEY = "sentinel.baseline";
+const APPLIED_MODEL_KEY = "sentinel.appliedModel";
+const APPLIED_THINKING_KEY = "sentinel.appliedThinking";
+
+type PiBaseline = {
+  model: { modelId: string; provider: string } | null;
+  thinkingLevel: string | null;
+};
 
 export const PI_GATE_MISSING_MESSAGE =
   "Sentinel's Pi extension did not load, so Pi cannot ask before it runs tools. Check that the instance's launch arguments do not disable extensions, or switch this thread to full access.";
@@ -244,35 +256,14 @@ async function acquireProcess(control: PiRunControl, launch: PiLaunch) {
   return lease;
 }
 
-/** If Pi never says it settled after agent_end, ask whether it is idle. */
-function scheduleSettleFallback(control: PiRunControl, process: PiRpcProcess) {
-  setTimeout(() => {
-    if (control.finished || control.tracker.settled || !control.tracker.ended) {
-      return;
-    }
-    void process
-      .request<Record<string, unknown>>("get_state", {}, { timeoutMs: 5_000 })
-      .then((state) => {
-        if (
-          control.tracker.ended &&
-          !control.tracker.settled &&
-          state?.isStreaming !== true &&
-          state?.isCompacting !== true
-        ) {
-          control.tracker.settled = true;
-          control.settle.resolve();
-        }
-      })
-      .catch(() => undefined);
-  }, SETTLE_FALLBACK_MS).unref?.();
-}
-
 function handleEvent(
   control: PiRunControl,
   process: PiRpcProcess,
   event: PiRpcEvent,
 ) {
   if (control.finished) {
+    // A dialog after the turn ended: nobody will answer it.
+    cancelUnclaimedPiDialog(process, event);
     return;
   }
   if (event.type === "extension_ui_request") {
@@ -289,11 +280,21 @@ function handleEvent(
     case "schedule":
       control.emitter.schedule();
       break;
+    case "started":
+      cancelPiIdleCheck(control);
+      break;
     case "ended":
-      scheduleSettleFallback(control, process);
+      // Pi 0.80.x never sends agent_settled.
+      void settleWhenPiIdle(control, process, {
+        delayMs: PI_SETTLE_TIMINGS.afterEndMs,
+        onBroken: () => evictProcess(control),
+      });
       break;
     case "settled":
-      control.settle.resolve();
+      void settleWhenPiIdle(control, process, {
+        delayMs: 0,
+        onBroken: () => evictProcess(control),
+      });
       break;
     default:
       break;
@@ -330,6 +331,10 @@ async function openSession(
   if (wanted && live === wanted) {
     return true;
   }
+  // Another session brings its own model: nothing set before applies.
+  for (const key of [BASELINE_KEY, APPLIED_MODEL_KEY, APPLIED_THINKING_KEY]) {
+    process.state.delete(key);
+  }
   if (wanted) {
     try {
       const result = await process.request<{ cancelled?: boolean }>(
@@ -362,6 +367,30 @@ async function openSession(
     }
   }
   return false;
+}
+
+/** The session's model and thinking level, kept until Sentinel sets either. */
+function captureBaseline(
+  process: PiRpcProcess,
+  session: Record<string, unknown> | null | undefined,
+): PiBaseline {
+  const known = process.state.get(BASELINE_KEY) as PiBaseline | undefined;
+  const baseline: PiBaseline = {
+    model: known?.model ?? null,
+    thinkingLevel: known?.thinkingLevel ?? null,
+  };
+  if (!baseline.model && process.state.get(APPLIED_MODEL_KEY) !== true) {
+    baseline.model = parsePiModelSlug(piModelSlug(session?.model));
+  }
+  if (
+    !baseline.thinkingLevel &&
+    process.state.get(APPLIED_THINKING_KEY) !== true &&
+    typeof session?.thinkingLevel === "string"
+  ) {
+    baseline.thinkingLevel = session.thinkingLevel;
+  }
+  process.state.set(BASELINE_KEY, baseline);
+  return baseline;
 }
 
 type PreparedTurn = {
@@ -448,13 +477,23 @@ async function startTurn(
   }
 
   // Model and thinking level are best effort: a value Pi refuses leaves the
-  // turn on Pi's current setting instead of failing it.
+  // turn on Pi's current setting instead of failing it. Going back to "Pi
+  // default" replays what the session had before Sentinel set anything
+  // (t3code adapter.ts applySelection, MIT).
+  const baseline = captureBaseline(process, session);
   const requestedSlug = input.request.modelId ?? null;
   let model: unknown = session?.model ?? null;
   const target = parsePiModelSlug(requestedSlug);
-  if (target && piModelSlug(model) !== requestedSlug) {
+  const restoreModel =
+    !target && process.state.get(APPLIED_MODEL_KEY) === true
+      ? baseline.model
+      : null;
+  if ((target && piModelSlug(model) !== requestedSlug) || restoreModel) {
     try {
-      model = await process.request("set_model", target, { signal });
+      model = await process.request("set_model", target ?? restoreModel!, {
+        signal,
+      });
+      process.state.set(APPLIED_MODEL_KEY, target !== null);
     } catch (error) {
       rethrowIfFatal(control, error);
       addNotice(
@@ -467,20 +506,30 @@ async function startTurn(
   let thinkingLevel =
     typeof session?.thinkingLevel === "string" ? session.thinkingLevel : null;
   const requestedLevel = piLevelFromEffort(input.request.reasoningEffort);
-  if (requestedLevel) {
+  const restoreLevel =
+    !target &&
+    !requestedLevel &&
+    process.state.get(APPLIED_THINKING_KEY) === true
+      ? baseline.thinkingLevel
+      : null;
+  if (requestedLevel || restoreLevel) {
     try {
-      const known =
-        (await listModels(control, process)).find(
-          (entry) => piModelSlug(entry) === piModelSlug(model),
-        ) ?? model;
-      const level = clampPiThinkingLevel(
-        requestedLevel,
-        supportedPiThinkingLevels(known),
-      );
+      let level = restoreLevel;
+      if (requestedLevel) {
+        const known =
+          (await listModels(control, process)).find(
+            (entry) => piModelSlug(entry) === piModelSlug(model),
+          ) ?? model;
+        level = clampPiThinkingLevel(
+          requestedLevel,
+          supportedPiThinkingLevels(known),
+        );
+      }
       if (level && level !== thinkingLevel) {
         await process.request("set_thinking_level", { level }, { signal });
         thinkingLevel = level;
       }
+      process.state.set(APPLIED_THINKING_KEY, requestedLevel !== null);
     } catch (error) {
       rethrowIfFatal(control, error);
       addNotice(
@@ -602,16 +651,28 @@ async function runPrompt(control: PiRunControl, turn: PreparedTurn) {
   const { process } = turn;
   try {
     persist.setThreadStatus(control.threadId, "streaming");
+    // Pi answers only after its preflight (templates, skills, extension
+    // input hooks and commands, which may open a dialog), so no timeout:
+    // Stop aborts it. "steer" joins a run Pi still has going (a queued
+    // continuation, detached compaction) instead of being refused.
     const answer = await process.request<{ disposition?: string }>(
       "prompt",
       {
         message: turn.text,
+        streamingBehavior: "steer",
         ...(turn.images.length > 0 ? { images: turn.images } : {}),
       },
-      { signal: control.abort.signal },
+      { signal: control.abort.signal, timeoutMs: 0 },
     );
     if (answer?.disposition !== "handled") {
-      // The run's events follow the "started" answer.
+      // The run's events follow a "started" or "queued" answer; an answer
+      // that started nothing (older builds say neither) is checked.
+      if (!control.tracker.started) {
+        void settleWhenPiIdle(control, process, {
+          delayMs: PI_SETTLE_TIMINGS.afterPromptMs,
+          onBroken: () => evictProcess(control),
+        });
+      }
       await control.settle.promise;
     }
     if (control.finished) {
@@ -621,7 +682,11 @@ async function runPrompt(control: PiRunControl, turn: PreparedTurn) {
     if (exited && !control.tracker.settled) {
       throw exited;
     }
-    if (control.tracker.started || answer?.disposition === "handled") {
+    if (
+      control.tracker.started ||
+      control.tracker.settled ||
+      answer?.disposition === "handled"
+    ) {
       markSynced(control, turn);
     }
     const outcome = piTurnOutcome(control.tracker, control.cancelRequested);
@@ -638,7 +703,8 @@ async function runPrompt(control: PiRunControl, turn: PreparedTurn) {
       return;
     }
     const exited = process.exitError();
-    if (exited) {
+    if (exited || !(error instanceof PiRpcError)) {
+      // Pi may still run something this turn no longer listens to.
       await evictProcess(control);
     }
     let message = errorMessage(exited ?? error);
@@ -844,6 +910,7 @@ export async function runPiThreadChat(
     requestedModelId: request.modelId ?? null,
     runId,
     settle: { promise: settlePromise, resolve: () => resolveSettle() },
+    settleGeneration: 0,
     statusLabel: `Starting ${LABEL} session...`,
     threadId: request.threadId,
     threadMode,
@@ -946,14 +1013,14 @@ export async function stopPiThreadRun(
   cancelPendingInteractions(control);
   const aborted = control.process?.isAlive()
     ? control.process
-        .request("abort", {}, { timeoutMs: CANCEL_GRACE_MS })
+        .request("abort", {}, { timeoutMs: PI_SETTLE_TIMINGS.stopGraceMs })
         .catch(() => undefined)
     : Promise.resolve();
 
   const settled = control.promptPromise
     ? await waitWithTimeout(
         Promise.all([aborted, control.promptPromise]),
-        CANCEL_GRACE_MS,
+        PI_SETTLE_TIMINGS.stopGraceMs,
       )
     : false;
   if (!settled || !control.finished) {

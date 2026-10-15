@@ -50,6 +50,8 @@ export type PiRunControl = ExternalRunControl & {
   requestedModelId: string | null;
   /** Resolves when Pi settled the turn (or the process died). */
   settle: { promise: Promise<void>; resolve(): void };
+  /** Bumped by new agent activity and each idle check: stale checks stop. */
+  settleGeneration: number;
   statusLabel: string | null;
   threadMode: "chat" | "plan";
   toolsEnabled: boolean;

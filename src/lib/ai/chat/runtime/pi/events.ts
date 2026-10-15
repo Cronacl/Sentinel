@@ -77,6 +77,7 @@ export type PiEventEffect =
   | { type: "flush" }
   | { type: "schedule" }
   | { type: "settled" }
+  | { type: "started" }
   | { type: "ended" }
   | { type: "none" };
 
@@ -246,7 +247,8 @@ export function applyPiEvent(
     case "agent_start":
       tracker.started = true;
       tracker.ended = false;
-      return { type: "none" };
+      tracker.settled = false;
+      return { type: "started" };
     case "message_start":
       if (messageRole(event) === "assistant") {
         tracker.assistantCount += 1;

@@ -184,7 +184,36 @@ describe("Pi launch", () => {
     expect(
       validatePiLaunchArgs(["--provider", "openai", "--model", "gpt-5.6"]),
     ).toEqual(["--provider", "openai", "--model", "gpt-5.6"]);
-    expect(validatePiLaunchArgs(["--", "--mode"])).toEqual(["--", "--mode"]);
+    expect(() => validatePiLaunchArgs(["--", "--mode"])).toThrow(
+      PiLaunchArgumentError,
+    );
+  });
+
+  it("splits built-in equals forms and refuses prompts, unknown short flags and a provider without a model", () => {
+    expect(
+      validatePiLaunchArgs([
+        "--model=anthropic/claude-sonnet-5",
+        "--no-skills",
+        "--my-flag",
+        "on",
+        "--other=1",
+      ]),
+    ).toEqual([
+      "--model",
+      "anthropic/claude-sonnet-5",
+      "--no-skills",
+      "--my-flag",
+      "on",
+      "--other=1",
+    ]);
+    for (const args of [
+      ["fix the bug"],
+      ["-z"],
+      ["--provider", "anthropic"],
+      ["--thinking"],
+    ]) {
+      expect(() => validatePiLaunchArgs(args)).toThrow(PiLaunchArgumentError);
+    }
   });
 
   it("puts the mode first, the user's arguments next and Sentinel's extension last", () => {

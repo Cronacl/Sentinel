@@ -114,7 +114,7 @@ export const piAuth: EngineAuthController = {
         title: "Pi sign-out: type /logout",
       }),
     );
-    return { message: "Removed the provider login you chose." };
+    return { message: "Type /logout in the Pi terminal to sign out." };
   },
 
   logoutNotice: () =>

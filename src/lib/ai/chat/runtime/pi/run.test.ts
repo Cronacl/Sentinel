@@ -18,6 +18,8 @@ const { PI_GATE_COMMAND } = await import("@/lib/ai/chat/engines/pi/commands");
 const { PI_APPROVAL_PREFIX } =
   await import("@/lib/ai/chat/engines/pi/extension");
 const { PI_GATE_MISSING_MESSAGE } = await import("./run");
+const { PI_SETTLE_TIMINGS } = await import("./settle");
+const DEFAULT_TIMINGS = { ...PI_SETTLE_TIMINGS };
 
 type Scenario = Parameters<typeof harness.instanceFor>[0];
 type Step = NonNullable<
@@ -70,6 +72,7 @@ const awaiting = () =>
 
 beforeEach(() => harness.reset());
 afterEach(async () => {
+  Object.assign(PI_SETTLE_TIMINGS, DEFAULT_TIMINGS);
   await harness.cleanup();
 });
 afterAll(() => harness.removeDirs());
@@ -176,6 +179,135 @@ describe.skipIf(process.platform === "win32")("runPiThreadChat", () => {
         type: "extension_ui_response",
       }),
     ]);
+  });
+
+  it("lets 'Allow for this session' cover the same call only", async () => {
+    const instance = harness.instanceFor(
+      scenario([
+        confirm(
+          "tool-ls-1",
+          "bash",
+          { command: "ls" },
+          {
+            confirmed: [
+              confirm(
+                "tool-ls-2",
+                "bash",
+                { command: "ls" },
+                {
+                  confirmed: [
+                    confirm(
+                      "tool-rm",
+                      "bash",
+                      { command: "rm -rf build" },
+                      { declined: [{ text: "Kept.", type: "text" }] },
+                    ),
+                  ],
+                },
+              ),
+            ],
+          },
+        ),
+      ]),
+    );
+    await harness.run(instance, "go");
+    expect((await awaiting()).toolCallId).toBe("tool-ls-1");
+    await harness.submit(instance, {
+      approved: true,
+      decision: "acceptForSession",
+    });
+    await harness.waitFor(
+      () =>
+        harness
+          .toolParts(harness.assistant())
+          .find(
+            (part) =>
+              part.toolCallId === "tool-rm" &&
+              part.state === "approval-requested",
+          ),
+      "the second command to ask",
+    );
+    await harness.submit(instance, { approved: false, decision: "decline" });
+    await finished();
+    expect(
+      harness.support
+        .piUiResponses(instance.logPath)
+        .map((record) => record.confirmed),
+    ).toEqual([true, true, false]);
+  });
+
+  it("declines tool calls when tools are off, even under full access", async () => {
+    harness.settings.permissionMode = "full";
+    const instance = harness.instanceFor(
+      scenario([
+        confirm(
+          "tool-sh",
+          "bash",
+          { command: "make" },
+          { declined: [{ text: "No tools.", type: "text" }] },
+        ),
+      ]),
+    );
+    await harness.run(instance, "go", { toolsEnabled: false });
+    const message = await finished();
+    expect(message.metadata?.status).toBe("completed");
+    expect(harness.support.piUiResponses(instance.logPath)).toEqual([
+      expect.objectContaining({ confirmed: false }),
+    ]);
+    expect(harness.toolParts(message)[0]?.state).toBe("output-denied");
+  });
+
+  it("reuses the thread's process and goes back to Pi's own model on 'Pi default'", async () => {
+    harness.settings.permissionMode = "accept_edits";
+    const instance = harness.instanceFor(
+      scenario([{ text: "Ok.", type: "text" }]),
+    );
+    await harness.run(instance, "one", {
+      modelId: "openai/gpt-5.6",
+      reasoningEffort: "high",
+    });
+    await finished();
+    const first = harness.assistant()!.id;
+    await harness.run(instance, "two", { modelId: "default" });
+    await harness.waitFor(
+      () => harness.assistant()!.id !== first && harness.finished(),
+      "the second turn to finish",
+    );
+
+    expect(harness.support.piLaunches(harness.instanceDir())).toHaveLength(1);
+    const commands = harness.support.piCommands(instance.logPath);
+    const types = commands.map((command) => command.type);
+    expect(types).not.toContain("switch_session");
+    expect(types.filter((type) => type === "get_commands")).toHaveLength(1);
+    const setModels = commands.filter(
+      (command) => command.type === "set_model",
+    );
+    expect(setModels).toHaveLength(2);
+    expect(setModels[1]).not.toMatchObject({ modelId: "gpt-5.6" });
+    expect(
+      commands
+        .filter((command) => command.type === "set_thinking_level")
+        .map((command) => command.level),
+    ).toEqual(["high", "medium"]);
+    expect(commands.filter((command) => command.type === "prompt")).toEqual([
+      expect.objectContaining({ streamingBehavior: "steer" }),
+      expect.objectContaining({ streamingBehavior: "steer" }),
+    ]);
+  });
+
+  it("finishes the turn on a Pi that never sends agent_settled", async () => {
+    harness.settings.permissionMode = "full";
+    PI_SETTLE_TIMINGS.afterEndMs = 20;
+    const instance = harness.instanceFor(
+      scenario([{ text: "Old Pi.", type: "text" }], {
+        omitAgentSettled: true,
+      }),
+    );
+    await harness.run(instance, "hi");
+    const message = await finished();
+    expect(message.metadata?.status).toBe("completed");
+    const types = commandTypes(instance);
+    expect(types.slice(types.indexOf("prompt"))).toContain("get_state");
   });
 
   it("approves edits inside the workspace under accept_edits and still asks for commands", async () => {
@@ -369,6 +501,26 @@ describe.skipIf(process.platform === "win32")("runPiThreadChat", () => {
     expect(message.metadata?.status).toBe("cancelled");
     expect(commandTypes(instance)).toContain("abort");
     expect(harness.eventTypes()).toContain("run.cancelled");
+  });
+
+  it("ends a Pi that ignores abort on Stop", async () => {
+    harness.settings.permissionMode = "full";
+    PI_SETTLE_TIMINGS.stopGraceMs = 100;
+    const instance = harness.instanceFor(
+      scenario([{ text: "Working", type: "text" }, { type: "hang" } as Step], {
+        hangCommands: ["abort"],
+      }),
+    );
+    await harness.run(instance, "long task");
+    await harness.waitFor(
+      () =>
+        JSON.stringify(harness.assistant()?.parts ?? []).includes("Working"),
+      "streamed text",
+    );
+    await harness.stop();
+    const message = await finished();
+    expect(message.metadata?.status).toBe("cancelled");
+    expect(harness.getPiProcessPool().keys()).toEqual([]);
   });
 
   it("runs /compact through Pi's compact command", async () => {

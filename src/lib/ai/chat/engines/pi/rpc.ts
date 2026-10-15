@@ -230,7 +230,12 @@ export class PiRpcProcess {
       }
       return;
     }
-    this.handlers?.onEvent?.(record as PiRpcEvent);
+    if (this.handlers?.onEvent) {
+      this.handlers.onEvent(record as PiRpcEvent);
+    } else {
+      // Between turns nobody can answer: Pi must not wait on it forever.
+      cancelUnclaimedPiDialog(this, record);
+    }
   }
 
   /** Handlers for one turn; returns their detach. */
@@ -371,5 +376,30 @@ export class PiRpcProcess {
     if (this.child.pid != null) {
       await endProcessGroup(this.child.pid, { graceMs: CLOSE_GRACE_MS });
     }
+  }
+}
+
+/** Extension dialogs Pi blocks on until they are answered. */
+const PI_DIALOG_METHODS = new Set(["confirm", "editor", "input", "select"]);
+
+/**
+ * Answers a dialog no turn can take (it arrived between turns or after the
+ * turn ended) with `{cancelled:true}`; other records are ignored.
+ */
+export function cancelUnclaimedPiDialog(
+  process: Pick<PiRpcProcess, "send">,
+  record: Record<string, unknown>,
+) {
+  if (
+    record.type === "extension_ui_request" &&
+    typeof record.id === "string" &&
+    typeof record.method === "string" &&
+    PI_DIALOG_METHODS.has(record.method)
+  ) {
+    process.send({
+      cancelled: true,
+      id: record.id,
+      type: "extension_ui_response",
+    });
   }
 }

@@ -9,8 +9,13 @@ import type { PiRpcProcess as PiRpcProcessType } from "./rpc";
 // command failures, timeouts, aborts and a crash with its stderr.
 mock.module("server-only", () => ({}));
 
-const { PiRpcProcess, PiRpcCancelledError, PiRpcError, PiRpcTimeoutError } =
-  await import("./rpc");
+const {
+  cancelUnclaimedPiDialog,
+  PiRpcProcess,
+  PiRpcCancelledError,
+  PiRpcError,
+  PiRpcTimeoutError,
+} = await import("./rpc");
 const support = await import("./__tests__/mock-pi");
 const { MOCK_PI_PATH } =
   await import("../../../../../../scripts/fixtures/agents/pi/test-driver");
@@ -160,5 +165,32 @@ describe("PiRpcProcess", () => {
     const exit = await process.exited;
     expect(exit.code === 0 || exit.signal !== null).toBe(true);
     expect(process.isAlive()).toBe(false);
+  });
+});
+
+describe("cancelUnclaimedPiDialog", () => {
+  it("cancels dialogs nobody can answer and ignores everything else", () => {
+    const sent: unknown[] = [];
+    const process = { send: (record: unknown) => sent.push(record) > 0 };
+    for (const method of ["confirm", "select", "input", "editor"]) {
+      cancelUnclaimedPiDialog(process, {
+        id: method,
+        method,
+        type: "extension_ui_request",
+      });
+    }
+    cancelUnclaimedPiDialog(process, {
+      id: "n",
+      method: "notify",
+      type: "extension_ui_request",
+    });
+    cancelUnclaimedPiDialog(process, { type: "agent_end" });
+    expect(sent).toEqual(
+      ["confirm", "select", "input", "editor"].map((id) => ({
+        cancelled: true,
+        id,
+        type: "extension_ui_response",
+      })),
+    );
   });
 });
