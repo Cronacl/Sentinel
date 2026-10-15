@@ -97,6 +97,8 @@ type ThreadScreenProps = {
     hasCodexThread: boolean;
     id: string;
     mode: "chat" | "plan";
+    /** The thread's own permission mode; null uses the workspace's. */
+    permissionModeOverride?: PermissionMode | null;
     pinnedAt: Date | null;
     status: "idle" | "streaming" | "awaiting_approval";
     summary: string | null;
@@ -125,6 +127,14 @@ export function ThreadScreen({
   const { navigateHome } = useShell();
   const utils = api.useUtils();
   const isQuickChat = workspace.kind === "quick_chat";
+  const threadPermissionModeOverride = thread.permissionModeOverride ?? null;
+  const threadPermission = useMemo(
+    () => ({
+      permissionModeOverride: threadPermissionModeOverride,
+      threadId: thread.id,
+    }),
+    [thread.id, threadPermissionModeOverride],
+  );
   const resolvedInitialComposerUiState = useMemo(
     () =>
       resolveInitialThreadComposerUiState({
@@ -1374,6 +1384,7 @@ export function ThreadScreen({
               showBranchSwitcher={!isQuickChat}
               status={status}
               threadId={thread.id}
+              threadPermission={threadPermission}
               threadSelection={threadSelectionState}
             />
           </div>

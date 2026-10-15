@@ -535,6 +535,8 @@ export function NewThreadScreen({
             id: draftThreadId,
             linkedPullRequest: current?.thread.linkedPullRequest ?? null,
             mode: threadMode,
+            permissionModeOverride:
+              current?.thread.permissionModeOverride ?? null,
             pinnedAt: current?.thread.pinnedAt ?? null,
             status: current?.thread.status ?? "idle",
             summary: current?.thread.summary ?? null,

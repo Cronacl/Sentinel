@@ -96,6 +96,7 @@ export function ChatComposer({
   showBranchSwitcher = false,
   status = "ready",
   threadId,
+  threadPermission = null,
   threadSelection = null,
 }: ChatComposerProps) {
   const handleSendRef = useRef<() => void>(() => {});
@@ -924,6 +925,7 @@ export function ChatComposer({
               permissionModes={getDriverPermissionModes(selectedEngine)}
               repoThreadId={repoThreadId}
               showBranchSwitcher={showBranchSwitcher}
+              threadPermission={threadPermission}
             />
           </div>
         ) : null}

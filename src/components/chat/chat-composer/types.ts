@@ -102,5 +102,10 @@ export type ChatComposerProps = {
   persistThreadSelection?: boolean;
   repoThreadId?: string;
   threadId?: string;
+  /** An existing thread's own permission mode (see ComposerWorkspaceBar). */
+  threadPermission?: {
+    permissionModeOverride: PermissionMode | null;
+    threadId: string;
+  } | null;
   threadSelection?: ChatComposerThreadSelection | null;
 };

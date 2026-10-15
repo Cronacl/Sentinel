@@ -4,7 +4,11 @@ import { db } from "@/server/db";
 import { threadFollowUps, threadMessages, threads } from "@/server/db/schema";
 import type { ThreadMode } from "@/lib/plan";
 import type { ReasoningEffort } from "@/lib/ai/providers/models";
-import type { ChatEngine, ThreadVisibility } from "@/server/db/enums";
+import type {
+  ChatEngine,
+  PermissionMode,
+  ThreadVisibility,
+} from "@/server/db/enums";
 import type {
   ClaudeThreadState,
   CopilotThreadState,
@@ -330,6 +334,18 @@ export function updateThreadRepoState(
       ...state,
     } satisfies RepoThreadState,
   });
+}
+
+/**
+ * Sets (or with null clears) the thread's own permission mode, which wins
+ * over the workspace override and the user default. Every other key in
+ * chat_engine_state is kept.
+ */
+export function updateThreadPermissionModeOverride(
+  threadId: string,
+  permissionModeOverride: PermissionMode | null,
+) {
+  updateThreadChatEngineState(threadId, { permissionModeOverride });
 }
 
 /**

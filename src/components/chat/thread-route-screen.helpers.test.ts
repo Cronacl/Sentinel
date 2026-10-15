@@ -28,6 +28,7 @@ function createThreadDetails(): ThreadDetails {
       chatModelOptions: null,
       chatReasoningEffort: "medium",
       createdAt: new Date("2026-04-21T10:00:00Z"),
+      permissionModeOverride: null,
       hasCodexThread: false,
       id: "thread-1",
       linkedPullRequest: null,

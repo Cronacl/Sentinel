@@ -9,6 +9,7 @@ import {
   threadGetSchema,
   threadQueuedFollowUpActionSchema,
   threadListSchema,
+  threadPermissionOverrideSchema,
   threadRenameSchema,
   threadSearchSchema,
   threadSetActiveBranchSchema,
@@ -19,6 +20,7 @@ import {
 import {
   getCodexThreadState,
   getRepoThreadState,
+  getThreadPermissionMode,
 } from "@/lib/ai/chat/engines/types";
 import { runThreadChat } from "@/lib/ai/chat";
 import { toStoredEngineInstanceId } from "@/lib/ai/chat/engines/contract/ids";
@@ -30,6 +32,7 @@ import {
   moveThreadFollowUpToFront,
   removeThreadFollowUp,
   setActiveMessage,
+  updateThreadPermissionModeOverride,
 } from "@/lib/ai/chat/persistence";
 import { summarizeQueuedFollowUp } from "@/lib/ai/chat/session/server";
 import { disposeShellSession } from "@/lib/ai/chat/tools/shell";
@@ -140,6 +143,8 @@ async function buildThreadDetails(
       linkedPullRequest:
         getRepoThreadState(thread.chatEngineState)?.lastPullRequest ?? null,
       mode: thread.mode,
+      // The thread's own override; null falls back to the workspace's.
+      permissionModeOverride: getThreadPermissionMode(thread.chatEngineState),
       pinnedAt: thread.pinnedAt,
       status: thread.status,
       summary: thread.summary,
@@ -606,6 +611,21 @@ export const threadsRouter = createTRPCRouter({
         mode: updated!.mode,
         reasoningEffort: updated!.chatReasoningEffort,
         threadId: updated!.id,
+      };
+    }),
+
+  updatePermissionOverride: protectedProcedure
+    .input(threadPermissionOverrideSchema)
+    .mutation(async ({ ctx, input }) => {
+      await getOwnedThreadOrThrow(ctx, input.threadId);
+      updateThreadPermissionModeOverride(
+        input.threadId,
+        input.permissionModeOverride,
+      );
+
+      return {
+        permissionModeOverride: input.permissionModeOverride,
+        threadId: input.threadId,
       };
     }),
 

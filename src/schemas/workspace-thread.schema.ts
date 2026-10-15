@@ -125,6 +125,12 @@ export const threadRenameSchema = z.object({
   title: z.string().trim().min(1, "Thread title is required.").max(200),
 });
 
+/** A thread's own permission mode; null falls back to the workspace's. */
+export const threadPermissionOverrideSchema = z.object({
+  permissionModeOverride: permissionModeSchema.nullable(),
+  threadId: z.string().min(1),
+});
+
 export const threadUpdateMetaSchema = z.object({
   summary: optionalText(500).optional(),
   threadId: z.string().min(1),

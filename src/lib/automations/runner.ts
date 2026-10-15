@@ -97,7 +97,6 @@ async function executeAutomationChat(params: {
     modelId?: string;
     modelOptions?: EngineOptionSelection[];
     reasoningEffort?: ReasoningEffort;
-    toolsEnabled?: boolean;
     trigger: "submit-user-message";
     workspaceId: string;
   };
