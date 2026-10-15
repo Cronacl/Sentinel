@@ -8,14 +8,17 @@
 // MOCK_CODEX_SCENARIO (JSON):
 //   initialize?: { error?: {code, message}; userAgent?: string }
 //   responses?: { [method]: Reply | Reply[] }   arrays are consumed in order
-//     Reply = { result: unknown } | { error: {code, message} }
+//     Reply = ({ result: unknown } | { error: {code, message} })
+//       & { notify?: object[] }   notifications written after the reply
 // Control requests (handled by the peer itself, never recorded):
 //   mock/emit {messages: object[], chunkSize?: number}
 //     writes each message (server requests and notifications) to stdout,
 //     optionally split into chunkSize-byte writes, then replies {}.
 //   mock/received {} → {frames}: every frame the peer has received so far.
 
-type Reply = { result: unknown } | { error: { code: number; message: string } };
+type Reply = (
+  { result: unknown } | { error: { code: number; message: string } }
+) & { notify?: unknown[] };
 
 type Scenario = {
   initialize?: {
@@ -113,7 +116,11 @@ async function handleRequest(message: Record<string, unknown>) {
     return;
   }
 
-  write({ id, jsonrpc: "2.0", ...reply });
+  const { notify, ...body } = reply;
+  write({ id, jsonrpc: "2.0", ...body });
+  for (const notification of notify ?? []) {
+    write(notification);
+  }
 }
 
 let remainder = "";

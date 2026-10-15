@@ -63,6 +63,8 @@ export type McpForwardingOptions = {
   homeDir?: string;
   /** False for agents that only take stdio servers (default true). */
   http?: boolean;
+  /** Put before every name (within the length cap); see MCP_NAME_PREFIX. */
+  namePrefix?: string;
   /** An OAuth server's access token, or null when it cannot be resolved. */
   resolveOAuthToken?: (entry: McpHttpRuntimeEntry) => Promise<string | null>;
   /** True for http servers that need OAuth. */
@@ -72,6 +74,16 @@ export type McpForwardingOptions = {
 // OpenCode skips every tool of a server whose name is over 64 characters
 // (its tool namespace limit); the suffix of a duplicate needs room too.
 const MAX_SERVER_NAME_LENGTH = 48;
+
+/**
+ * For agents that merge the forwarded servers into their own config by
+ * name, field by field (Codex config overrides over config.toml, OpenCode
+ * 1.x config content over opencode.json, and OpenCode 2.x's runtime set):
+ * a same-named server of the user's would be merged into an invalid entry
+ * (command and url both set) or removed with ours. Prefixed names cannot
+ * collide.
+ */
+export const MCP_NAME_PREFIX = "sentinel_";
 
 class MissingEnvError extends Error {}
 
@@ -84,13 +96,14 @@ function requireEnv(env: McpForwardingOptions["env"], name: string) {
 }
 
 /** Agent-safe server names: [A-Za-z0-9_-], at most 48 characters, unique. */
-function uniqueName(name: string, used: Set<string>) {
+function uniqueName(name: string, used: Set<string>, prefix = "") {
   const base =
-    name
+    prefix +
+    (name
       .trim()
       .replace(/[^A-Za-z0-9_-]+/g, "_")
       .replace(/^_+|_+$/g, "")
-      .slice(0, MAX_SERVER_NAME_LENGTH) || "mcp";
+      .slice(0, MAX_SERVER_NAME_LENGTH - prefix.length) || "mcp");
   let candidate = base;
   for (let index = 2; used.has(candidate); index += 1) {
     candidate = `${base}_${index}`;
@@ -235,7 +248,11 @@ export async function resolveForwardedMcpServers(
       continue;
     }
     try {
-      const name = uniqueName(entry.catalogId ?? entry.name, used);
+      const name = uniqueName(
+        entry.catalogId ?? entry.name,
+        used,
+        options.namePrefix,
+      );
       servers.push(
         entry.transport === "http"
           ? await httpServer(entry, name, options)

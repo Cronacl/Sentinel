@@ -696,6 +696,7 @@ async function buildClaudeRuntimeOptions(input: {
   requestedModelId: string | null;
   sessionId: string;
   threadMode: "chat" | "plan";
+  toolsEnabled: boolean | undefined;
   userId: string;
   workspaceRoot: string | null;
 }) {
@@ -711,10 +712,11 @@ async function buildClaudeRuntimeOptions(input: {
     models: await getCachedClaudeModels(runtime.executablePath),
     reasoningEffort: input.reasoningEffort,
   });
-  // The user's MCP servers, next to the ones Claude Code's own settings
-  // configure. Their tools ask through canUseTool like any other.
+  // The user's MCP servers (none without tools), next to the ones Claude
+  // Code's own settings configure. Their tools ask through canUseTool.
   const forwardedMcp = await loadForwardedMcpServers({
     env: runtime.env,
+    toolsEnabled: input.toolsEnabled,
     userId: input.userId,
   });
   logSkippedMcpServers("claude", forwardedMcp.skipped);
@@ -1795,6 +1797,7 @@ export async function runClaudeThreadChat(
     requestedModelId,
     sessionId,
     threadMode,
+    toolsEnabled: request.toolsEnabled,
     userId: request.userId,
     workspaceRoot,
   });

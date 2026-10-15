@@ -14,7 +14,6 @@ import {
   parseQuestionResponse,
   type ExternalQuestion,
 } from "@/lib/ai/chat/runtime/external/user-input";
-import { getErrorMessage } from "@/lib/errors";
 import { createLogger } from "@/lib/logger";
 import type { PermissionMode } from "@/server/db/enums";
 
@@ -161,8 +160,11 @@ type OpenCode2Rule = {
 
 /**
  * 2.x session rules (t3code provider-opencode v2/adapter.ts sessionRules,
- * MIT): the mode's, then an edit deny in plan mode (session rules override
- * the agent's; shell and read are never denied).
+ * MIT; last matching rule wins): the mode's, then an edit deny in plan mode
+ * (session rules override the agent's; shell and read are never denied).
+ * Outside full access everything asks first, as on 1.x: the agent's
+ * default allows `*`, which would run forwarded MCP tools unasked (and
+ * unattended runs decline only what is asked).
  */
 export function buildOpenCode2PermissionRules(
   mode: PermissionMode,
@@ -177,6 +179,7 @@ export function buildOpenCode2PermissionRules(
     ...(mode === "full"
       ? [rule("*", "allow")]
       : [
+          rule("*", "ask"),
           rule("shell", "ask"),
           rule("edit", mode === "accept_edits" ? "allow" : "ask"),
           rule("external_directory", "ask"),
@@ -190,6 +193,27 @@ export function buildOpenCode2PermissionRules(
  * OpenCode's "stop", which ends the whole execution (t3code).
  */
 const OPENCODE2_DECLINED_MESSAGE = "The user declined this request.";
+
+/**
+ * An MCP add/remove failure for the logs: its tag and status only, since
+ * a decode error's message can echo the request's headers or environment.
+ */
+function describeMcpError(error: unknown) {
+  const record = error as {
+    _tag?: unknown;
+    cause?: { status?: unknown };
+    name?: unknown;
+    status?: unknown;
+  } | null;
+  const tag = [record?._tag, record?.name].find(
+    (value) => typeof value === "string",
+  );
+  const status = record?.status ?? record?.cause?.status;
+  return {
+    status: typeof status === "number" ? status : null,
+    tag: typeof tag === "string" ? tag : "error",
+  };
+}
 
 /** A persisted session that exists but is not continued. */
 class SessionNotContinued extends Error {}
@@ -686,7 +710,7 @@ async function syncV2McpServers(
         complete = false;
         leftover.push(name);
         log.warn("opencode_mcp_remove_failed", {
-          error: getErrorMessage(error),
+          error: describeMcpError(error),
           server: name,
         });
       });
@@ -698,7 +722,7 @@ async function syncV2McpServers(
         complete = false;
         // Logged by name, never with its config (secrets).
         log.warn("opencode_mcp_add_failed", {
-          error: getErrorMessage(error),
+          error: describeMcpError(error),
           server: name,
         });
       });

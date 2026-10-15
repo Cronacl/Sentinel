@@ -4,6 +4,7 @@ import type { McpServerRuntimeEntry } from "@/lib/mcp/runtime";
 
 import {
   forwardedMcpServersKey,
+  MCP_NAME_PREFIX,
   resolveForwardedMcpServers,
 } from "./mcp-forwarding";
 
@@ -147,6 +148,20 @@ describe("resolveForwardedMcpServers", () => {
       "My_Server_2",
       "github",
       "x".repeat(48),
+    ]);
+  });
+
+  it("prefixes names within the cap for agents that merge them by name", async () => {
+    const result = await resolveForwardedMcpServers(
+      [
+        { ...http, catalogId: "github", id: "6", name: "GitHub" },
+        { ...http, id: "7", name: "x".repeat(80) },
+      ],
+      { ...options, namePrefix: MCP_NAME_PREFIX },
+    );
+    expect(result.servers.map((server) => server.name)).toEqual([
+      "sentinel_github",
+      `sentinel_${"x".repeat(39)}`,
     ]);
   });
 

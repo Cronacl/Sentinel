@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   forwardedMcpServersKey,
+  MCP_NAME_PREFIX,
   NO_FORWARDED_MCP_SERVERS,
   resolveForwardedMcpServers,
   type ForwardedMcpServers,
@@ -41,8 +42,15 @@ export async function loadForwardedMcpServers(input: {
   env: Record<string, string | undefined>;
   /** False for agents that only take stdio servers. */
   http?: boolean;
+  /** For agents that merge them into their own config by name. */
+  prefixNames?: boolean;
+  /** False: the turn runs without tools, so no servers are forwarded. */
+  toolsEnabled?: boolean;
   userId: string;
 }): Promise<LoadedMcpServers> {
+  if (input.toolsEnabled === false) {
+    return { ...NO_FORWARDED_MCP_SERVERS, key: "" };
+  }
   const entries = await getMcpServerRuntime(input.userId).catch(() => []);
   if (!entries.some((entry) => entry.isEnabled)) {
     return { ...NO_FORWARDED_MCP_SERVERS, key: "" };
@@ -50,6 +58,7 @@ export async function loadForwardedMcpServers(input: {
   const forwarded = await resolveForwardedMcpServers(entries, {
     env: input.env,
     http: input.http,
+    namePrefix: input.prefixNames ? MCP_NAME_PREFIX : undefined,
     requiresOAuth: requiresMcpOAuth,
     resolveOAuthToken: (entry) => resolveOAuthToken(input.userId, entry),
   });

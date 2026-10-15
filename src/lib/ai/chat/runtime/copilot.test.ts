@@ -482,6 +482,67 @@ describe("Copilot SDK 1.x session wiring", () => {
     expect(config).not.toHaveProperty("mcpServers");
   });
 
+  it("passes the same mcpServers when resuming a session, and none without tools", async () => {
+    mcpServers = [
+      {
+        config: {
+          headers: [],
+          headersFromEnv: [],
+          url: "https://mcp.example.com/mcp",
+        },
+        id: "mcp-2",
+        isEnabled: true,
+        name: "Remote",
+        transport: "http",
+      },
+    ];
+    const expected = {
+      Remote: {
+        headers: {},
+        tools: ["*"],
+        type: "http",
+        url: "https://mcp.example.com/mcp",
+      },
+    };
+    try {
+      await runCopilotThreadChat(
+        {
+          message: createUserMessage("Continue."),
+          modelId: "gpt-5.4",
+          threadId: "thread-mcp-resume",
+          trigger: "submit-user-message",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        },
+        {
+          chatEngineState: {
+            copilot: {
+              cwd: "/tmp/workspace",
+              modelId: "gpt-5.4",
+              reasoningEffort: null,
+              sessionId: "session-existing",
+            },
+          },
+          mode: "chat",
+          status: "idle",
+        } as any,
+      );
+      const resumed = copilotManager.resumeSession.mock.calls.at(-1) as
+        unknown[] | undefined;
+      expect(resumed?.[0]).toBe("session-existing");
+      expect((resumed?.[1] as { mcpServers?: unknown }).mcpServers).toEqual(
+        expected,
+      );
+
+      const { config } = await startCopilotRun("thread-mcp-no-tools", {
+        toolsEnabled: false,
+      });
+      expect(config).not.toHaveProperty("mcpServers");
+    } finally {
+      mcpServers = [];
+    }
+  });
+
   it("sends xhigh when the model lists it and falls back to high otherwise", async () => {
     copilotManager.getSupportedReasoningEfforts.mockImplementation(async () => [
       "low",

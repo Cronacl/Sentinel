@@ -63,9 +63,12 @@ type Manager = InstanceType<typeof CodexAppServerManager> & {
 
 const managers: Manager[] = [];
 
-function createManager(scenario: Record<string, unknown> = {}) {
+function createManager(
+  scenario: Record<string, unknown> = {},
+  options: ConstructorParameters<typeof CodexAppServerManager>[0] = {},
+) {
   currentScenario = scenario;
-  const manager = new CodexAppServerManager() as Manager;
+  const manager = new CodexAppServerManager(options) as Manager;
   managers.push(manager);
   return manager;
 }
@@ -717,7 +720,17 @@ describe("CodexAppServerManager client requests", () => {
       responses: {
         "thread/resume": [thread, thread, thread, thread],
         "thread/start": thread,
-        "thread/unsubscribe": { result: { status: "unsubscribed" } },
+        // Codex closes the unloaded thread after the reply.
+        "thread/unsubscribe": {
+          notify: [
+            {
+              jsonrpc: "2.0",
+              method: "thread/closed",
+              params: { threadId: "thr" },
+            },
+          ],
+          result: { status: "unsubscribed" },
+        },
       },
     });
     const config = (url: string) => ({ mcp_servers: { Docs: { url } } });
@@ -756,6 +769,49 @@ describe("CodexAppServerManager client requests", () => {
       ["thread/unsubscribe", null],
       ["thread/resume", config("https://b")],
       ["thread/resume", null],
+    ]);
+  });
+
+  it("retries the reload on the next resume when the thread is not closed in time", async () => {
+    const thread = { result: { model: "gpt-6", thread: { id: "thr" } } };
+    const manager = createManager(
+      {
+        responses: {
+          "thread/resume": [thread, thread, thread],
+          "thread/start": thread,
+          "thread/unsubscribe": { result: { status: "unsubscribed" } },
+        },
+      },
+      { threadCloseTimeoutMs: 20 },
+    );
+    const mcp = (key: string) => ({ config: null, key });
+
+    await manager.startThread({
+      approvalPolicy: "on-request",
+      cwd: "/work",
+      mcp: mcp("key-a"),
+      model: null,
+      sandboxMode: "workspace-write",
+    });
+    // No thread/closed: the resume may have rejoined the old servers.
+    await manager.resumeThread("thr", mcp("key-b"));
+    await manager.resumeThread("thr", mcp("key-b"));
+    // Closed now: the key is gone and the resume loads it fresh.
+    await emitFromPeer(manager, [
+      { jsonrpc: "2.0", method: "thread/closed", params: { threadId: "thr" } },
+    ]);
+    await manager.resumeThread("thr", mcp("key-b"));
+
+    const methods = (await receivedFrames(manager))
+      .map((frame) => frame.method)
+      .filter((method) => method?.startsWith("thread/"));
+    expect(methods).toEqual([
+      "thread/start",
+      "thread/unsubscribe",
+      "thread/resume",
+      "thread/unsubscribe",
+      "thread/resume",
+      "thread/resume",
     ]);
   });
 

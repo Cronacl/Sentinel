@@ -1834,14 +1834,15 @@ describe("runCodexThreadChat instances and unattended runs", () => {
         transport: "stdio",
       },
     ];
+    // Prefixed: never merged into a same-named server of config.toml.
     const expectedConfig = {
       mcp_servers: {
-        Docs: {
+        sentinel_Docs: {
           args: ["serve"],
           command: "docs-mcp",
           env: { DOCS_TOKEN: "secret" },
         },
-        Remote: {
+        sentinel_Remote: {
           http_headers: { "X-Key": "k" },
           url: "https://mcp.example.com/mcp",
         },

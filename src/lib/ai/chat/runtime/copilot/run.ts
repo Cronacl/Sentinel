@@ -1561,9 +1561,11 @@ export async function runCopilotThreadChat(
       return await answer;
     };
 
-    // The user's MCP servers, for a new and a resumed session alike.
+    // The user's MCP servers (none without tools), for a new and a resumed
+    // session alike.
     const forwardedMcp = await loadForwardedMcpServers({
       env: instance?.env ?? process.env,
+      toolsEnabled: request.toolsEnabled,
       userId: request.userId,
     });
     logSkippedMcpServers("copilot", forwardedMcp.skipped);

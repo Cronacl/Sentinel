@@ -949,6 +949,21 @@ describe("runClaudeThreadChat approvals", () => {
           url: "https://mcp.example.com/mcp",
         },
       });
+
+      // Without tools nothing is forwarded (full access would run them).
+      await runClaudeThreadChat(
+        {
+          message: createUserMessage("No tools."),
+          modelId: "claude-sonnet-4-20250514",
+          threadId: "thread-mcp-no-tools",
+          toolsEnabled: false,
+          trigger: "submit-user-message",
+          userId: "user-1",
+          workspaceId: "workspace-1",
+        },
+        { chatEngineState: null, mode: "chat", status: "idle" } as any,
+      );
+      expect(capturedClaudeQueryInput?.options?.mcpServers).toBeUndefined();
     } finally {
       mcpServers = [];
       delete process.env.SENTINEL_TEST_CLAUDE_MCP_TOKEN;

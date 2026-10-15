@@ -692,6 +692,8 @@ function toCodexError(message: string, error?: unknown) {
 export type CodexAppServerManagerOptions = {
   /** The engine instance this app-server runs for (default: the default). */
   instance?: CodexCliInstance | null;
+  /** How long a resume waits for an unsubscribed thread to close. */
+  threadCloseTimeoutMs?: number;
 };
 
 export class CodexAppServerManager {
@@ -704,8 +706,11 @@ export class CodexAppServerManager {
 
   private readonly instance: CodexCliInstance | null;
 
+  private readonly threadCloseTimeoutMs: number;
+
   constructor(options: CodexAppServerManagerOptions = {}) {
     this.instance = options.instance ?? null;
+    this.threadCloseTimeoutMs = options.threadCloseTimeoutMs ?? 5_000;
   }
 
   // NDJSON framing of the app-server's stdout (LF-delimited; a fresh one
@@ -740,6 +745,9 @@ export class CodexAppServerManager {
    * loaded with (in memory only; it digests secrets).
    */
   private loadedThreadMcpKeys = new Map<string, string>();
+
+  /** Resumes waiting for thread/closed after unsubscribing, by thread id. */
+  private threadClosedWaiters = new Map<string, Set<() => void>>();
 
   private starting: Promise<void> | null = null;
 
@@ -1321,11 +1329,10 @@ export class CodexAppServerManager {
   async resumeThread(threadId: string, mcp?: CodexThreadMcp | null) {
     const key = mcp?.key ?? "";
     const loadedKey = this.loadedThreadMcpKeys.get(threadId);
+    let unloaded = true;
     if (loadedKey !== undefined && loadedKey !== key) {
       this.loadedThreadMcpKeys.delete(threadId);
-      await this.call("thread/unsubscribe", { threadId }).catch((error) => {
-        log.debug("thread_unsubscribe_failed", { error, threadId });
-      });
+      unloaded = await this.unloadThread(threadId);
     }
     const response = (await this.call("thread/resume", {
       ...(mcp?.config ? { config: mcp.config } : {}),
@@ -1339,8 +1346,69 @@ export class CodexAppServerManager {
       sandbox: unknown;
       thread: CodexThread;
     };
-    this.loadedThreadMcpKeys.set(threadId, key);
+    // Not unloaded in time: the resume rejoined the thread with its old
+    // servers, so the next turn tries again.
+    this.loadedThreadMcpKeys.set(threadId, unloaded ? key : (loadedKey ?? ""));
     return response;
+  }
+
+  /**
+   * Unsubscribes from a loaded thread and waits (bounded) for Codex to
+   * close it: the unload can finish after the reply. False when the thread
+   * may still be loaded.
+   */
+  private async unloadThread(threadId: string) {
+    let settle: (closed: boolean) => void = () => {};
+    const closed = new Promise<boolean>((resolve) => {
+      settle = resolve;
+    });
+    const onClosed = () => settle(true);
+    const waiters = this.threadClosedWaiters.get(threadId) ?? new Set();
+    waiters.add(onClosed);
+    this.threadClosedWaiters.set(threadId, waiters);
+    const timer = setTimeout(() => settle(false), this.threadCloseTimeoutMs);
+    try {
+      const response = (await this.call("thread/unsubscribe", {
+        threadId,
+      })) as { status?: unknown } | null;
+      if (response?.status === "notLoaded") {
+        return true;
+      }
+      if (response?.status !== "unsubscribed") {
+        log.debug("thread_unsubscribe_kept_loaded", {
+          status: response?.status,
+          threadId,
+        });
+        return false;
+      }
+      const unloaded = await closed;
+      if (!unloaded) {
+        log.debug("thread_close_timed_out", { threadId });
+      }
+      return unloaded;
+    } catch (error) {
+      log.debug("thread_unsubscribe_failed", { error, threadId });
+      return false;
+    } finally {
+      clearTimeout(timer);
+      waiters.delete(onClosed);
+      if (waiters.size === 0) {
+        this.threadClosedWaiters.delete(threadId);
+      }
+    }
+  }
+
+  /** thread/closed, or the app-server gone: nothing is loaded any more. */
+  private releaseThreadClosedWaiters(threadId?: string) {
+    const entries =
+      threadId === undefined
+        ? [...this.threadClosedWaiters.values()]
+        : [this.threadClosedWaiters.get(threadId) ?? new Set<() => void>()];
+    for (const waiters of entries) {
+      for (const onClosed of waiters) {
+        onClosed();
+      }
+    }
   }
 
   async startTurn(params: {
@@ -1609,6 +1677,7 @@ export class CodexAppServerManager {
     this.stdoutLines = this.createStdoutSplitter();
     this.initialized = false;
     this.loadedThreadMcpKeys.clear();
+    this.releaseThreadClosedWaiters();
     this.pendingServerRequests.clear();
 
     for (const pending of this.pendingRequests.values()) {
@@ -1675,6 +1744,7 @@ export class CodexAppServerManager {
         const params = message.params as { threadId?: unknown } | undefined;
         if (typeof params?.threadId === "string") {
           this.loadedThreadMcpKeys.delete(params.threadId);
+          this.releaseThreadClosedWaiters(params.threadId);
         }
       }
       if (message.method === "serverRequest/resolved") {

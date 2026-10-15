@@ -910,7 +910,8 @@ describe("runOpenCodeThreadChat on OpenCode 2.x", () => {
 
       const requests = await fake.requests();
       const added = requests.findIndex(
-        (request) => request.path === "/api/experimental/mcp/Remote_Docs",
+        (request) =>
+          request.path === "/api/experimental/mcp/sentinel_Remote_Docs",
       );
       expect(requests[added]).toEqual(
         expect.objectContaining({
@@ -1089,6 +1090,13 @@ describe("runOpenCodeThreadChat on OpenCode 2.x", () => {
                 tool: "bash",
                 type: "tool",
               },
+              {
+                callID: "call_mcp",
+                input: { query: "x" },
+                permission: { permission: "docs_search" },
+                tool: "docs_search",
+                type: "tool",
+              },
             ],
           },
         ],
@@ -1105,13 +1113,24 @@ describe("runOpenCodeThreadChat on OpenCode 2.x", () => {
     expect(
       requests.some((r) => r.method === "DELETE" && /\/form\//.test(r.path)),
     ).toBe(true);
-    const [reply] = await promptBodies(fake, /\/permission\/.+\/reply$/);
-    expect(reply).toEqual(
-      expect.objectContaining({
-        decision: "reject",
-        message: expect.any(String),
-      }),
-    );
+    const replies = await promptBodies(fake, /\/permission\/.+\/reply$/);
+    // The shell call and the MCP tool call: both asked, both declined.
+    expect(replies).toHaveLength(2);
+    for (const reply of replies) {
+      expect(reply).toEqual(
+        expect.objectContaining({
+          decision: "reject",
+          message: expect.any(String),
+        }),
+      );
+    }
+    // Asked at all because the session's rules ask for `*` first.
+    const [created] = await requestsTo(fake, "POST", /^\/api\/session$/);
+    expect((created!.body as any).permissions[0]).toEqual({
+      action: "*",
+      effect: "ask",
+      resource: "*",
+    });
   });
 
   it("interrupts on stop and ends as cancelled", async () => {

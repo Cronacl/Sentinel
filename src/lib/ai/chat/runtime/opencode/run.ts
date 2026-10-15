@@ -1109,9 +1109,11 @@ export async function runOpenCodeThreadChat(
       ),
       DRIVER_CATALOG.opencode.capabilities.permissionModes,
     );
-    // The user's MCP servers; their tools ask through the session's rules.
+    // The user's MCP servers, under prefixed names; their tools ask through
+    // the session's rules.
     const forwardedMcp = await loadForwardedMcpServers({
       env: instance?.env ?? process.env,
+      prefixNames: true,
       userId: request.userId,
     });
     logSkippedMcpServers("opencode", forwardedMcp.skipped);

@@ -2436,10 +2436,13 @@ export async function runCodexThreadChat(
       thread: existingThread,
     });
 
-    // The user's MCP servers, in the thread's config overrides. MCP tool
-    // calls ask through the same approvals (declined when unattended).
+    // The user's MCP servers (none without tools), in the thread's config
+    // overrides under prefixed names. MCP tool calls ask through the same
+    // approvals (declined when unattended).
     const forwardedMcp = await loadForwardedMcpServers({
       env: instance?.env ?? process.env,
+      prefixNames: true,
+      toolsEnabled: request.toolsEnabled,
       userId: request.userId,
     });
     logSkippedMcpServers("codex", forwardedMcp.skipped);
