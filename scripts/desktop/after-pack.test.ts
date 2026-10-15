@@ -3,8 +3,10 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readlink,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import os from "node:os";
@@ -13,20 +15,24 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 type PackageTarget = { arch: number | string; platform: string };
-const { copyPackageWithDependencies, prunePackagedServerPackages } =
-  require("./after-pack.cjs") as {
-    copyPackageWithDependencies: (
-      projectDir: string,
-      targetNodeModulesPath: string,
-      packageName: string,
-      copiedPackages?: Set<string>,
-      options?: { target?: PackageTarget },
-    ) => Promise<void>;
-    prunePackagedServerPackages: (options: {
-      nodeModulesPath: string;
-      target: PackageTarget;
-    }) => Promise<void>;
-  };
+const {
+  copyPackageWithDependencies,
+  findEscapingSymlinks,
+  prunePackagedServerPackages,
+} = require("./after-pack.cjs") as {
+  copyPackageWithDependencies: (
+    projectDir: string,
+    targetNodeModulesPath: string,
+    packageName: string,
+    copiedPackages?: Set<string>,
+    options?: { target?: PackageTarget },
+  ) => Promise<void>;
+  findEscapingSymlinks: (rootPath: string) => Promise<string[]>;
+  prunePackagedServerPackages: (options: {
+    nodeModulesPath: string;
+    target: PackageTarget;
+  }) => Promise<void>;
+};
 
 const tempRoots: string[] = [];
 
@@ -268,6 +274,68 @@ describe("copyPackageWithDependencies", () => {
         { target: { arch: 4, platform: "darwin" } },
       ),
     ).rejects.toThrow(/ships no runtime for darwin-4/);
+  });
+});
+
+describe("symlinks in packaged dependencies", () => {
+  it("keeps relative links relative and leaves .bin shims out, so codesign accepts the bundle", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "after-pack-test-"));
+    tempRoots.push(tempRoot);
+    const projectDir = path.join(tempRoot, "project");
+    const targetNodeModulesPath = path.join(tempRoot, "target", "node_modules");
+    const updaterRoot = path.join(projectDir, "node_modules", "updater");
+
+    await writePackage(projectDir, "updater", {
+      name: "updater",
+      version: "1.0.0",
+    });
+    // bun nests a dependency (and its .bin shim) next to its dependent.
+    const nestedSemver = path.join(updaterRoot, "node_modules", "semver");
+    await mkdir(path.join(nestedSemver, "bin"), { recursive: true });
+    await writeFile(path.join(nestedSemver, "bin", "semver.js"), "\n");
+    await mkdir(path.join(updaterRoot, "node_modules", ".bin"));
+    await symlink(
+      "../semver/bin/semver.js",
+      path.join(updaterRoot, "node_modules", ".bin", "semver"),
+    );
+    await symlink("index.js", path.join(updaterRoot, "main.js"));
+
+    await copyPackageWithDependencies(
+      projectDir,
+      targetNodeModulesPath,
+      "updater",
+    );
+
+    const copied = path.join(targetNodeModulesPath, "updater");
+    expect(await readlink(path.join(copied, "main.js"))).toBe("index.js");
+    expect(
+      await stat(path.join(copied, "node_modules", ".bin")).catch(() => null),
+    ).toBeNull();
+    expect(await findEscapingSymlinks(path.join(tempRoot, "target"))).toEqual(
+      [],
+    );
+  });
+
+  it("reports absolute, dangling and escaping links", async () => {
+    const tempRoot = await mkdtemp(path.join(os.tmpdir(), "after-pack-test-"));
+    tempRoots.push(tempRoot);
+    const bundle = path.join(tempRoot, "bundle");
+    await mkdir(path.join(bundle, "lib"), { recursive: true });
+    await writeFile(path.join(tempRoot, "outside.js"), "\n");
+    await writeFile(path.join(bundle, "lib", "inside.js"), "\n");
+    await symlink(
+      path.join(bundle, "lib", "inside.js"),
+      path.join(bundle, "absolute"),
+    );
+    await symlink("../outside.js", path.join(bundle, "escaping"));
+    await symlink("lib/missing.js", path.join(bundle, "dangling"));
+    await symlink("lib/inside.js", path.join(bundle, "fine"));
+
+    expect((await findEscapingSymlinks(bundle)).sort()).toEqual([
+      `absolute -> ${path.join(bundle, "lib", "inside.js")}`,
+      "dangling -> lib/missing.js",
+      "escaping -> ../outside.js",
+    ]);
   });
 });
 
