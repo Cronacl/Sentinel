@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import path from "node:path";
 
 import type { McpServerRuntimeEntry } from "@/lib/mcp/runtime";
 
@@ -53,7 +54,7 @@ describe("resolveForwardedMcpServers", () => {
       {
         args: ["--port", "1"],
         command: "mcp-server",
-        cwd: "/Users/me/tools",
+        cwd: path.join("/Users/me", "tools"),
         env: { MODE: "x", TOKEN: "t" },
         name: "My_Server",
         transport: "stdio",
