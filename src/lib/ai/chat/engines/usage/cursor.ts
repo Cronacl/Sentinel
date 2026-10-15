@@ -57,28 +57,29 @@ export function getCursorAuthFilePaths(
   env: Record<string, string | undefined>,
   options: { homeDirectory: string; platform: NodeJS.Platform },
 ) {
+  const join = (options.platform === "win32" ? path.win32 : path.posix).join;
   const home =
     (options.platform === "win32" ? env.USERPROFILE : env.HOME)?.trim() ||
     options.homeDirectory;
   if (options.platform === "win32") {
     return [
-      path.join(
-        env.APPDATA?.trim() || path.join(home, "AppData", "Roaming"),
+      join(
+        env.APPDATA?.trim() || join(home, "AppData", "Roaming"),
         "Cursor",
         "auth.json",
       ),
     ];
   }
   if (options.platform === "darwin") {
-    return [path.join(home, ".cursor", "auth.json")];
+    return [join(home, ".cursor", "auth.json")];
   }
   return [
-    path.join(
-      env.XDG_CONFIG_HOME?.trim() || path.join(home, ".config"),
+    join(
+      env.XDG_CONFIG_HOME?.trim() || join(home, ".config"),
       "cursor",
       "auth.json",
     ),
-    path.join(home, ".cursor", "auth.json"),
+    join(home, ".cursor", "auth.json"),
   ];
 }
 

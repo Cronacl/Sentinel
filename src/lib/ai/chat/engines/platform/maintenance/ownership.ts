@@ -231,6 +231,7 @@ export async function resolveUpdatePlan(
 ): Promise<EngineUpdatePlan> {
   const deps = { ...defaultDeps, ...overrides };
   const platform = deps.platform;
+  const pathModule = platform === "win32" ? path.win32 : path.posix;
   const binaryPath = input.binaryPath?.trim();
   if (!binaryPath) {
     return { kind: "manual", reason: "The runtime was not found." };
@@ -247,9 +248,9 @@ export async function resolveUpdatePlan(
   });
   const nativeDisplayName = await (async () => {
     // Shown by name when that name finds this very binary on PATH.
-    const name = path.basename(binaryPath);
+    const name = pathModule.basename(binaryPath);
     const found = await deps.which(name, input.env.PATH).catch(() => null);
-    return found && path.resolve(found) === path.resolve(binaryPath)
+    return found && pathModule.resolve(found) === pathModule.resolve(binaryPath)
       ? name.replace(/\.(?:exe|cmd|bat)$/i, "")
       : binaryPath;
   })();
@@ -357,12 +358,12 @@ export async function resolveUpdatePlan(
       );
     }
     if (
-      path
+      pathModule
         .basename(normalizeCommandPath(realCommandPath))
         .replace(/\.exe$/, "") === "volta-shim"
     ) {
-      const voltaHome = path.dirname(path.dirname(binaryPath));
-      const packageDir = path.join(
+      const voltaHome = pathModule.dirname(pathModule.dirname(binaryPath));
+      const packageDir = pathModule.join(
         voltaHome,
         "tools",
         "image",
@@ -388,8 +389,8 @@ export async function resolveUpdatePlan(
       packageName,
     );
     if (!npmPrefix && platform === "win32") {
-      const shimDirectory = path.dirname(binaryPath);
-      const manifest = path.join(
+      const shimDirectory = pathModule.dirname(binaryPath);
+      const manifest = pathModule.join(
         shimDirectory,
         "node_modules",
         ...packageName.split("/"),
@@ -437,7 +438,7 @@ export async function resolveUpdatePlan(
     }
     // The keg's own brew works even when a GUI-launched app has no Homebrew
     // on PATH; the prefix check below still applies to it.
-    const kegBrew = path.join(homebrew.prefix, "bin", "brew");
+    const kegBrew = pathModule.join(homebrew.prefix, "bin", "brew");
     const brewPath = (await deps.exists(kegBrew))
       ? kegBrew
       : await deps.which("brew", input.env.PATH).catch(() => null);

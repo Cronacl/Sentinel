@@ -182,8 +182,13 @@ export async function findExecutableInPath(
     return null;
   }
 
+  // The PATH value follows the platform's own delimiter (see
+  // buildPreferredExecutablePathValue).
+  const delimiter = (
+    (options.platform ?? process.platform) === "win32" ? path.win32 : path.posix
+  ).delimiter;
   const directories = pathValue
-    .split(path.delimiter)
+    .split(delimiter)
     .map((entry) => entry.trim())
     .filter(Boolean);
   const names = getExecutableNames(command, options);

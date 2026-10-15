@@ -14,6 +14,7 @@ type Fs = {
   brewPrefix?: string | null;
   exists?: string[];
   files?: Record<string, string>;
+  platform?: NodeJS.Platform;
   realpaths: Record<string, string>;
   which?: Record<string, string>;
 };
@@ -24,7 +25,7 @@ function deps(fs: Fs) {
     brewCalls,
     deps: {
       exists: async (target: string) => (fs.exists ?? []).includes(target),
-      platform: "darwin" as const,
+      platform: fs.platform ?? "darwin",
       readFile: async (target: string) => {
         const content = fs.files?.[target];
         if (content === undefined) throw new Error("ENOENT");
@@ -168,6 +169,28 @@ describe("resolveUpdatePlan", () => {
           executable: "npm",
           lockKey: "npm-global:/users/me/.nvm/versions/node/v24.14.1",
         },
+        owner: "npm",
+      }),
+    );
+  });
+
+  it("finds npm's prefix from a Windows shim's package beside it", async () => {
+    const shim = "C:\\Users\\me\\AppData\\Roaming\\npm\\codex.cmd";
+    const result = await plan("codex", shim, {
+      exists: [
+        "C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\package.json",
+      ],
+      platform: "win32",
+      realpaths: { [shim]: shim },
+    }).result;
+    expect(result).toEqual(
+      expect.objectContaining({
+        command: expect.objectContaining({
+          args: expect.arrayContaining([
+            "--prefix",
+            "C:\\Users\\me\\AppData\\Roaming\\npm",
+          ]),
+        }),
         owner: "npm",
       }),
     );

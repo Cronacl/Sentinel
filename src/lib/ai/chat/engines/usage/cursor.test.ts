@@ -199,8 +199,8 @@ describe("Cursor usage", () => {
       getCursorAuthFilePaths(
         { APPDATA: "C:\\Users\\me\\AppData\\Roaming" },
         { homeDirectory: "C:\\Users\\me", platform: "win32" },
-      )[0],
-    ).toContain("Cursor");
+      ),
+    ).toEqual(["C:\\Users\\me\\AppData\\Roaming\\Cursor\\auth.json"]);
     expect(
       getCursorAuthFilePaths(
         { XDG_CONFIG_HOME: "/xdg" },
