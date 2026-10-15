@@ -14,7 +14,7 @@ export const MANAGED_TOOL_RECEIPT_FILE = ".sentinel-receipt.json";
 export const MANAGED_TOOL_ACTIVE_FILE = "active.json";
 
 export const managedToolReceiptSchema = z.object({
-  archive: z.enum(["raw", "tar", "tar.gz", "zip"]),
+  archive: z.enum(["raw", "tar", "tar.bz2", "tar.gz", "zip"]),
   /** The executable's path relative to the install directory. */
   executable: z.string().min(1),
   installedAt: z.iso.datetime(),

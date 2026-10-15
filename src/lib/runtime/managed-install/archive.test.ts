@@ -36,7 +36,7 @@ afterEach(async () => {
 });
 
 async function extract(
-  kind: "tar" | "tar.gz" | "zip",
+  kind: "tar" | "tar.bz2" | "tar.gz" | "zip",
   data: Buffer,
   limits?: { maxEntries?: number; maxTotalBytes?: number },
 ) {
@@ -97,7 +97,9 @@ describe("detectArchiveKind", () => {
     expect(detectArchiveKind("agent.tgz")).toBe("tar.gz");
     expect(detectArchiveKind("agent.tar")).toBe("tar");
     expect(detectArchiveKind("https://x.test/agent")).toBe("raw");
-    expect(() => detectArchiveKind("agent.tar.bz2")).toThrow(ArchiveError);
+    expect(detectArchiveKind("https://x.test/goose.tar.bz2")).toBe("tar.bz2");
+    expect(detectArchiveKind("agent.tbz2")).toBe("tar.bz2");
+    expect(() => detectArchiveKind("agent.bz2")).toThrow(ArchiveError);
     expect(() => detectArchiveKind("agent.tar.xz")).toThrow(ArchiveError);
   });
 });
@@ -258,6 +260,109 @@ describe("extractArchive: tar", () => {
       { data: "x".repeat(2000), name: "a" },
     ]).subarray(0, 1024);
     await expect(extract("tar", truncated)).rejects.toThrow("truncated");
+  });
+});
+
+// `bzip2 -1` of buildTar([pkg/, pkg/bin/agent (0755), pkg/data.bin]):
+// two blocks, with long runs (RLE1 and RUNA/RUNB) in data.bin.
+const TAR_BZ2_FIXTURE = Buffer.from(
+  [
+    "QlpoMTFBWSZTWVJbsUsADk5/////////////////////////////////////////////4A",
+    "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",
+    "rbrGVWMDh8KlgcP/4u5IpwoSCkt2KWA=",
+  ].join(""),
+  "base64",
+);
+
+function tarBz2FixtureData() {
+  const data = Buffer.alloc(150_000);
+  for (let index = 0; index < data.length; index += 1) {
+    data[index] = index % 1000 === 0 ? 0x41 : (index >> 6) & 0xff;
+  }
+  return data;
+}
+
+describe("extractArchive: tar.bz2", () => {
+  it("decodes a multi-block bzip2 tar in process", async () => {
+    const { destination } = await extract("tar.bz2", TAR_BZ2_FIXTURE);
+
+    expect(await listTree(destination)).toEqual([
+      "pkg/",
+      "pkg/bin/",
+      "pkg/bin/agent",
+      "pkg/data.bin",
+    ]);
+    expect(
+      (await stat(path.join(destination, "pkg/bin/agent"))).mode & 0o7777,
+    ).toBe(0o755);
+    expect(
+      (await readFile(path.join(destination, "pkg/data.bin"))).equals(
+        tarBz2FixtureData(),
+      ),
+    ).toBe(true);
+  });
+
+  it("refuses corrupt bzip2 data and output past the size limit", async () => {
+    const corrupt = Buffer.from(TAR_BZ2_FIXTURE);
+    // The first block's stored CRC (after "BZh1" and the block magic).
+    corrupt[10]! ^= 0x01;
+    await expect(extract("tar.bz2", corrupt)).rejects.toThrow(ArchiveError);
+    await rm(path.join(root, "out"), { force: true, recursive: true });
+
+    await expect(
+      extract("tar.bz2", TAR_BZ2_FIXTURE, { maxEntries: 4, maxTotalBytes: 1 }),
+    ).rejects.toThrow(ArchiveError);
+    await rm(path.join(root, "out"), { force: true, recursive: true });
+
+    await expect(
+      extract("tar.bz2", Buffer.from("not bzip2 at all")),
+    ).rejects.toThrow(ArchiveError);
   });
 });
 

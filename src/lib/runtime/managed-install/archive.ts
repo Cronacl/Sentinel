@@ -7,7 +7,9 @@ import {
   lstat,
   mkdir,
   open,
+  readFile,
   realpath,
+  stat,
   symlink,
 } from "node:fs/promises";
 import path from "node:path";
@@ -15,7 +17,9 @@ import { Readable, Transform, type TransformCallback } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip, createInflateRaw } from "node:zlib";
 
-// Safe extraction of downloaded tool archives (zip, tar, tar.gz) into a
+import { Bzip2Error, decodeBzip2 } from "./bzip2";
+
+// Safe extraction of downloaded tool archives (zip, tar, tar.gz, tar.bz2) into a
 // directory Sentinel owns, without shelling out to `tar`/`unzip`:
 // - every member path is relative, with no `..` segment, no drive letter
 //   and no NUL; members are written below the destination only, checked
@@ -33,10 +37,11 @@ import { createGunzip, createInflateRaw } from "node:zlib";
 // - modes are normalized (0755 for executables, 0644 otherwise), so no
 //   setuid bit or world-writable file is created;
 // - files are created exclusively: a duplicate member is an error.
-// Encrypted and ZIP64 archives are refused. Formats the registry may add
-// later (bz2, xz) are refused too rather than handed to a system tool.
+// Encrypted and ZIP64 archives are refused. bzip2 is decoded in process
+// (./bzip2.ts); other formats (xz, zstd, 7z, rar) are refused rather than
+// handed to a system tool.
 
-export type ArchiveKind = "raw" | "tar" | "tar.gz" | "zip";
+export type ArchiveKind = "raw" | "tar" | "tar.bz2" | "tar.gz" | "zip";
 
 export class ArchiveError extends Error {
   readonly code = "archive_invalid";
@@ -53,6 +58,8 @@ export const DEFAULT_EXTRACT_LIMITS: ExtractLimits = {
 };
 
 const SYMLINK_TARGET_MAX_BYTES = 4_096;
+/** bzip2 input is decoded from memory, so its size is bounded. */
+const MAX_BZIP2_INPUT_BYTES = 1024 * 1024 * 1024;
 
 /** The archive kind a download URL or file name names. */
 export function detectArchiveKind(name: string): ArchiveKind {
@@ -66,7 +73,8 @@ export function detectArchiveKind(name: string): ArchiveKind {
   if (lower.endsWith(".zip")) return "zip";
   if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) return "tar.gz";
   if (lower.endsWith(".tar")) return "tar";
-  if (/\.(?:tar\.)?(?:bz2|xz|zst|7z|rar)$|\.tbz2?$|\.txz$/.test(lower)) {
+  if (/\.tar\.bz2$|\.tbz2?$/.test(lower)) return "tar.bz2";
+  if (/\.(?:tar\.)?(?:bz2|xz|zst|7z|rar)$|\.txz$/.test(lower)) {
     throw new ArchiveError(`Unsupported archive format: ${pathname}`);
   }
   return "raw";
@@ -817,6 +825,25 @@ export async function extractArchive(input: {
 
   if (input.kind === "zip") {
     await extractZip(input.archivePath, context);
+  } else if (input.kind === "tar.bz2") {
+    const info = await stat(input.archivePath);
+    if (info.size > MAX_BZIP2_INPUT_BYTES) {
+      throw new ArchiveError("The bzip2 archive is too large.");
+    }
+    const chunks = decodeBzip2(await readFile(input.archivePath), {
+      // File bytes plus a header and padding per entry, and the end blocks.
+      maxOutputBytes:
+        context.limits.maxTotalBytes + (context.limits.maxEntries + 2) * 1536,
+      signal: input.signal,
+    });
+    const source = Readable.from(chunks, { objectMode: false });
+    try {
+      await extractTar(source, context);
+    } catch (error) {
+      throw error instanceof Bzip2Error
+        ? new ArchiveError(error.message)
+        : error;
+    }
   } else {
     const file = createReadStream(input.archivePath);
     const source = input.kind === "tar.gz" ? file.pipe(createGunzip()) : file;
