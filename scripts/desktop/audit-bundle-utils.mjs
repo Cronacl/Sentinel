@@ -139,3 +139,49 @@ export function findSqliteVecRuntimeIssues({
 
   return relativeFiles.has(loadablePath) ? [] : [`missing ${loadablePath}`];
 }
+
+const RELATIVE_IMPORT_PATTERN =
+  /(?:from\s+|import\s*\(\s*|require\(\s*|import\s+)["'](\.{1,2}\/[^"']+)["']/g;
+
+/**
+ * Relative imports reachable from the app's main entry that app.asar does
+ * not contain. electron-builder ships only build.files, so a missing one
+ * crashes the packaged app at launch with ERR_MODULE_NOT_FOUND.
+ *
+ * @param {{
+ *   entries: string[];
+ *   main: string;
+ *   readFile: (entry: string) => string;
+ * }} input `entries` as @electron/asar lists them ("/desktop/main/index.mjs").
+ */
+export function findMissingAsarImports({ entries, main, readFile }) {
+  const files = new Set(
+    entries.map((entry) => normalizePathForMatch(entry).replace(/^\/+/, "")),
+  );
+  /** @type {string[]} */
+  const missing = [];
+  const seen = new Set();
+  /** @type {{ file: string; from: string | null }[]} */
+  const queue = [{ file: normalizePathForMatch(main), from: null }];
+
+  while (queue.length > 0) {
+    const { file, from } =
+      /** @type {{ file: string; from: string | null }} */ (queue.pop());
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (!files.has(file)) {
+      missing.push(from ? `${file} (imported from ${from})` : file);
+      continue;
+    }
+    for (const match of readFile(file).matchAll(RELATIVE_IMPORT_PATTERN)) {
+      const target = path.posix.normalize(
+        path.posix.join(path.posix.dirname(file), match[1] ?? ""),
+      );
+      if (/\.(?:[cm]?js|json)$/.test(target)) {
+        queue.push({ file: target, from: file });
+      }
+    }
+  }
+
+  return missing;
+}

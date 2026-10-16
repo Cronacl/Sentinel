@@ -233,3 +233,46 @@ describe("dependency lifecycle scripts", () => {
     ).toEqual([]);
   });
 });
+
+describe("packaged desktop main process", () => {
+  it("packages every file the desktop main process imports", async () => {
+    // electron-builder ships only build.files; a relative import outside them
+    // crashes the packaged app at launch (ERR_MODULE_NOT_FOUND).
+    const root = process.cwd();
+    const packageJson = JSON.parse(
+      await readFile(path.join(root, "package.json"), "utf8"),
+    ) as { build: { files: string[] }; main: string };
+    const includes = packageJson.build.files.filter(
+      (pattern) => !pattern.startsWith("!"),
+    );
+    const isPackaged = (file: string) =>
+      includes.some((pattern) =>
+        pattern.endsWith("/**/*")
+          ? file.startsWith(pattern.slice(0, -"**/*".length))
+          : file === pattern,
+      );
+    const importPattern =
+      /(?:from\s+|import\s*\(\s*|require\(\s*|import\s+)["'](\.{1,2}\/[^"']+)["']/g;
+
+    const missing: string[] = [];
+    const seen = new Set<string>();
+    const queue = [packageJson.main];
+    while (queue.length > 0) {
+      const file = queue.pop()!;
+      if (seen.has(file)) continue;
+      seen.add(file);
+      if (!isPackaged(file)) missing.push(file);
+      const source = await readFile(path.join(root, file), "utf8");
+      for (const match of source.matchAll(importPattern)) {
+        const target = path
+          .relative(root, path.resolve(root, path.dirname(file), match[1]!))
+          .split(path.sep)
+          .join("/");
+        if (/\.(?:[cm]?js|json)$/.test(target)) queue.push(target);
+      }
+    }
+
+    expect(seen.size).toBeGreaterThan(5);
+    expect(missing).toEqual([]);
+  });
+});

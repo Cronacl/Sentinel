@@ -4,6 +4,7 @@ import { access, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import {
   findBetterSqlite3RuntimeIssues,
+  findMissingAsarImports,
   findMissingServerRuntimeFiles,
   findSqliteVecRuntimeIssues,
   inferBundleArch,
@@ -18,7 +19,7 @@ import {
 } from "./update-feed.mjs";
 
 const require = createRequire(import.meta.url);
-const { listPackage } = require("@electron/asar");
+const { extractFile, listPackage } = require("@electron/asar");
 const {
   findUnexpectedPackagedCopilotFiles,
   getExpectedPackagedCopilotFiles,
@@ -253,6 +254,18 @@ for (const unpackedAppPath of unpackedAppPaths) {
   const serverPath = path.join(resourcesPath, "server");
 
   const appAsarEntries = listPackage(appAsarPath);
+  const missingAsarImports = findMissingAsarImports({
+    entries: appAsarEntries,
+    main: JSON.parse(extractFile(appAsarPath, "package.json").toString("utf8"))
+      .main,
+    readFile: (file) => extractFile(appAsarPath, file).toString("utf8"),
+  });
+
+  if (missingAsarImports.length > 0) {
+    failures.push(
+      `${appAsarPath}: the main process imports files missing from app.asar (add them to build.files):\n${missingAsarImports.join("\n")}`,
+    );
+  }
   const asarTopLevelEntries = getAsarTopLevelEntries(appAsarEntries);
   const unexpectedAsarEntries = asarTopLevelEntries.filter(
     (entry) => !ALLOWED_ASAR_TOP_LEVEL.has(entry),
