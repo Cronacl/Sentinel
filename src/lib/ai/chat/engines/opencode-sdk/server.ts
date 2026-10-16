@@ -29,6 +29,8 @@ import { probeOpenCodeServer, type OpenCodeGeneration } from "./version";
 // opencodeRuntime.ts, so a log prefix cannot break startup.
 const OPENCODE_SERVER_READY_PATTERN = /server listening on\s+(https?:\/\/\S+)/i;
 const ANSI_ESCAPE_PATTERN = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+const OPENCODE_EXIT_STDERR_GRACE_MS = 250;
+
 export const OPENCODE_SERVER_HOSTNAME = "127.0.0.1";
 // Basic-auth user; set explicitly so an inherited OPENCODE_SERVER_USERNAME
 // cannot desynchronize server and client.
@@ -289,18 +291,23 @@ export async function startOpenCodeServerProcess(input: {
     });
     child.on("exit", (code, signal) => {
       resolveExited({ code, signal });
-      fail(
-        new Error(
-          [
-            `OpenCode server exited before startup completed`,
-            code != null ? `with code ${code}` : null,
-            signal ? `(${signal})` : null,
-            stderr.trim() ? `stderr: ${stderr.trim()}` : null,
-          ]
-            .filter(Boolean)
-            .join(" "),
-        ),
-      );
+      // "exit" can fire before the last stderr chunk is read; report once
+      // the pipes close (bounded, in case a grandchild keeps them open).
+      const report = () =>
+        fail(
+          new Error(
+            [
+              `OpenCode server exited before startup completed`,
+              code != null ? `with code ${code}` : null,
+              signal ? `(${signal})` : null,
+              stderr.trim() ? `stderr: ${stderr.trim()}` : null,
+            ]
+              .filter(Boolean)
+              .join(" "),
+          ),
+        );
+      child.once("close", report);
+      setTimeout(report, OPENCODE_EXIT_STDERR_GRACE_MS).unref?.();
     });
 
     pollTimer = setTimeout(poll, OPENCODE_READY_POLL_INTERVAL_MS);
