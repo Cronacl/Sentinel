@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.0.69](https://github.com/Cronacl/Sentinel/compare/v0.0.68...v0.0.69) (2026-10-16)
+
+
+### Bug Fixes
+
+* **desktop:** package agent-shutdown.mjs so the app starts ([1dc8cc8](https://github.com/Cronacl/Sentinel/commit/1dc8cc81694c3e9e7999cf52165d7a4b049cfd70))
+* **desktop:** package agent-shutdown.mjs so the app starts ([42e1991](https://github.com/Cronacl/Sentinel/commit/42e199100eee034426b45d5089065a688a460fd8))
+* **opencode:** keep the server's stderr in startup-exit errors ([da3a8bd](https://github.com/Cronacl/Sentinel/commit/da3a8bd9dbcf31e3b444c37b8ff4b246728d8eea))
+
 ## [0.0.68](https://github.com/Cronacl/Sentinel/compare/v0.0.67...v0.0.68) (2026-10-15)
 
 
