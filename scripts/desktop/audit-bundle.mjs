@@ -258,7 +258,9 @@ for (const unpackedAppPath of unpackedAppPaths) {
     entries: appAsarEntries,
     main: JSON.parse(extractFile(appAsarPath, "package.json").toString("utf8"))
       .main,
-    readFile: (file) => extractFile(appAsarPath, file).toString("utf8"),
+    // @electron/asar looks entries up by native path (backslashes on Windows).
+    readFile: (file) =>
+      extractFile(appAsarPath, file.split("/").join(path.sep)).toString("utf8"),
   });
 
   if (missingAsarImports.length > 0) {
