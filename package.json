@@ -201,6 +201,7 @@
       "desktop/main/**/*",
       "desktop/preload/**/*",
       "desktop/shared/**/*",
+      "scripts/desktop/agent-shutdown.mjs",
       "scripts/desktop/constants.mjs",
       "scripts/desktop/server-manager.mjs",
       "scripts/desktop/service-manager.mjs",

@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 
 import {
   findBetterSqlite3RuntimeIssues,
+  findMissingAsarImports,
   findMissingServerRuntimeFiles,
   findSqliteVecRuntimeIssues,
   inferBundleArch,
@@ -264,6 +265,40 @@ describe("findSqliteVecRuntimeIssues", () => {
         platform: "linux",
         serverFiles: [],
         serverPath,
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe("findMissingAsarImports", () => {
+  const sources: Record<string, string> = {
+    "desktop/main/index.mjs": `import { start } from "../../scripts/desktop/server-manager.mjs";\nimport { app } from "electron";`,
+    "scripts/desktop/server-manager.mjs": `import { sweep } from "./agent-shutdown.mjs";\nimport { APP_URL } from './constants.mjs';`,
+    "scripts/desktop/constants.mjs": "export const APP_URL = '';",
+  };
+
+  it("reports a relative import the asar does not contain, with its importer", () => {
+    expect(
+      findMissingAsarImports({
+        entries: Object.keys(sources).map((file) => `/${file}`),
+        main: "desktop/main/index.mjs",
+        readFile: (file) => sources[file]!,
+      }),
+    ).toEqual([
+      "scripts/desktop/agent-shutdown.mjs (imported from scripts/desktop/server-manager.mjs)",
+    ]);
+  });
+
+  it("passes when every reachable file is packaged", () => {
+    const complete = {
+      ...sources,
+      "scripts/desktop/agent-shutdown.mjs": "export function sweep() {}",
+    };
+    expect(
+      findMissingAsarImports({
+        entries: Object.keys(complete).map((file) => `/${file}`),
+        main: "desktop/main/index.mjs",
+        readFile: (file) => complete[file as keyof typeof complete]!,
       }),
     ).toEqual([]);
   });
